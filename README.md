@@ -2,6 +2,8 @@
 
 A standalone application for [brief description of what memoon-card does].
 
+> **Note**: This is a sub-repo (nested Git repository) within the Portfolio monorepo. It has its own Git history and can be managed independently, while still being discovered and integrated by Portfolio's auto-discovery system.
+
 ## 🏗️ Project Structure
 
 ```
