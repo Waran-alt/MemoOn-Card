@@ -15,6 +15,20 @@
  * - https://github.com/open-spaced-repetition/free-spaced-repetition-scheduler
  */
 
+import {
+  FSRS_V6_DEFAULT_WEIGHTS,
+  FSRS_CONSTANTS,
+  RETRIEVABILITY_THRESHOLDS,
+} from '../constants/fsrs.constants';
+import {
+  DEFAULT_MANAGEMENT_CONFIG,
+  STABILITY_MULTIPLIERS,
+  RETRIEVABILITY_MULTIPLIERS,
+  TIME_MULTIPLIERS,
+  RISK_CALCULATION,
+} from '../constants/management.constants';
+import { INTERVAL_THRESHOLDS, TIME_CONSTANTS, CONTENT_CHANGE_THRESHOLDS, API_LIMITS } from '../constants/app.constants';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -87,39 +101,8 @@ export interface DeckManagementRisk {
   recommendedPreStudyCount: number; // Cards to review before managing
 }
 
-// ============================================================================
-// Default Weights
-// ============================================================================
-
-/**
- * FSRS v6 Default Weights (21 weights)
- * Derived from millions of review logs
- * Includes same-day review handling, overdue factor, and extended parameters
- */
-export const FSRS_V6_DEFAULT_WEIGHTS: readonly number[] = [
-  0.4,   // w₀: Initial Stability for Again
-  0.9,   // w₁: Initial Stability for Hard
-  2.3,   // w₂: Initial Stability for Good
-  10.9,  // w₃: Initial Stability for Easy
-  4.93,  // w₄: Initial Difficulty base
-  0.94,  // w₅: Initial Difficulty spread
-  0.86,  // w₆: Difficulty weight
-  0.01,  // w₇: Difficulty mean reversion
-  1.49,  // w₈: Success Stability base
-  0.14,  // w₉: Success Stability diminishing returns
-  0.94,  // w₁₀: Success Stability retrievability factor
-  2.18,  // w₁₁: Failure Stability base
-  0.05,  // w₁₂: Failure Stability difficulty factor
-  0.34,  // w₁₃: Failure Stability preservation
-  1.26,  // w₁₄: Failure Stability retrievability factor
-  0.29,  // w₁₅: Hard interval modifier
-  2.61,  // w₁₆: Easy interval modifier
-  0.5,   // w₁₇: Same-day Stability (first review)
-  0.3,   // w₁₈: Same-day Stability (subsequent reviews)
-  0.8,   // w₁₉: Short-term saturation cap
-  9.0,   // w₂₀: Overdue factor (for v6 retrievability formula)
-  1.0,   // w₂₁: Extended parameter for advanced tuning
-] as const;
+// Re-export for backward compatibility
+export { FSRS_V6_DEFAULT_WEIGHTS } from '../constants/fsrs.constants';
 
 // ============================================================================
 // FSRS Core Class
@@ -135,15 +118,15 @@ export class FSRS {
   ) {
     this.config = {
       weights: config?.weights ?? [...FSRS_V6_DEFAULT_WEIGHTS],
-      targetRetention: config?.targetRetention ?? 0.9,
+      targetRetention: config?.targetRetention ?? FSRS_CONSTANTS.DEFAULT_TARGET_RETENTION,
     };
 
     this.managementConfig = {
-      minRevealSeconds: managementConfig?.minRevealSeconds ?? 5,
-      fuzzingHoursMin: managementConfig?.fuzzingHoursMin ?? 4,
-      fuzzingHoursMax: managementConfig?.fuzzingHoursMax ?? 8,
-      adaptiveFuzzing: managementConfig?.adaptiveFuzzing ?? true,
-      warnBeforeManaging: managementConfig?.warnBeforeManaging ?? true,
+      minRevealSeconds: managementConfig?.minRevealSeconds ?? DEFAULT_MANAGEMENT_CONFIG.MIN_REVEAL_SECONDS,
+      fuzzingHoursMin: managementConfig?.fuzzingHoursMin ?? DEFAULT_MANAGEMENT_CONFIG.FUZZING_HOURS_MIN,
+      fuzzingHoursMax: managementConfig?.fuzzingHoursMax ?? DEFAULT_MANAGEMENT_CONFIG.FUZZING_HOURS_MAX,
+      adaptiveFuzzing: managementConfig?.adaptiveFuzzing ?? DEFAULT_MANAGEMENT_CONFIG.ADAPTIVE_FUZZING,
+      warnBeforeManaging: managementConfig?.warnBeforeManaging ?? DEFAULT_MANAGEMENT_CONFIG.WARN_BEFORE_MANAGING,
     };
 
     // Validate weights - require exactly 21 weights
@@ -166,10 +149,13 @@ export class FSRS {
     if (stability <= 0) return 0;
     if (elapsedDays <= 0) return 1;
 
-    // FSRS v6 formula (with overdue factor w₂₀)
-    // R(t,S) = (1 + w₂₀ * (t/S))^(-1)
+    // FSRS v6 formula (official implementation)
+    // R(t,S) = (1 + factor * (t/S))^(-w₂₀)
+    // where factor = 0.9^(-1/w₂₀) - 1 to ensure R(S,S) = 90%
+    // Source: https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm
     const w20 = this.config.weights[20];
-    return Math.pow(1 + w20 * (elapsedDays / stability), -1);
+    const factor = Math.pow(0.9, -1 / w20) - 1;
+    return Math.pow(1 + factor * (elapsedDays / stability), -w20);
   }
 
   /**
@@ -187,19 +173,32 @@ export class FSRS {
   /**
    * Calculate initial Difficulty (D₀) for a new card
    * 
+   * FSRS-6 formula: D₀(G) = w₄ - e^(w₅ * (G - 1)) + 1
+   * where w₄ = D₀(1), i.e., the initial difficulty when the first rating is Again.
+   * 
+   * Source: https://expertium.github.io/Algorithm.html
+   * 
    * @param rating User's rating (1-4)
    * @returns Initial difficulty (1.0 to 10.0)
    */
   private calculateInitialDifficulty(rating: Rating): number {
-    // D₀(G) = w₄ - (G - 3) * w₅
+    // D₀(G) = w₄ - e^(w₅ * (G - 1)) + 1
     const w4 = this.config.weights[4];
     const w5 = this.config.weights[5];
-    const d0 = w4 - (rating - 3) * w5;
+    const d0 = w4 - Math.exp(w5 * (rating - 1)) + 1;
     return this.clampDifficulty(d0);
   }
 
   /**
    * Update Difficulty after a review
+   * 
+   * FSRS-6 formula with linear damping and mean reversion:
+   * 1. ΔD(G) = -w₆ * (G - 3)
+   * 2. D' = D + ΔD * (10 - D) / 9  (linear damping)
+   * 3. D'' = w₇ * D₀(4) + (1 - w₇) * D'  (mean reversion)
+   * 
+   * In FSRS-6, D₀(4) (Easy) is the target of mean reversion.
+   * Source: https://expertium.github.io/Algorithm.html
    * 
    * @param currentDifficulty Current difficulty
    * @param rating User's rating (1-4)
@@ -211,13 +210,21 @@ export class FSRS {
     const w4 = this.config.weights[4];
     const w5 = this.config.weights[5];
 
-    // D₀(3) = w₄ (for Good rating)
-    const d0Good = w4;
+    // Step 1: Calculate change in difficulty based on grade
+    // ΔD(G) = -w₆ * (G - 3)
+    const deltaD = -w6 * (rating - 3);
 
-    // D_new = w₇ * D₀(3) + (1 - w₇) * (D_old - w₆ * (G - 3))
-    const dNew = w7 * d0Good + (1 - w7) * (currentDifficulty - w6 * (rating - 3));
+    // Step 2: Apply linear damping
+    // D' = D + ΔD * (10 - D) / 9
+    // This makes updates smaller as D approaches 10 (maximum)
+    const dPrime = currentDifficulty + deltaD * (10 - currentDifficulty) / 9;
 
-    return this.clampDifficulty(dNew);
+    // Step 3: Apply mean reversion towards D₀(4) (Easy rating)
+    // D₀(4) = w₄ - e^(w₅ * (4 - 1)) + 1 = w₄ - e^(3*w₅) + 1
+    const d0Easy = w4 - Math.exp(w5 * (4 - 1)) + 1;
+    const dDoublePrime = w7 * d0Easy + (1 - w7) * dPrime;
+
+    return this.clampDifficulty(dDoublePrime);
   }
 
   /**
@@ -248,6 +255,13 @@ export class FSRS {
   /**
    * Update Stability after a failed review (G = 1)
    * 
+   * FSRS-6 formula: S'_f(D,S,R) = min(w₁₁ * D^(-w₁₂) * ((S + 1)^w₁₃ - 1) * e^(w₁₄ * (1 - R)), S)
+   * 
+   * The min(..., S) ensures that post-lapse stability can never be greater than
+   * stability before the lapse.
+   * 
+   * Source: https://expertium.github.io/Algorithm.html
+   * 
    * @param currentStability Current stability
    * @param difficulty Current difficulty
    * @param retrievability Current retrievability
@@ -264,9 +278,12 @@ export class FSRS {
     const w14 = this.config.weights[14];
 
     // S_new = w₁₁ * D^(-w₁₂) * ((S + 1)^w₁₃ - 1) * e^(w₁₄ * (1 - R))
-    return w11 * Math.pow(difficulty, -w12) * 
+    const newStability = w11 * Math.pow(difficulty, -w12) * 
       (Math.pow(currentStability + 1, w13) - 1) * 
       Math.exp(w14 * (1 - retrievability));
+
+    // Ensure post-lapse stability never exceeds pre-lapse stability
+    return Math.min(newStability, currentStability);
   }
 
   /**
@@ -278,10 +295,9 @@ export class FSRS {
    */
   private calculateInterval(stability: number, rating: Rating): number {
     const targetRetention = this.config.targetRetention;
-    const ln09 = Math.log(0.9);
 
     // Base interval: I = (S / ln(0.9)) * ln(R_target)
-    let interval = (stability / ln09) * Math.log(targetRetention);
+    let interval = (stability / FSRS_CONSTANTS.LN_09) * Math.log(targetRetention);
 
     // Apply Hard/Easy modifiers
     if (rating === 2) { // Hard
@@ -292,8 +308,8 @@ export class FSRS {
       interval *= w16;
     }
 
-    // Ensure minimum interval of 0.1 days
-    return Math.max(0.1, interval);
+    // Ensure minimum interval
+    return Math.max(FSRS_CONSTANTS.MIN_INTERVAL_DAYS, interval);
   }
 
   /**
@@ -311,43 +327,47 @@ export class FSRS {
    * Get hours elapsed between two dates
    */
   private getElapsedHours(from: Date, to: Date): number {
-    return (to.getTime() - from.getTime()) / (1000 * 60 * 60);
+    return (to.getTime() - from.getTime()) / TIME_CONSTANTS.MS_PER_HOUR;
   }
 
   /**
    * Update Stability for same-day reviews (FSRS v6)
    * 
+   * Formula: S'(S,G) = S * e^(w₁₇ * (G - 3 + w₁₈)) * S^(-w₁₉)
+   * 
    * @param currentStability Current stability
    * @param lastReview Last review date
    * @param now Current date
-   * @param isFirstReviewOfDay Whether this is the first review today
+   * @param rating User's rating (1-4)
    * @returns Adjusted stability for same-day review
    */
   private updateStabilitySameDay(
     currentStability: number,
     lastReview: Date,
     now: Date,
-    isFirstReviewOfDay: boolean
+    rating: Rating
   ): number {
     const elapsedHours = this.getElapsedHours(lastReview, now);
     
-    // Only apply same-day logic if reviewed within 24 hours
-    if (elapsedHours >= 24) {
+    // Only apply same-day logic if reviewed within threshold
+    if (elapsedHours >= FSRS_CONSTANTS.SAME_DAY.THRESHOLD_HOURS) {
       return currentStability;
     }
 
+    // FSRS v6 same-day review formula (official implementation)
+    // S'(S,G) = S * e^(w₁₇ * (G - 3 + w₁₈)) * S^(-w₁₉)
+    // Source: https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm
     const w17 = this.config.weights[17];
     const w18 = this.config.weights[18];
     const w19 = this.config.weights[19];
-
-    // Use w17 for first review of day, w18 for subsequent same-day reviews
-    const sameDayWeight = isFirstReviewOfDay ? w17 : w18;
     
-    // Apply same-day boost with saturation cap (w19)
-    const boost = sameDayWeight * Math.min(1, elapsedHours / 4); // 4 hours = full boost
-    const cappedBoost = Math.min(boost, w19);
+    // Calculate stability increase factor
+    const sInc = Math.exp(w17 * (rating - 3 + w18)) * Math.pow(currentStability, -w19);
     
-    return currentStability * (1 + cappedBoost);
+    // Ensure SInc >= 1 when G >= 3 (Good or Easy)
+    const finalSInc = rating >= 3 ? Math.max(1, sInc) : sInc;
+    
+    return currentStability * finalSInc;
   }
 
   /**
@@ -412,14 +432,12 @@ export class FSRS {
       // Apply same-day review adjustment (FSRS v6)
       // Only applies if reviewed within 24 hours on the same day
       if (isSameDayReview && elapsedHours < 24) {
-        // If it's the same day, this is NOT the first review of the day
-        // First review would have lastReview on a different day
-        const isFirstReviewOfDay = false; // Same day = subsequent review
+        // Apply same-day review formula (FSRS v6)
         newStability = this.updateStabilitySameDay(
           newStability,
           state.lastReview!,
           now,
-          isFirstReviewOfDay
+          rating
         );
       }
 
@@ -494,7 +512,7 @@ export class FSRS {
    */
   getCramCards(
     cards: Array<{ state: FSRSState; id: string }>,
-    limit: number = 50
+    limit: number = API_LIMITS.DEFAULT_PRE_STUDY_LIMIT
   ): Array<{ id: string; state: FSRSState; retrievability: number; risk: 'critical' | 'optimal' | 'safe' }> {
     const now = new Date();
 
@@ -510,9 +528,9 @@ export class FSRS {
         );
 
         let risk: 'critical' | 'optimal' | 'safe';
-        if (retrievability < 0.85) {
+        if (retrievability < RETRIEVABILITY_THRESHOLDS.CRITICAL) {
           risk = 'critical';
-        } else if (retrievability <= 0.92) {
+        } else if (retrievability <= RETRIEVABILITY_THRESHOLDS.OPTIMAL_MAX) {
           risk = 'optimal';
         } else {
           risk = 'safe';
@@ -534,12 +552,12 @@ export class FSRS {
   // ============================================================================
 
   private clampDifficulty(d: number): number {
-    return Math.max(1.0, Math.min(10.0, d));
+    return Math.max(FSRS_CONSTANTS.DIFFICULTY.MIN, Math.min(FSRS_CONSTANTS.DIFFICULTY.MAX, d));
   }
 
   private getElapsedDays(from: Date, to: Date): number {
     const ms = to.getTime() - from.getTime();
-    return ms / (1000 * 60 * 60 * 24);
+    return ms / TIME_CONSTANTS.MS_PER_DAY;
   }
 
   private addDays(date: Date, days: number): Date {
@@ -549,8 +567,8 @@ export class FSRS {
   }
 
   private formatIntervalMessage(days: number): string {
-    if (days < 1) {
-      const hours = Math.round(days * 24);
+    if (days < INTERVAL_THRESHOLDS.ONE_DAY) {
+      const hours = Math.round(days * TIME_CONSTANTS.HOURS_PER_DAY);
       if (hours < 1) {
         return 'Review again soon';
       }
@@ -560,13 +578,13 @@ export class FSRS {
     const roundedDays = Math.round(days);
     if (roundedDays === 1) {
       return 'Review tomorrow';
-    } else if (roundedDays < 7) {
+    } else if (roundedDays < INTERVAL_THRESHOLDS.ONE_WEEK) {
       return `Review in ${roundedDays} days`;
-    } else if (roundedDays < 30) {
-      const weeks = Math.round(roundedDays / 7);
+    } else if (roundedDays < INTERVAL_THRESHOLDS.ONE_MONTH) {
+      const weeks = Math.round(roundedDays / TIME_CONSTANTS.DAYS_PER_WEEK);
       return `Review in ${weeks} week${weeks !== 1 ? 's' : ''}`;
     } else {
-      const months = Math.round(roundedDays / 30);
+      const months = Math.round(roundedDays / TIME_CONSTANTS.DAYS_PER_MONTH);
       return `Review in ${months} month${months !== 1 ? 's' : ''}`;
     }
   }
@@ -597,27 +615,29 @@ export class FSRS {
 
     // Risk factors
     const rFactor = 1 - retrievability; // Lower R = higher risk
-    const timeFactor = Math.max(0, 1 - hoursUntilDue / 24); // Sooner = higher risk
-    const stabilityFactor = state.stability < 1 ? 1 : Math.min(1, 1 / state.stability); // Lower S = higher risk
+    const timeFactor = Math.max(0, 1 - hoursUntilDue / RISK_CALCULATION.HOURS_PER_DAY); // Sooner = higher risk
+    const stabilityFactor = state.stability < RISK_CALCULATION.STABILITY_THRESHOLD_DAYS 
+      ? 1 
+      : Math.min(1, 1 / state.stability); // Lower S = higher risk
 
     // Weighted risk calculation
-    const riskPercent = Math.min(100, (
-      rFactor * 50 +        // Retrievability: 50% weight
-      timeFactor * 30 +     // Time until due: 30% weight
-      stabilityFactor * 20  // Stability: 20% weight
+    const riskPercent = Math.min(RISK_CALCULATION.MAX_RISK_PERCENT, (
+      rFactor * RISK_CALCULATION.WEIGHTS.RETRIEVABILITY +
+      timeFactor * RISK_CALCULATION.WEIGHTS.TIME +
+      stabilityFactor * RISK_CALCULATION.WEIGHTS.STABILITY
     ) * 100);
 
     // Determine risk level
     let riskLevel: 'low' | 'medium' | 'high' | 'critical';
     let recommendedAction: 'safe' | 'pre-study' | 'avoid';
     
-    if (riskPercent >= 70) {
+    if (riskPercent >= RISK_CALCULATION.THRESHOLDS.CRITICAL) {
       riskLevel = 'critical';
       recommendedAction = 'avoid';
-    } else if (riskPercent >= 50) {
+    } else if (riskPercent >= RISK_CALCULATION.THRESHOLDS.HIGH) {
       riskLevel = 'high';
       recommendedAction = 'pre-study';
-    } else if (riskPercent >= 30) {
+    } else if (riskPercent >= RISK_CALCULATION.THRESHOLDS.MEDIUM) {
       riskLevel = 'medium';
       recommendedAction = 'pre-study';
     } else {
@@ -702,7 +722,7 @@ export class FSRS {
     const retrievability = this.calculateRetrievability(elapsedDays, state.stability);
 
     // If card is not due soon, no penalty needed
-    if (hoursUntilDue > 24) {
+    if (hoursUntilDue > TIME_MULTIPLIERS.PENALTY_THRESHOLD_HOURS) {
       return state;
     }
 
@@ -713,40 +733,39 @@ export class FSRS {
       const baseFuzzing = this.managementConfig.fuzzingHoursMin;
 
       // Adjust based on stability
-      // Low stability (< 1 day): Proportional fuzzing (don't over-penalize)
-      // High stability (> 7 days): Minimal fuzzing (card is strong)
+      // Low stability (< threshold): Proportional fuzzing (don't over-penalize)
+      // High stability (> threshold): Minimal fuzzing (card is strong)
       let stabilityMultiplier = 1;
-      if (state.stability < 1) {
+      if (state.stability < STABILITY_MULTIPLIERS.LOW_THRESHOLD_DAYS) {
         // For low stability, fuzzing should be proportional to stability
-        // e.g., 0.5 day stability → 0.5x fuzzing
-        stabilityMultiplier = Math.max(0.3, state.stability);
-      } else if (state.stability > 7) {
+        stabilityMultiplier = Math.max(STABILITY_MULTIPLIERS.LOW_STABILITY_MIN, state.stability);
+      } else if (state.stability > STABILITY_MULTIPLIERS.HIGH_THRESHOLD_DAYS) {
         // High stability cards are strong, less fuzzing needed
-        stabilityMultiplier = 0.5;
+        stabilityMultiplier = STABILITY_MULTIPLIERS.HIGH_STABILITY;
       }
 
       // Adjust based on retrievability
-      // High R (>0.9): Less fuzzing (card is fresh)
-      // Low R (<0.7): More fuzzing (card is at risk)
+      // High R (>threshold): Less fuzzing (card is fresh)
+      // Low R (<threshold): More fuzzing (card is at risk)
       let rMultiplier = 1;
-      if (retrievability > 0.9) {
-        rMultiplier = 0.7; // Card is fresh, less penalty
-      } else if (retrievability < 0.7) {
-        rMultiplier = 1.2; // Card is at risk, more penalty
+      if (retrievability > RETRIEVABILITY_MULTIPLIERS.HIGH_THRESHOLD) {
+        rMultiplier = RETRIEVABILITY_MULTIPLIERS.HIGH_R;
+      } else if (retrievability < RETRIEVABILITY_MULTIPLIERS.LOW_THRESHOLD) {
+        rMultiplier = RETRIEVABILITY_MULTIPLIERS.LOW_R;
       }
 
       // Adjust based on time until due
       let timeMultiplier = 1;
-      if (hoursUntilDue < 2) {
-        timeMultiplier = 1.5; // Due very soon, more penalty
-      } else if (hoursUntilDue < 6) {
-        timeMultiplier = 1.2;
+      if (hoursUntilDue < TIME_MULTIPLIERS.VERY_SOON_HOURS) {
+        timeMultiplier = TIME_MULTIPLIERS.VERY_SOON;
+      } else if (hoursUntilDue < TIME_MULTIPLIERS.SOON_HOURS) {
+        timeMultiplier = TIME_MULTIPLIERS.SOON;
       }
 
       // Calculate final fuzzing
       fuzzingHours = baseFuzzing * stabilityMultiplier * rMultiplier * timeMultiplier;
       fuzzingHours = Math.min(fuzzingHours, this.managementConfig.fuzzingHoursMax);
-      fuzzingHours = Math.max(fuzzingHours, 0.5); // Minimum 30 minutes
+      fuzzingHours = Math.max(fuzzingHours, DEFAULT_MANAGEMENT_CONFIG.FUZZING_HOURS_ABSOLUTE_MIN);
     } else {
       // Fixed fuzzing
       const range = this.managementConfig.fuzzingHoursMax - this.managementConfig.fuzzingHoursMin;
@@ -773,8 +792,8 @@ export class FSRS {
    */
   getPreStudyCards(
     cards: Array<{ id: string; state: FSRSState }>,
-    targetRetention: number = 0.95,
-    limit: number = 50
+    targetRetention: number = FSRS_CONSTANTS.PRE_STUDY_TARGET_RETENTION,
+    limit: number = API_LIMITS.DEFAULT_PRE_STUDY_LIMIT
   ): Array<{ id: string; state: FSRSState; risk: ManagementRisk }> {
     const risks = cards.map(card => {
       const risk = this.calculateManagementRisk(card.state);
@@ -832,8 +851,8 @@ export class FSRS {
 
     return {
       changePercent,
-      isSignificant: changePercent > 30,
-      shouldReset: changePercent > 50,
+      isSignificant: changePercent > CONTENT_CHANGE_THRESHOLDS.SIGNIFICANT,
+      shouldReset: changePercent > CONTENT_CHANGE_THRESHOLDS.RESET,
     };
   }
 

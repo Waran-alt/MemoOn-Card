@@ -39,17 +39,33 @@ export interface Card {
   updated_at: Date;
 }
 
+/**
+ * Review Log interface matching FSRS Optimizer schema
+ * 
+ * Schema reference: https://github.com/open-spaced-repetition/fsrs-optimizer
+ * 
+ * Required for FSRS optimization:
+ * - card_id: Unique identifier of the flashcard
+ * - review_time: Timestamp in milliseconds (UTC)
+ * - review_rating: User's rating (1=Again, 2=Hard, 3=Good, 4=Easy)
+ * - review_state: Learning phase (0=New, 1=Learning, 2=Review, 3=Relearning) - optional
+ * - review_duration: Time spent reviewing in milliseconds - optional
+ */
 export interface ReviewLog {
   id: string;
   card_id: string;
   user_id: string;
   rating: 1 | 2 | 3 | 4;
-  scheduled_days: number;
-  elapsed_days: number;
-  review_date: Date;
+  review_time: number; // Timestamp in milliseconds (UTC) - matches FSRS Optimizer schema
+  review_state?: 0 | 1 | 2 | 3; // 0=New, 1=Learning, 2=Review, 3=Relearning
+  review_duration?: number; // Time spent reviewing in milliseconds
+  scheduled_days: number; // Interval scheduled for next review
+  elapsed_days: number; // Days elapsed since last review
   stability_before: number | null;
   difficulty_before: number | null;
   retrievability_before: number | null;
+  // Legacy field - kept for backward compatibility, use review_time instead
+  review_date?: Date;
 }
 
 export interface UserSettings {
@@ -59,6 +75,9 @@ export interface UserSettings {
   last_optimized_at: Date | null;
   review_count_since_optimization: number;
   updated_at: Date;
+  // FSRS Optimizer requirements
+  timezone?: string; // IANA timezone (e.g., "America/New_York")
+  day_start?: number; // Hour (0-23) when user's day starts
 }
 
 export interface CardManagementView {

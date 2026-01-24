@@ -1,0 +1,381 @@
+/**
+ * FSRS Optimization Service
+ * 
+ * Integrates with the Python FSRS Optimizer to personalize FSRS weights
+ * based on user review history.
+ * 
+ * Uses the official FSRS Optimizer: https://github.com/open-spaced-repetition/fsrs-optimizer
+ */
+
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { writeFile, unlink, readFile } from 'fs/promises';
+import { join } from 'path';
+import { pool } from '../config/database';
+import { UserSettings } from '../types/database';
+
+const execAsync = promisify(exec);
+
+export interface OptimizationResult {
+  success: boolean;
+  weights?: number[];
+  message: string;
+  error?: string;
+}
+
+export interface OptimizationConfig {
+  timezone?: string;
+  dayStart?: number;
+  targetRetention?: number;
+}
+
+/**
+ * FSRS Optimization Service
+ */
+export class OptimizationService {
+  /**
+   * Export review logs to CSV format for FSRS Optimizer
+   */
+  async exportReviewLogsToCSV(userId: string, outputPath: string): Promise<void> {
+    const query = `
+      SELECT 
+        card_id::text as card_id,
+        review_time,
+        rating as review_rating,
+        COALESCE(review_state, 
+          CASE 
+            WHEN stability_before IS NULL THEN 0
+            WHEN stability_before < 1 THEN 1
+            WHEN rating = 1 THEN 3
+            ELSE 2
+          END
+        ) as review_state,
+        COALESCE(review_duration, NULL) as review_duration
+      FROM review_logs
+      WHERE user_id = $1
+        AND review_time IS NOT NULL
+      ORDER BY review_time
+    `;
+
+    const result = await pool.query(query, [userId]);
+
+    if (result.rows.length === 0) {
+      throw new Error('No review logs found for user');
+    }
+
+    // Generate CSV content
+    const csvHeader = 'card_id,review_time,review_rating,review_state,review_duration\n';
+    const csvRows = result.rows.map(row => {
+      const cardId = String(row.card_id);
+      const reviewTime = String(row.review_time);
+      const reviewRating = String(row.review_rating);
+      const reviewState = row.review_state !== null ? String(row.review_state) : '';
+      const reviewDuration = row.review_duration !== null ? String(row.review_duration) : '';
+      
+      return `${cardId},${reviewTime},${reviewRating},${reviewState},${reviewDuration}`;
+    }).join('\n');
+
+    await writeFile(outputPath, csvHeader + csvRows, 'utf-8');
+  }
+
+  /**
+   * Run FSRS Optimizer on review logs
+   * 
+   * Requires Python and fsrs-optimizer package to be installed:
+   * pip install fsrs-optimizer
+   */
+  async optimizeWeights(
+    userId: string,
+    config?: OptimizationConfig
+  ): Promise<OptimizationResult> {
+    const tempDir = join(process.cwd(), 'temp');
+    const csvPath = join(tempDir, `revlog_${userId}_${Date.now()}.csv`);
+    const outputPath = join(tempDir, `output_${userId}_${Date.now()}.json`);
+
+    try {
+      // Ensure temp directory exists
+      await execAsync(`mkdir -p ${tempDir}`);
+
+      // Export review logs to CSV
+      await this.exportReviewLogsToCSV(userId, csvPath);
+
+      // Get user settings for timezone and day_start
+      const userSettings = await this.getUserSettings(userId);
+      const timezone = config?.timezone || userSettings.timezone || 'UTC';
+      const dayStart = config?.dayStart ?? userSettings.day_start ?? 4; // Default 4 AM
+
+      // Build optimizer command
+      // Note: FSRS Optimizer CLI accepts timezone and day_start as environment variables
+      // or we can pass them as arguments if supported
+      const env = {
+        ...process.env,
+        TZ: timezone,
+      };
+
+      // Run FSRS Optimizer
+      // Try multiple Python executables and virtual environment paths
+      const pythonCommands = [
+        'python3 -m fsrs_optimizer',
+        'python -m fsrs_optimizer',
+        // Try common virtual environment locations
+        `${process.cwd()}/venv/bin/python -m fsrs_optimizer`,
+        `${process.cwd()}/.venv/bin/python -m fsrs_optimizer`,
+        `${process.cwd()}/backend/venv/bin/python -m fsrs_optimizer`,
+        // Try pipx installation
+        'pipx run fsrs_optimizer',
+      ];
+
+      let stdout = '';
+      let stderr = '';
+      let lastError: Error | null = null;
+
+      for (const pythonCmd of pythonCommands) {
+        try {
+          const result = await execAsync(
+            `${pythonCmd} "${csvPath}"`,
+            { 
+              env,
+              maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large outputs
+            }
+          );
+          stdout = result.stdout;
+          stderr = result.stderr;
+          lastError = null;
+          break; // Success, exit loop
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          // Continue to next command
+        }
+      }
+
+      if (lastError) {
+        throw new Error(
+          `Failed to run FSRS Optimizer. Tried: ${pythonCommands.join(', ')}\n` +
+          `Error: ${lastError.message}\n\n` +
+          `Please install fsrs-optimizer using one of:\n` +
+          `  - pipx install fsrs-optimizer (recommended)\n` +
+          `  - python3 -m venv venv && venv/bin/pip install fsrs-optimizer\n` +
+          `  - Or ensure it's available in your Python path`
+        );
+      }
+
+      // Parse optimizer output
+      // The optimizer outputs weights in various formats
+      const weights = this.parseOptimizerOutput(stdout, stderr);
+
+      if (!weights || weights.length !== 21) {
+        throw new Error(`Invalid optimizer output: expected 21 weights, got ${weights?.length || 0}`);
+      }
+
+      // Update user settings with optimized weights
+      await this.updateUserWeights(userId, weights);
+
+      // Cleanup temp files
+      await unlink(csvPath).catch(() => {}); // Ignore errors if file doesn't exist
+
+      return {
+        success: true,
+        weights,
+        message: 'FSRS weights optimized successfully',
+      };
+    } catch (error) {
+      // Cleanup temp files on error
+      await unlink(csvPath).catch(() => {});
+      await unlink(outputPath).catch(() => {});
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      return {
+        success: false,
+        message: 'Failed to optimize FSRS weights',
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Parse optimizer output to extract weights
+   * 
+   * The FSRS Optimizer outputs weights in various formats.
+   * This method attempts to parse the most common formats.
+   * 
+   * The optimizer typically outputs:
+   * - A JSON array of weights
+   * - A Python list format
+   * - Space or comma-separated values
+   */
+  private parseOptimizerOutput(stdout: string, stderr: string): number[] | null {
+    const output = stdout + '\n' + stderr;
+    
+    try {
+      // Method 1: Try to find JSON array in output
+      const jsonMatches = output.match(/\[[\d\.,\-\s]+\]/g);
+      if (jsonMatches) {
+        for (const match of jsonMatches) {
+          try {
+            const weights = JSON.parse(match);
+            if (Array.isArray(weights) && weights.length === 21) {
+              return weights;
+            }
+          } catch {
+            // Continue to next match
+          }
+        }
+      }
+
+      // Method 2: Try Python list format [0.212, 1.2931, ...]
+      const pythonListMatch = output.match(/\[([\d\.,\-\s]+)\]/);
+      if (pythonListMatch) {
+        const weights = pythonListMatch[1]
+          .split(/[,\s]+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 0)
+          .map(Number)
+          .filter(n => !isNaN(n));
+        
+        if (weights.length === 21) {
+          return weights;
+        }
+      }
+
+      // Method 3: Try to find all decimal numbers and take first 21
+      const numbers = output.match(/[\d]+\.[\d]+/g);
+      if (numbers && numbers.length >= 21) {
+        const weights = numbers.slice(0, 21).map(Number);
+        if (weights.every(w => !isNaN(w))) {
+          return weights;
+        }
+      }
+
+      // Method 4: Look for lines with "weights" or "parameters"
+      const lines = output.split('\n');
+      for (const line of lines) {
+        // Try various patterns
+        const patterns = [
+          /weights?[:\s=]+\[([\d\.,\-\s]+)\]/i,
+          /parameters?[:\s=]+\[([\d\.,\-\s]+)\]/i,
+          /\[([\d\.,\-\s]{50,})\]/i, // Long array-like string
+        ];
+
+        for (const pattern of patterns) {
+          const match = line.match(pattern);
+          if (match) {
+            const weights = match[1]
+              .split(/[,\s]+/)
+              .map(s => s.trim())
+              .filter(s => s.length > 0)
+              .map(Number)
+              .filter(n => !isNaN(n));
+            
+            if (weights.length === 21) {
+              return weights;
+            }
+          }
+        }
+      }
+
+      console.error('Could not parse optimizer output. stdout:', stdout.substring(0, 500));
+      console.error('stderr:', stderr.substring(0, 500));
+      return null;
+    } catch (error) {
+      console.error('Error parsing optimizer output:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user settings
+   */
+  private async getUserSettings(userId: string): Promise<UserSettings> {
+    const result = await pool.query<UserSettings>(
+      'SELECT * FROM user_settings WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      // Return defaults
+      return {
+        user_id: userId,
+        fsrs_weights: [],
+        target_retention: 0.9,
+        last_optimized_at: null,
+        review_count_since_optimization: 0,
+        updated_at: new Date(),
+      };
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Update user weights in database
+   */
+  private async updateUserWeights(userId: string, weights: number[]): Promise<void> {
+    await pool.query(
+      `INSERT INTO user_settings (user_id, fsrs_weights, last_optimized_at, review_count_since_optimization, updated_at)
+       VALUES ($1, $2, $3, 0, $4)
+       ON CONFLICT (user_id) 
+       DO UPDATE SET 
+         fsrs_weights = $2,
+         last_optimized_at = $3,
+         review_count_since_optimization = 0,
+         updated_at = $4`,
+      [userId, JSON.stringify(weights), new Date(), new Date()]
+    );
+  }
+
+  /**
+   * Check if FSRS Optimizer is available
+   * 
+   * Tries multiple Python executables and virtual environment paths
+   */
+  async checkOptimizerAvailable(): Promise<{ available: boolean; pythonPath?: string; method?: string }> {
+    const pythonCommands = [
+      { cmd: 'python3 -c "import fsrs_optimizer"', method: 'python3 (system)' },
+      { cmd: 'python -c "import fsrs_optimizer"', method: 'python (system)' },
+      { cmd: `${process.cwd()}/venv/bin/python -c "import fsrs_optimizer"`, method: 'venv (project root)' },
+      { cmd: `${process.cwd()}/.venv/bin/python -c "import fsrs_optimizer"`, method: '.venv (project root)' },
+      { cmd: `${process.cwd()}/backend/venv/bin/python -c "import fsrs_optimizer"`, method: 'venv (backend)' },
+      { cmd: 'pipx run fsrs_optimizer --help', method: 'pipx' },
+    ];
+
+    for (const { cmd, method } of pythonCommands) {
+      try {
+        await execAsync(cmd, { timeout: 5000 });
+        return { available: true, method };
+      } catch {
+        // Continue to next
+      }
+    }
+
+    return { available: false };
+  }
+
+  /**
+   * Get minimum review count required for optimization
+   */
+  getMinReviewCount(): number {
+    // FSRS Optimizer typically requires at least 100-200 reviews
+    // This is a conservative estimate
+    return 100;
+  }
+
+  /**
+   * Check if user has enough reviews for optimization
+   */
+  async canOptimize(userId: string): Promise<{ canOptimize: boolean; reviewCount: number; minRequired: number }> {
+    const result = await pool.query(
+      'SELECT COUNT(*) as count FROM review_logs WHERE user_id = $1',
+      [userId]
+    );
+
+    const reviewCount = parseInt(result.rows[0].count, 10);
+    const minRequired = this.getMinReviewCount();
+
+    return {
+      canOptimize: reviewCount >= minRequired,
+      reviewCount,
+      minRequired,
+    };
+  }
+}

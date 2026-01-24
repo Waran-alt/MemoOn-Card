@@ -32,7 +32,16 @@ RUN yarn build
 # Runtime
 FROM deps AS runner
 WORKDIR /app
-RUN apk add --no-cache libc6-compat curl
+# Install Python and pip for FSRS Optimizer
+# Alpine uses python3 and py3-pip packages
+RUN apk add --no-cache \
+    libc6-compat \
+    curl \
+    python3 \
+    py3-pip \
+    && python3 -m pip install --no-cache-dir --upgrade pip \
+    && python3 -m pip install --no-cache-dir fsrs-optimizer
+
 COPY --from=builder /app/backend/dist ./backend/dist
 EXPOSE 4002
 WORKDIR /app/backend
@@ -41,7 +50,15 @@ CMD ["yarn", "start"]
 # Development target
 FROM deps AS development
 WORKDIR /app
-RUN apk add --no-cache libc6-compat curl
+# Install Python and pip for FSRS Optimizer
+RUN apk add --no-cache \
+    libc6-compat \
+    curl \
+    python3 \
+    py3-pip \
+    && python3 -m pip install --no-cache-dir --upgrade pip \
+    && python3 -m pip install --no-cache-dir fsrs-optimizer
+
 COPY --from=builder /app/backend/dist ./backend/dist
 EXPOSE 4002
 WORKDIR /app/backend

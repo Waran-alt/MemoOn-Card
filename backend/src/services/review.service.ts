@@ -3,6 +3,7 @@ import { ReviewLog } from '../types/database';
 import { FSRSState, ReviewResult, createFSRS } from './fsrs.service';
 import { CardService } from './card.service';
 import { UserSettings } from '../types/database';
+import { FSRS_V6_DEFAULT_WEIGHTS, FSRS_CONSTANTS } from '../constants/fsrs.constants';
 
 export class ReviewService {
   private cardService: CardService;
@@ -26,11 +27,8 @@ export class ReviewService {
     if (result.rows.length === 0) {
       // Return defaults (21 weights)
       return {
-        weights: [
-          0.4, 0.9, 2.3, 10.9, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94,
-          2.18, 0.05, 0.34, 1.26, 0.29, 2.61, 0.5, 0.3, 0.8, 9.0, 1.0,
-        ],
-        targetRetention: 0.9,
+        weights: [...FSRS_V6_DEFAULT_WEIGHTS],
+        targetRetention: FSRS_CONSTANTS.DEFAULT_TARGET_RETENTION,
       };
     }
 
@@ -93,17 +91,33 @@ export class ReviewService {
 
   /**
    * Log a review for optimization
+   * 
+   * Follows FSRS Optimizer schema: https://github.com/open-spaced-repetition/fsrs-optimizer
+   * 
+   * Required fields:
+   * - card_id: Flashcard identifier
+   * - review_time: Timestamp in milliseconds (UTC)
+   * - review_rating: User's rating (1-4)
+   * 
+   * Optional fields:
+   * - review_state: Learning phase (0=New, 1=Learning, 2=Review, 3=Relearning)
+   * - review_duration: Time spent reviewing in milliseconds
    */
   private async logReview(
     cardId: string,
     userId: string,
     rating: 1 | 2 | 3 | 4,
     reviewResult: ReviewResult,
-    previousState: FSRSState | null
+    previousState: FSRSState | null,
+    reviewDuration?: number, // Time spent reviewing in milliseconds
+    reviewState?: 0 | 1 | 2 | 3 // Learning phase
   ): Promise<void> {
     const now = new Date();
+    const reviewTime = now.getTime(); // Timestamp in milliseconds (UTC)
+    
     let elapsedDays = 0;
     let retrievabilityBefore = null;
+    let determinedReviewState: 0 | 1 | 2 | 3 = 0; // Default to New
 
     if (previousState) {
       const lastReviewTime = previousState.lastReview?.getTime() || previousState.nextReview.getTime();
@@ -115,23 +129,45 @@ export class ReviewService {
         elapsedDays,
         previousState.stability
       );
+      
+      // Determine review state based on previous state
+      // 0=New, 1=Learning, 2=Review, 3=Relearning
+      if (previousState.stability === 0 || !previousState.lastReview) {
+        determinedReviewState = 0; // New
+      } else if (previousState.stability < 1) {
+        determinedReviewState = 1; // Learning
+      } else if (rating === 1) {
+        determinedReviewState = 3; // Relearning (failed)
+      } else {
+        determinedReviewState = 2; // Review
+      }
+    } else {
+      // New card
+      determinedReviewState = 0; // New
     }
+
+    // Use provided reviewState if available, otherwise use determined value
+    const finalReviewState = reviewState ?? determinedReviewState;
 
     const scheduledDays = reviewResult.interval;
 
     await pool.query(
       `INSERT INTO review_logs (
-        card_id, user_id, rating, scheduled_days, elapsed_days,
-        review_date, stability_before, difficulty_before, retrievability_before
+        card_id, user_id, rating, review_time, review_state, review_duration,
+        scheduled_days, elapsed_days, review_date,
+        stability_before, difficulty_before, retrievability_before
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         cardId,
         userId,
         rating,
+        reviewTime, // Timestamp in milliseconds (UTC)
+        finalReviewState,
+        reviewDuration || null,
         scheduledDays,
         elapsedDays,
-        now,
+        now, // Keep review_date for backward compatibility
         previousState?.stability || null,
         previousState?.difficulty || null,
         retrievabilityBefore,

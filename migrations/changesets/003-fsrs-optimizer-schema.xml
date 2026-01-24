@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="003-fsrs-optimizer-schema" author="developer">
+        <comment>Add FSRS Optimizer required fields to review_logs and user_settings</comment>
+        
+        <!-- Add FSRS Optimizer fields to review_logs -->
+        <addColumn tableName="review_logs">
+            <column name="review_time" type="bigint">
+                <constraints nullable="true"/>
+            </column>
+            <column name="review_state" type="integer">
+                <constraints nullable="true" checkConstraint="review_state BETWEEN 0 AND 3"/>
+            </column>
+            <column name="review_duration" type="integer">
+                <constraints nullable="true" checkConstraint="review_duration >= 0"/>
+            </column>
+        </addColumn>
+
+        <!-- Populate review_time from review_date for existing records -->
+        <sql>
+            UPDATE review_logs 
+            SET review_time = EXTRACT(EPOCH FROM review_date) * 1000
+            WHERE review_time IS NULL;
+        </sql>
+
+        <!-- Make review_time NOT NULL after populating -->
+        <addNotNullConstraint 
+            tableName="review_logs" 
+            columnName="review_time" 
+            columnDataType="bigint"/>
+
+        <!-- Add index on review_time for optimization queries -->
+        <createIndex indexName="idx_review_logs_review_time" tableName="review_logs">
+            <column name="review_time"/>
+        </createIndex>
+
+        <!-- Add timezone and day_start to user_settings for FSRS Optimizer -->
+        <addColumn tableName="user_settings">
+            <column name="timezone" type="varchar(100)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="day_start" type="integer">
+                <constraints nullable="true" checkConstraint="day_start BETWEEN 0 AND 23"/>
+            </column>
+        </addColumn>
+
+    </changeSet>
+
+</databaseChangeLog>

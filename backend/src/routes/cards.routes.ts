@@ -2,6 +2,7 @@ import { Request, Response, Router } from 'express';
 import { CardService } from '../services/card.service';
 import { ReviewService } from '../services/review.service';
 import { CreateCardRequest, ReviewCardRequest, UpdateCardRequest } from '../types/database';
+import { API_LIMITS } from '../constants/app.constants';
 
 const router = Router();
 const cardService = new CardService();
@@ -68,7 +69,7 @@ router.get('/decks/:deckId/cards/new', async (req: Request, res: Response) => {
     const userId = getUserId(req);
     const deckId = getStringParam(req.params.deckId);
     const limitStr = getStringParam(req.query.limit as string | string[] | undefined);
-    const limit = parseInt(limitStr) || 20;
+    const limit = parseInt(limitStr) || API_LIMITS.DEFAULT_CARD_LIMIT;
     const cards = await cardService.getNewCards(deckId, userId, limit);
     return res.json({ success: true, data: cards });
   } catch (error) {

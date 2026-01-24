@@ -8,6 +8,7 @@ import { testConnection } from './config/database';
 import decksRoutes from './routes/decks.routes';
 import cardsRoutes from './routes/cards.routes';
 import reviewsRoutes from './routes/reviews.routes';
+import optimizationRoutes from './routes/optimization.routes';
 
 dotenv.config();
 
@@ -65,6 +66,7 @@ app.get('/api/test-fsrs', (_req: Request, res: Response) => {
 app.use('/api/decks', decksRoutes);
 app.use('/api/cards', cardsRoutes);
 app.use('/api/reviews', reviewsRoutes);
+app.use('/api/optimization', optimizationRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
@@ -106,6 +108,9 @@ async function startServer() {
     console.log(`   - DELETE /api/cards/:id`);
     console.log(`   - POST   /api/cards/:id/review`);
     console.log(`   - POST   /api/reviews/batch`);
+    console.log(`   - GET    /api/optimization/status`);
+    console.log(`   - POST   /api/optimization/optimize`);
+    console.log(`   - GET    /api/optimization/export`);
   });
 }
 
