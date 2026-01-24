@@ -1,4 +1,4 @@
-# Setup Guide for Memoon Card
+# Setup Guide for MemoOn Card
 
 This guide will help you set up the memoon-card application from scratch.
 
@@ -33,7 +33,7 @@ cd ../backend && yarn install
 ### 3. Set Up Environment Variables
 
 ```bash
-cp .env.example .env
+cp .env .env
 # Edit .env with your configuration
 ```
 
@@ -78,7 +78,7 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3000' }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:3002' }));
 app.use(morgan('dev'));
 app.use(express.json());
 
@@ -149,8 +149,8 @@ cd frontend && yarn dev
 
 ### 8. Verify Setup
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:4000/health
+- Frontend: http://localhost:3002
+- Backend API: http://localhost:4002/health
 - Database: `psql -h localhost -U postgres -d memoon_card_db`
 
 ## Next Steps
@@ -177,7 +177,7 @@ memoon-card/
 │   ├── changelog.xml
 │   └── changesets/
 ├── docker-compose.yml     # Docker services
-├── .env.example          # Environment template
+├── .env          # Environment template
 └── README.md             # Project overview
 ```
 

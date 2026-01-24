@@ -1,7 +1,20 @@
 {
   "name": "memoon-card",
   "version": "1.0.0",
-  "description": "Memoon Card application",
+  "description": "MemoOn Card - Intelligent flashcard system with FSRS spaced repetition algorithm",
+  "author": "Waran-alt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Waran-alt/memoon-card.git"
+  },
+  "keywords": [
+    "flashcards",
+    "spaced-repetition",
+    "fsrs",
+    "memorization",
+    "learning"
+  ],
   "private": true,
   "workspaces": [
     "frontend",
@@ -21,12 +34,12 @@
     "migrate:up": "liquibase --changeLogFile=migrations/changelog.xml update",
     "migrate:status": "liquibase --changeLogFile=migrations/changelog.xml status"
   },
-  "packageManager": "yarn@4.9.2",
+  "packageManager": "yarn@4.12.0",
   "devDependencies": {
-    "typescript": "^5.3.3"
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=22.0.0",
-    "yarn": ">=4.9.2"
+    "yarn": ">=4.12.0"
   }
 }

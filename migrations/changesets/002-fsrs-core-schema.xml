@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="002-fsrs-core-schema" author="developer">
+        <comment>FSRS core schema: decks, cards, review logs, and management tracking</comment>
+
+        <!-- Decks Table -->
+        <createTable tableName="decks">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_decks_user" references="users(id)" onDelete="CASCADE"/>
+            </column>
+            <column name="title" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="text">
+                <constraints nullable="true"/>
+            </column>
+            <column name="created_at" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_decks_user_id" tableName="decks">
+            <column name="user_id"/>
+        </createIndex>
+
+        <!-- Cards Table (with FSRS state) -->
+        <createTable tableName="cards">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_cards_user" references="users(id)" onDelete="CASCADE"/>
+            </column>
+            <column name="deck_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_cards_deck" references="decks(id)" onDelete="CASCADE"/>
+            </column>
+            
+            <!-- Card Content -->
+            <column name="recto" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="verso" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="comment" type="text">
+                <constraints nullable="true"/>
+            </column>
+            <column name="recto_image" type="varchar(500)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="verso_image" type="varchar(500)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="recto_formula" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="verso_formula" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reverse" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            
+            <!-- FSRS State -->
+            <column name="stability" type="decimal(10,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="difficulty" type="decimal(4,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="last_review" type="timestamp">
+                <constraints nullable="true"/>
+            </column>
+            <column name="next_review" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            
+            <!-- Metadata -->
+            <column name="created_at" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_cards_user_deck" tableName="cards">
+            <column name="user_id"/>
+            <column name="deck_id"/>
+        </createIndex>
+        <createIndex indexName="idx_cards_next_review" tableName="cards">
+            <column name="next_review"/>
+        </createIndex>
+        <createIndex indexName="idx_cards_user_next_review" tableName="cards">
+            <column name="user_id"/>
+            <column name="next_review"/>
+        </createIndex>
+
+        <!-- Review Logs Table (for FSRS optimization) -->
+        <createTable tableName="review_logs">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="card_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_review_logs_card" references="cards(id)" onDelete="CASCADE"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_review_logs_user" references="users(id)" onDelete="CASCADE"/>
+            </column>
+            
+            <!-- Review Data -->
+            <column name="rating" type="integer">
+                <constraints nullable="false" checkConstraint="rating BETWEEN 1 AND 4"/>
+            </column>
+            <column name="scheduled_days" type="decimal(10,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="elapsed_days" type="decimal(10,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="review_date" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            
+            <!-- FSRS State at Review Time -->
+            <column name="stability_before" type="decimal(10,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="difficulty_before" type="decimal(4,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="retrievability_before" type="decimal(5,4)">
+                <constraints nullable="true"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_review_logs_user_date" tableName="review_logs">
+            <column name="user_id"/>
+            <column name="review_date"/>
+        </createIndex>
+        <createIndex indexName="idx_review_logs_card" tableName="review_logs">
+            <column name="card_id"/>
+        </createIndex>
+
+        <!-- User Settings Table (for personalized FSRS weights) -->
+        <createTable tableName="user_settings">
+            <column name="user_id" type="uuid">
+                <constraints primaryKey="true" nullable="false" foreignKeyName="fk_user_settings_user" references="users(id)" onDelete="CASCADE"/>
+            </column>
+            
+            <!-- FSRS Configuration -->
+            <column name="fsrs_weights" type="jsonb" defaultValue="'[]'">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fsrs_version" type="varchar(10)" defaultValue="'v6'">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_retention" type="decimal(3,2)" defaultValueNumeric="0.9">
+                <constraints nullable="false"/>
+            </column>
+            
+            <!-- Optimization -->
+            <column name="last_optimized_at" type="timestamp">
+                <constraints nullable="true"/>
+            </column>
+            <column name="review_count_since_optimization" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            
+            <column name="updated_at" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Card Management Views Table -->
+        <createTable tableName="card_management_views">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="card_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_management_views_card" references="cards(id)" onDelete="CASCADE"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_management_views_user" references="users(id)" onDelete="CASCADE"/>
+            </column>
+            
+            <column name="action" type="varchar(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="revealed_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="revealed_for_seconds" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_changed" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="change_percent" type="decimal(5,2)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="fuzzing_applied" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fuzzing_hours" type="decimal(4,2)">
+                <constraints nullable="true"/>
+            </column>
+            
+            <column name="created_at" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_management_views_user_date" tableName="card_management_views">
+            <column name="user_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <createIndex indexName="idx_management_views_card" tableName="card_management_views">
+            <column name="card_id"/>
+        </createIndex>
+
+        <!-- Card Flags Table (for flag now, fix later) -->
+        <createTable tableName="card_flags">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="card_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_flags_card" references="cards(id)" onDelete="CASCADE"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_flags_user" references="users(id)" onDelete="CASCADE"/>
+            </column>
+            
+            <column name="reason" type="varchar(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="note" type="text">
+                <constraints nullable="true"/>
+            </column>
+            <column name="flagged_during_session_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="resolved" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            
+            <column name="created_at" type="timestamp" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_card_flags_user_resolved" tableName="card_flags">
+            <column name="user_id"/>
+            <column name="resolved"/>
+        </createIndex>
+        <createIndex indexName="idx_card_flags_card" tableName="card_flags">
+            <column name="card_id"/>
+        </createIndex>
+
+    </changeSet>
+
+</databaseChangeLog>

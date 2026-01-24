@@ -18,7 +18,7 @@ memoon-card/
 ├── documentation/         # Project documentation
 ├── client.config.json     # Portfolio client configuration
 ├── docker-compose.yml     # Docker Compose configuration
-├── .env.example          # Environment variables template
+├── .env          # Environment variables template
 └── package.json          # Workspace root configuration
 ```
 
@@ -41,7 +41,7 @@ cd frontend && yarn install
 cd ../backend && yarn install
 
 # Copy environment files
-cp .env.example .env
+cp .env .env
 # Edit .env with your configuration
 
 # Start services with Docker Compose

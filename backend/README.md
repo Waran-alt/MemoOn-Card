@@ -39,7 +39,7 @@ yarn dev
 
 ## Environment Variables
 
-See root `.env.example` for required environment variables.
+See root `.env` for required environment variables.
 
 Make sure to set:
 - `POSTGRES_HOST`
