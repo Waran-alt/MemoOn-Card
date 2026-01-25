@@ -6,6 +6,7 @@ import {
   CardWithState,
 } from '../types/database';
 import { FSRSState } from '../services/fsrs.service';
+import { sanitizeHtml } from '../utils/sanitize';
 
 export class CardService {
   /**
@@ -41,6 +42,11 @@ export class CardService {
     userId: string,
     data: CreateCardRequest
   ): Promise<Card> {
+    // Sanitize HTML content to prevent XSS
+    const sanitizedRecto = sanitizeHtml(data.recto);
+    const sanitizedVerso = sanitizeHtml(data.verso);
+    const sanitizedComment = data.comment ? sanitizeHtml(data.comment) : null;
+
     const result = await pool.query<Card>(
       `INSERT INTO cards (
         user_id, deck_id, recto, verso, comment,
@@ -51,9 +57,9 @@ export class CardService {
       [
         userId,
         deckId,
-        data.recto,
-        data.verso,
-        data.comment || null,
+        sanitizedRecto,
+        sanitizedVerso,
+        sanitizedComment,
         data.recto_image || null,
         data.verso_image || null,
         data.recto_formula || false,
@@ -78,15 +84,15 @@ export class CardService {
 
     if (data.recto !== undefined) {
       updates.push(`recto = $${paramCount++}`);
-      values.push(data.recto);
+      values.push(sanitizeHtml(data.recto)); // Sanitize HTML
     }
     if (data.verso !== undefined) {
       updates.push(`verso = $${paramCount++}`);
-      values.push(data.verso);
+      values.push(sanitizeHtml(data.verso)); // Sanitize HTML
     }
     if (data.comment !== undefined) {
       updates.push(`comment = $${paramCount++}`);
-      values.push(data.comment);
+      values.push(data.comment ? sanitizeHtml(data.comment) : null); // Sanitize HTML
     }
     if (data.recto_image !== undefined) {
       updates.push(`recto_image = $${paramCount++}`);

@@ -1,5 +1,6 @@
 import { pool } from '../config/database';
 import { Deck, CreateDeckRequest } from '../types/database';
+import { sanitizeHtml } from '../utils/sanitize';
 
 export class DeckService {
   /**
@@ -28,11 +29,15 @@ export class DeckService {
    * Create a new deck
    */
   async createDeck(userId: string, data: CreateDeckRequest): Promise<Deck> {
+    // Sanitize HTML content to prevent XSS
+    const sanitizedTitle = sanitizeHtml(data.title);
+    const sanitizedDescription = data.description ? sanitizeHtml(data.description) : null;
+
     const result = await pool.query<Deck>(
       `INSERT INTO decks (user_id, title, description)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [userId, data.title, data.description || null]
+      [userId, sanitizedTitle, sanitizedDescription]
     );
     return result.rows[0];
   }
@@ -51,11 +56,11 @@ export class DeckService {
 
     if (data.title !== undefined) {
       updates.push(`title = $${paramCount++}`);
-      values.push(data.title);
+      values.push(sanitizeHtml(data.title)); // Sanitize HTML
     }
     if (data.description !== undefined) {
       updates.push(`description = $${paramCount++}`);
-      values.push(data.description);
+      values.push(data.description ? sanitizeHtml(data.description) : null); // Sanitize HTML
     }
 
     if (updates.length === 0) {

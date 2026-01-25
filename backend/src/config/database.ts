@@ -1,17 +1,24 @@
 import { Pool, PoolConfig } from 'pg';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import {
+  POSTGRES_HOST,
+  POSTGRES_PORT,
+  POSTGRES_DB,
+  POSTGRES_USER,
+  POSTGRES_PASSWORD,
+} from './env';
+import { DATABASE_POOL } from '../constants/database.constants';
 
 const dbConfig: PoolConfig = {
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
-  database: process.env.POSTGRES_DB || 'memoon_card_db',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres',
-  max: 20, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  host: POSTGRES_HOST,
+  port: POSTGRES_PORT,
+  database: POSTGRES_DB,
+  user: POSTGRES_USER,
+  password: POSTGRES_PASSWORD,
+  max: DATABASE_POOL.MAX_CLIENTS,
+  idleTimeoutMillis: DATABASE_POOL.IDLE_TIMEOUT_MS,
+  connectionTimeoutMillis: DATABASE_POOL.CONNECTION_TIMEOUT_MS,
+  query_timeout: DATABASE_POOL.QUERY_TIMEOUT_MS,
+  statement_timeout: DATABASE_POOL.STATEMENT_TIMEOUT_MS,
 };
 
 export const pool = new Pool(dbConfig);

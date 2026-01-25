@@ -1,257 +1,153 @@
-import { Request, Response, Router } from 'express';
+import { Router } from 'express';
 import { CardService } from '../services/card.service';
 import { ReviewService } from '../services/review.service';
-import { CreateCardRequest, ReviewCardRequest, UpdateCardRequest } from '../types/database';
+import { getUserId } from '../middleware/auth';
+import { asyncHandler } from '../middleware/errorHandler';
+import { validateRequest, validateParams, validateQuery } from '../middleware/validation';
+import {
+  CreateCardSchema,
+  UpdateCardSchema,
+  ReviewCardSchema,
+  CardIdSchema,
+  DeckIdParamSchema,
+  GetCardsQuerySchema,
+} from '../schemas/card.schemas';
+import { NotFoundError, ValidationError } from '../utils/errors';
 import { API_LIMITS } from '../constants/app.constants';
 
 const router = Router();
 const cardService = new CardService();
 const reviewService = new ReviewService();
 
-// Get user ID from request (for now, using a placeholder - will add auth later)
-const getUserId = (req: Request): string => {
-  // TODO: Extract from JWT token
-  return (req.headers['x-user-id'] as string) || '00000000-0000-0000-0000-000000000000';
-};
-
-// Helper to safely extract string from query parameters (handles ParsedQs type)
-const getStringParam = (value: string | string[] | undefined): string => {
-  if (Array.isArray(value)) {
-    return value[0] || '';
-  }
-  return value || '';
-};
-
 /**
  * GET /api/decks/:deckId/cards
  * Get all cards in a deck
  */
-router.get('/decks/:deckId/cards', async (req: Request, res: Response) => {
-  try {
-    const userId = getUserId(req);
-    const deckId = getStringParam(req.params.deckId);
-    const cards = await cardService.getCardsByDeckId(deckId, userId);
-    return res.json({ success: true, data: cards });
-  } catch (error) {
-    console.error('Error getting cards:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
+router.get('/decks/:deckId/cards', validateParams(DeckIdParamSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const deckId = String(req.params.deckId);
+  const cards = await cardService.getCardsByDeckId(deckId, userId);
+  return res.json({ success: true, data: cards });
+}));
 
 /**
  * GET /api/decks/:deckId/cards/due
  * Get due cards for a deck
  */
-router.get('/decks/:deckId/cards/due', async (req: Request, res: Response) => {
-  try {
-    const userId = getUserId(req);
-    const deckId = getStringParam(req.params.deckId);
-    const cards = await cardService.getDueCards(deckId, userId);
-    return res.json({ success: true, data: cards });
-  } catch (error) {
-    console.error('Error getting due cards:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
+router.get('/decks/:deckId/cards/due', validateParams(DeckIdParamSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const deckId = String(req.params.deckId);
+  const cards = await cardService.getDueCards(deckId, userId);
+  return res.json({ success: true, data: cards });
+}));
 
 /**
  * GET /api/decks/:deckId/cards/new
  * Get new cards (not yet reviewed)
  */
-router.get('/decks/:deckId/cards/new', async (req: Request, res: Response) => {
-  try {
-    const userId = getUserId(req);
-    const deckId = getStringParam(req.params.deckId);
-    const limitStr = getStringParam(req.query.limit as string | string[] | undefined);
-    const limit = parseInt(limitStr) || API_LIMITS.DEFAULT_CARD_LIMIT;
-    const cards = await cardService.getNewCards(deckId, userId, limit);
-    return res.json({ success: true, data: cards });
-  } catch (error) {
-    console.error('Error getting new cards:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
+router.get('/decks/:deckId/cards/new', validateParams(DeckIdParamSchema), validateQuery(GetCardsQuerySchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const deckId = String(req.params.deckId);
+  const limit = typeof req.query.limit === 'number' ? req.query.limit : API_LIMITS.DEFAULT_CARD_LIMIT;
+  const cards = await cardService.getNewCards(deckId, userId, limit);
+  return res.json({ success: true, data: cards });
+}));
 
 /**
  * POST /api/decks/:deckId/cards
  * Create a new card
  */
-router.post('/decks/:deckId/cards', async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const userId = getUserId(req);
-    const data: CreateCardRequest = req.body;
-    
-    if (!data.recto || !data.verso) {
-      return res.status(400).json({
-        success: false,
-        error: 'Recto and verso are required',
-      });
-    }
-    
-    const deckId = getStringParam(req.params.deckId);
-    const card = await cardService.createCard(deckId, userId, data);
-    return res.status(201).json({ success: true, data: card });
-  } catch (error) {
-    console.error('Error creating card:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
+router.post('/decks/:deckId/cards', validateParams(DeckIdParamSchema), validateRequest(CreateCardSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const deckId = String(req.params.deckId);
+  const card = await cardService.createCard(deckId, userId, req.body);
+  return res.status(201).json({ success: true, data: card });
+}));
 
 /**
  * GET /api/cards/:id
  * Get a specific card
  */
-router.get('/:id', async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const userId = getUserId(req);
-    const cardId = getStringParam(req.params.id);
-    const card = await cardService.getCardById(cardId, userId);
-    
-    if (!card) {
-      return res.status(404).json({
-        success: false,
-        error: 'Card not found',
-      });
-    }
-    
-    return res.json({ success: true, data: card });
-  } catch (error) {
-    console.error('Error getting card:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+router.get('/:id', validateParams(CardIdSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const card = await cardService.getCardById(cardId, userId);
+  
+  if (!card) {
+    throw new NotFoundError('Card');
   }
-});
+  
+  return res.json({ success: true, data: card });
+}));
 
 /**
  * PUT /api/cards/:id
  * Update a card
  */
-router.put('/:id', async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const userId = getUserId(req);
-    const cardId = getStringParam(req.params.id);
-    const data: UpdateCardRequest = req.body;
-    const card = await cardService.updateCard(cardId, userId, data);
-    
-    if (!card) {
-      return res.status(404).json({
-        success: false,
-        error: 'Card not found',
-      });
-    }
-    
-    return res.json({ success: true, data: card });
-  } catch (error) {
-    console.error('Error updating card:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+router.put('/:id', validateParams(CardIdSchema), validateRequest(UpdateCardSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const card = await cardService.updateCard(cardId, userId, req.body);
+  
+  if (!card) {
+    throw new NotFoundError('Card');
   }
-});
+  
+  return res.json({ success: true, data: card });
+}));
 
 /**
  * DELETE /api/cards/:id
  * Delete a card
  */
-router.delete('/:id', async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const userId = getUserId(req);
-    const cardId = getStringParam(req.params.id);
-    const deleted = await cardService.deleteCard(cardId, userId);
-    
-    if (!deleted) {
-      return res.status(404).json({
-        success: false,
-        error: 'Card not found',
-      });
-    }
-    
-    return res.json({ success: true, message: 'Card deleted' });
-  } catch (error) {
-    console.error('Error deleting card:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+router.delete('/:id', validateParams(CardIdSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const deleted = await cardService.deleteCard(cardId, userId);
+  
+  if (!deleted) {
+    throw new NotFoundError('Card');
   }
-});
+  
+  return res.json({ success: true, message: 'Card deleted' });
+}));
 
 /**
  * POST /api/cards/:id/review
  * Review a card (update FSRS state)
  */
-router.post('/:id/review', async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const userId = getUserId(req);
-    const data: ReviewCardRequest = req.body;
-    
-    if (!data.rating || ![1, 2, 3, 4].includes(data.rating)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Valid rating (1-4) is required',
-      });
-    }
-    
-    const cardId = getStringParam(req.params.id);
-    const result = await reviewService.reviewCard(cardId, userId, data.rating);
-    
-    if (!result) {
-      return res.status(404).json({
-        success: false,
-        error: 'Card not found',
-      });
-    }
-    
-    return res.json({ success: true, data: result });
-  } catch (error) {
-    console.error('Error reviewing card:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+router.post('/:id/review', validateParams(CardIdSchema), validateRequest(ReviewCardSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const rating = req.body.rating;
+  
+  if (![1, 2, 3, 4].includes(rating)) {
+    throw new ValidationError('Valid rating (1-4) is required');
   }
-});
+  
+  const result = await reviewService.reviewCard(cardId, userId, rating);
+  
+  if (!result) {
+    throw new NotFoundError('Card');
+  }
+  
+  return res.json({ success: true, data: result });
+}));
 
 /**
  * POST /api/cards/:id/reset-stability
  * Reset card stability (treat as new)
  */
-router.post('/:id/reset-stability', async (req: Request, res: Response): Promise<Response> => {
-  try {
-    const userId = getUserId(req);
-    const cardId = getStringParam(req.params.id);
-    const card = await cardService.resetCardStability(cardId, userId);
-    
-    if (!card) {
-      return res.status(404).json({
-        success: false,
-        error: 'Card not found',
-      });
-    }
-    
-    return res.json({ success: true, data: card });
-  } catch (error) {
-    console.error('Error resetting card stability:', error);
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+router.post('/:id/reset-stability', validateParams(CardIdSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const card = await cardService.resetCardStability(cardId, userId);
+  
+  if (!card) {
+    throw new NotFoundError('Card');
   }
-});
+  
+  return res.json({ success: true, data: card });
+}));
 
 export default router;

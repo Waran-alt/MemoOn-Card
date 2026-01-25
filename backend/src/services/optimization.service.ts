@@ -9,12 +9,41 @@
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { writeFile, unlink, readFile } from 'fs/promises';
-import { join } from 'path';
+import { writeFile, unlink, readFile, mkdir } from 'fs/promises';
+import { join, resolve, basename } from 'path';
 import { pool } from '../config/database';
 import { UserSettings } from '../types/database';
+import { ValidationError } from '../utils/errors';
+import { OPTIMIZER_CONFIG } from '../constants/optimization.constants';
 
 const execAsync = promisify(exec);
+
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validate and sanitize user ID
+ */
+function validateUserId(userId: string): void {
+  if (!UUID_REGEX.test(userId)) {
+    throw new ValidationError('Invalid user ID format');
+  }
+}
+
+/**
+ * Sanitize and validate file path
+ * Ensures path is within temp directory and doesn't contain path traversal
+ */
+function sanitizePath(filePath: string, baseDir: string): string {
+  const resolved = resolve(baseDir, basename(filePath));
+  
+  // Ensure resolved path is within base directory
+  if (!resolved.startsWith(resolve(baseDir))) {
+    throw new ValidationError('Invalid file path');
+  }
+  
+  return resolved;
+}
 
 export interface OptimizationResult {
   success: boolean;
@@ -37,6 +66,8 @@ export class OptimizationService {
    * Export review logs to CSV format for FSRS Optimizer
    */
   async exportReviewLogsToCSV(userId: string, outputPath: string): Promise<void> {
+    // Validate userId format
+    validateUserId(userId);
     const query = `
       SELECT 
         card_id::text as card_id,
@@ -88,21 +119,31 @@ export class OptimizationService {
     userId: string,
     config?: OptimizationConfig
   ): Promise<OptimizationResult> {
-    const tempDir = join(process.cwd(), 'temp');
-    const csvPath = join(tempDir, `revlog_${userId}_${Date.now()}.csv`);
-    const outputPath = join(tempDir, `output_${userId}_${Date.now()}.json`);
+    // Validate userId format to prevent command injection
+    validateUserId(userId);
+    
+    const tempDir = resolve(process.cwd(), 'temp');
+    const timestamp = Date.now();
+    
+    // Create safe file names (userId is already validated as UUID)
+    const csvFileName = `revlog_${userId}_${timestamp}.csv`;
+    const outputFileName = `output_${userId}_${timestamp}.json`;
+    
+    // Sanitize paths to prevent path traversal
+    const csvPath = sanitizePath(csvFileName, tempDir);
+    const outputPath = sanitizePath(outputFileName, tempDir);
 
     try {
-      // Ensure temp directory exists
-      await execAsync(`mkdir -p ${tempDir}`);
+      // Use fs.mkdir instead of shell command to prevent command injection
+      await mkdir(tempDir, { recursive: true });
 
       // Export review logs to CSV
       await this.exportReviewLogsToCSV(userId, csvPath);
 
       // Get user settings for timezone and day_start
       const userSettings = await this.getUserSettings(userId);
-      const timezone = config?.timezone || userSettings.timezone || 'UTC';
-      const dayStart = config?.dayStart ?? userSettings.day_start ?? 4; // Default 4 AM
+      const timezone = config?.timezone || userSettings.timezone || OPTIMIZER_CONFIG.DEFAULT_TIMEZONE;
+      const dayStart = config?.dayStart ?? userSettings.day_start ?? OPTIMIZER_CONFIG.DEFAULT_DAY_START;
 
       // Build optimizer command
       // Note: FSRS Optimizer CLI accepts timezone and day_start as environment variables
@@ -131,11 +172,17 @@ export class OptimizationService {
 
       for (const pythonCmd of pythonCommands) {
         try {
+          // Use array format for exec to prevent command injection
+          // Split command and arguments safely
+          const [command, ...args] = pythonCmd.split(' ');
+          const fullArgs = [...args, csvPath];
+          
           const result = await execAsync(
-            `${pythonCmd} "${csvPath}"`,
+            `${command} ${fullArgs.map(arg => `"${arg}"`).join(' ')}`,
             { 
               env,
-              maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large outputs
+              maxBuffer: OPTIMIZER_CONFIG.MAX_BUFFER_BYTES,
+              timeout: OPTIMIZER_CONFIG.EXECUTION_TIMEOUT_MS,
             }
           );
           stdout = result.stdout;
@@ -274,8 +321,8 @@ export class OptimizationService {
         }
       }
 
-      console.error('Could not parse optimizer output. stdout:', stdout.substring(0, 500));
-      console.error('stderr:', stderr.substring(0, 500));
+      console.error('Could not parse optimizer output. stdout:', stdout.substring(0, OPTIMIZER_CONFIG.ERROR_OUTPUT_MAX_LENGTH));
+      console.error('stderr:', stderr.substring(0, OPTIMIZER_CONFIG.ERROR_OUTPUT_MAX_LENGTH));
       return null;
     } catch (error) {
       console.error('Error parsing optimizer output:', error);
@@ -341,7 +388,7 @@ export class OptimizationService {
 
     for (const { cmd, method } of pythonCommands) {
       try {
-        await execAsync(cmd, { timeout: 5000 });
+        await execAsync(cmd, { timeout: OPTIMIZER_CONFIG.CHECK_TIMEOUT_MS });
         return { available: true, method };
       } catch {
         // Continue to next
@@ -355,9 +402,7 @@ export class OptimizationService {
    * Get minimum review count required for optimization
    */
   getMinReviewCount(): number {
-    // FSRS Optimizer typically requires at least 100-200 reviews
-    // This is a conservative estimate
-    return 100;
+    return OPTIMIZER_CONFIG.MIN_REVIEW_COUNT;
   }
 
   /**
