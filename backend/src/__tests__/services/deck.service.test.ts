@@ -3,20 +3,21 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DeckService } from '../../services/deck.service';
-import { Deck, CreateDeckRequest } from '../../types/database';
-import { pool } from '../../config/database';
-import { createMockQueryResult } from '../utils/test-helpers';
+import { QueryResult } from 'pg';
+import { DeckService } from '@/services/deck.service';
+import { Deck, CreateDeckRequest } from '@/types/database';
+import { pool } from '@/config/database';
+import { createMockQueryResult } from '@/__tests__/utils/test-helpers';
 
 // Mock database pool
-vi.mock('../../config/database', () => ({
+vi.mock('@/config/database', () => ({
   pool: {
     query: vi.fn(),
   },
 }));
 
 // Mock sanitize
-vi.mock('../../utils/sanitize', () => ({
+vi.mock('@/utils/sanitize', () => ({
   sanitizeHtml: vi.fn((input: string) => input), // Return as-is for tests
 }));
 
@@ -43,7 +44,7 @@ describe('DeckService', () => {
         },
       ];
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult(mockDecks));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult(mockDecks));
 
       const result = await deckService.getDecksByUserId(mockUserId);
 
@@ -55,7 +56,7 @@ describe('DeckService', () => {
     });
 
     it('should return empty array if no decks found', async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await deckService.getDecksByUserId(mockUserId);
 
@@ -74,7 +75,7 @@ describe('DeckService', () => {
         updated_at: new Date(),
       };
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
 
       const result = await deckService.getDeckById(mockDeckId, mockUserId);
 
@@ -86,7 +87,7 @@ describe('DeckService', () => {
     });
 
     it('should return null if deck not found', async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await deckService.getDeckById(mockDeckId, mockUserId);
 
@@ -105,12 +106,12 @@ describe('DeckService', () => {
         id: mockDeckId,
         user_id: mockUserId,
         title: createData.title,
-        description: createData.description,
+        description: createData.description ?? null,
         created_at: new Date(),
         updated_at: new Date(),
       };
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
 
       const result = await deckService.createDeck(mockUserId, createData);
 
@@ -135,7 +136,7 @@ describe('DeckService', () => {
         updated_at: new Date(),
       };
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
 
       const result = await deckService.createDeck(mockUserId, createData);
 
@@ -154,12 +155,12 @@ describe('DeckService', () => {
         id: mockDeckId,
         user_id: mockUserId,
         title: updateData.title,
-        description: updateData.description,
+        description: updateData.description ?? null,
         created_at: new Date(),
         updated_at: new Date(),
       };
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockDeck]));
 
       const result = await deckService.updateDeck(mockDeckId, mockUserId, updateData);
 
@@ -173,7 +174,7 @@ describe('DeckService', () => {
 
   describe('deleteDeck', () => {
     it('should delete a deck', async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([]));
 
       await deckService.deleteDeck(mockDeckId, mockUserId);
 

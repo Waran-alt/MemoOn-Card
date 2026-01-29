@@ -3,20 +3,21 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CardService } from '../../services/card.service';
-import { Card, CreateCardRequest } from '../../types/database';
-import { pool } from '../../config/database';
-import { createMockQueryResult } from '../utils/test-helpers';
+import { QueryResult } from 'pg';
+import { CardService } from '@/services/card.service';
+import { Card, CreateCardRequest } from '@/types/database';
+import { pool } from '@/config/database';
+import { createMockQueryResult } from '@/__tests__/utils/test-helpers';
 
 // Mock database pool
-vi.mock('../../config/database', () => ({
+vi.mock('@/config/database', () => ({
   pool: {
     query: vi.fn(),
   },
 }));
 
 // Mock sanitize
-vi.mock('../../utils/sanitize', () => ({
+vi.mock('@/utils/sanitize', () => ({
   sanitizeHtml: vi.fn((input: string) => input), // Return as-is for tests
 }));
 
@@ -55,7 +56,7 @@ describe('CardService', () => {
         },
       ];
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult(mockCards));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult(mockCards));
 
       const result = await cardService.getCardsByDeckId(mockDeckId, mockUserId);
 
@@ -89,7 +90,7 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
 
       const result = await cardService.getCardById(mockCardId, mockUserId);
 
@@ -97,7 +98,7 @@ describe('CardService', () => {
     });
 
     it('should return null if card not found', async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.getCardById(mockCardId, mockUserId);
 
@@ -119,7 +120,7 @@ describe('CardService', () => {
         user_id: mockUserId,
         recto: createData.recto,
         verso: createData.verso,
-        comment: createData.comment,
+        comment: createData.comment ?? null,
         recto_image: null,
         verso_image: null,
         recto_formula: false,
@@ -133,7 +134,7 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
 
       const result = await cardService.createCard(mockDeckId, mockUserId, createData);
 
@@ -172,7 +173,7 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
 
       const result = await cardService.updateCard(mockCardId, mockUserId, updateData);
 
@@ -182,7 +183,7 @@ describe('CardService', () => {
 
   describe('deleteCard', () => {
     it('should delete a card', async () => {
-      vi.mocked(pool.query).mockResolvedValueOnce(createMockQueryResult([]));
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([]));
 
       await cardService.deleteCard(mockCardId, mockUserId);
 
