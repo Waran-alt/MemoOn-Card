@@ -1,22 +1,23 @@
 # Multi-stage build for client frontend
-# Build context: Portfolio root (.)
+# Build context: memoon-card root (.) or Portfolio root with PROJECT_ROOT=clients/memoon-card
+ARG PROJECT_ROOT=.
 
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare yarn@4.12.0 --activate
 
 # Workspace setup
 FROM base AS workspace-setup
+ARG PROJECT_ROOT=.
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
 # Copy client monorepo files
-COPY clients/memoon-card/.yarnrc.yml ./.yarnrc.yml
-COPY clients/memoon-card/package.json ./package.json
-COPY clients/memoon-card/frontend/package.json ./frontend/package.json
-COPY clients/memoon-card/backend/package.json ./backend/package.json
-# Copy .yarn directory if it exists (Yarn will create it during install if missing)
-COPY clients/memoon-card/.yarn* ./.yarn/
-COPY clients/memoon-card/frontend/yarn.lock* ./yarn.lock
+COPY ${PROJECT_ROOT}/.yarnrc.yml ./.yarnrc.yml
+COPY ${PROJECT_ROOT}/package.json ./package.json
+COPY ${PROJECT_ROOT}/frontend/package.json ./frontend/package.json
+COPY ${PROJECT_ROOT}/backend/package.json ./backend/package.json
+COPY ${PROJECT_ROOT}/.yarn* ./.yarn/
+COPY ${PROJECT_ROOT}/frontend/yarn.lock* ./yarn.lock
 
 # Install dependencies
 FROM workspace-setup AS deps
@@ -24,8 +25,9 @@ RUN yarn install
 
 # Build
 FROM deps AS builder
+ARG PROJECT_ROOT=.
 WORKDIR /app
-COPY clients/memoon-card/frontend ./frontend
+COPY ${PROJECT_ROOT}/frontend ./frontend
 WORKDIR /app/frontend
 RUN yarn build
 
@@ -50,10 +52,11 @@ CMD ["node", "frontend/server.js"]
 
 # Development target
 FROM deps AS development
+ARG PROJECT_ROOT=.
 WORKDIR /app
 ENV NODE_ENV=development
 RUN apk add --no-cache libc6-compat curl
-COPY clients/memoon-card/frontend ./frontend
+COPY ${PROJECT_ROOT}/frontend ./frontend
 WORKDIR /app/frontend
 EXPOSE 3002
 ENV PORT=3002

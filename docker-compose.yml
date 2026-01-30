@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:17-alpine
@@ -22,9 +20,13 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        PROJECT_ROOT: .
     container_name: memoon-card-backend
+    env_file:
+      - backend/.env
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${BACKEND_PORT:-4002}
@@ -36,7 +38,7 @@ services:
     ports:
       - "${BACKEND_PORT:-4002}:4002"
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
       - /app/node_modules
     depends_on:
       postgres:
@@ -47,16 +49,20 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        PROJECT_ROOT: .
     container_name: memoon-card-frontend
     environment:
       NODE_ENV: ${NODE_ENV:-development}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002}
+      PORT: ${FRONTEND_PORT:-3002}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://memoon-card.localhost}
+      BACKEND_URL: http://memoon-card-backend:4002
     ports:
-      - "${FRONTEND_PORT:-3002}:3000"
+      - "${FRONTEND_PORT:-3002}:${FRONTEND_PORT:-3002}"
     volumes:
-      - ./frontend:/app
+      - ./frontend:/app/frontend
       - /app/node_modules
       - /app/.next
     depends_on:

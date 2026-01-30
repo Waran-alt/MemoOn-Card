@@ -1,13 +1,21 @@
 /**
  * Environment Configuration Validation
- * 
- * Validates and provides type-safe access to environment variables
+ *
+ * Loads env in order: root .env (shared) then backend/.env (overrides).
+ * Docker sets env via Compose, so files are only used when running locally.
  */
 
+import path from 'path';
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
-dotenv.config();
+const backendRoot = path.resolve(__dirname, '..', '..');
+const repoRoot =
+  backendRoot.endsWith(`${path.sep}dist`) || backendRoot.endsWith('/dist')
+    ? path.resolve(backendRoot, '..', '..')
+    : path.resolve(backendRoot, '..');
+dotenv.config({ path: path.join(repoRoot, '.env') });
+dotenv.config({ path: path.join(backendRoot, '.env') });
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
