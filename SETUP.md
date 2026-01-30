@@ -70,24 +70,54 @@ cd backend && yarn dev
 cd frontend && yarn dev
 ```
 
-### Integrated with Portfolio
+### Integrated with Portfolio (https://memoon-card.localhost)
 
-When integrated with the Portfolio monorepo:
+The subdomain **https://memoon-card.localhost** is served by the Portfolio Nginx proxy. It only works when memoon-card runs **from the Portfolio root** with the generated client compose, so Nginx and memoon-card containers share the same Docker network.
 
-1. **Run discovery** (from Portfolio root):
+1. **From Portfolio repo root**, generate client config and start the full stack:
    ```bash
    yarn discover:clients
+   docker-compose -f docker-compose.yml -f .generated/docker-compose.clients.yml up -d
    ```
 
-2. **Run migrations**:
+2. **Run migrations** (from Portfolio root):
    ```bash
    yarn migrate:client memoon-card
    ```
 
-3. **Start services**:
-   ```bash
-   docker-compose up -d
-   ```
+3. **If you get 502 on https://memoon-card.localhost:**  
+   Nginx cannot reach `memoon-card-frontend:3002`. Ensure you started services from **Portfolio root** with the override above (not only `docker-compose up` from this directory). If you run memoon-card from this directory (`clients/memoon-card`) with its own `docker-compose up`, those containers use a different network and Nginx will return 502. Use **http://localhost:3002** when running memoon-card standalone.
+
+## View and manage the database
+
+PostgreSQL runs in Docker. Use any of these:
+
+**1. Command line (psql)** — open a shell inside the Postgres container:
+
+```bash
+docker-compose exec postgres psql -U postgres -d memoon_card_db
+```
+
+Then run SQL (e.g. `\dt` to list tables, `\q` to quit).
+
+**2. GUI client** — connect with:
+
+| Setting   | Value                                                        |
+|-----------|--------------------------------------------------------------|
+| Host      | `localhost`                                                  |
+| Port      | `5432` (or `POSTGRES_PORT` from `.env`)                      |
+| Database  | `memoon_card_db`                                             |
+| User      | `postgres`                                                   |
+| Password  | value of `POSTGRES_PASSWORD` in `.env` (default `postgres`)  |
+
+Examples: [pgAdmin](https://www.pgadmin.org/), [DBeaver](https://dbeaver.io/), [TablePlus](https://tableplus.com/), [Beekeeper Studio](https://www.beekeeperstudio.io/).
+
+**3. Migrations**
+
+```bash
+yarn migrate:up      # apply pending migrations
+yarn migrate:status  # show migration status
+```
 
 ## Access
 
