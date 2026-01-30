@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { createFSRS } from './services/fsrs.service';
 import { testConnection } from './config/database';
@@ -95,6 +96,9 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth', authLimiter);
 
+// Cookie parsing (for refresh_token httpOnly cookie)
+app.use(cookieParser());
+
 // Request logging
 app.use(morgan('dev'));
 
@@ -182,6 +186,7 @@ async function startServer() {
     console.log(`   - POST   /api/auth/register`);
     console.log(`   - POST   /api/auth/login`);
     console.log(`   - POST   /api/auth/refresh`);
+    console.log(`   - GET    /api/auth/session`);
     console.log(`   - GET    /api/decks`);
     console.log(`   - POST   /api/decks`);
     console.log(`   - GET    /api/decks/:id`);

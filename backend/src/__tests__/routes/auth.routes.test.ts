@@ -5,12 +5,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import authRoutes from '@/routes/auth.routes';
 import { errorHandler } from '@/middleware/errorHandler';
 import { userService } from '@/services/user.service';
 import { User } from '@/types/database';
 
 vi.mock('@/config/env', () => ({
+  NODE_ENV: 'test',
   JWT_SECRET: 'test-secret-minimum-32-characters-long',
   JWT_ACCESS_EXPIRES_IN: '15m',
   JWT_REFRESH_EXPIRES_IN: '7d',
@@ -19,6 +21,7 @@ vi.mock('@/config/env', () => ({
 vi.mock('@/services/user.service', () => ({
   userService: {
     createUser: vi.fn(),
+    getUserById: vi.fn(),
     getUserByEmail: vi.fn(),
     verifyPassword: vi.fn(),
   },
@@ -36,6 +39,7 @@ const mockUser: User = {
 function createApp() {
   const app = express();
   app.use(express.json());
+  app.use(cookieParser());
   app.use('/api/auth', authRoutes);
   app.use(errorHandler);
   return app;
@@ -213,10 +217,10 @@ describe('Auth routes', () => {
       }
     });
 
-    it('should return 400 when refreshToken missing', async () => {
+    it('should return 401 when refreshToken missing', async () => {
       const res = await request(app).post('/api/auth/refresh').send({});
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(401);
     });
   });
 });

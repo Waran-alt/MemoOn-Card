@@ -2,6 +2,13 @@
  * Frontend type definitions
  */
 
+/** User shape from auth API (login, register, session, refresh) */
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
 export interface Deck {
   id: string;
   user_id: string;

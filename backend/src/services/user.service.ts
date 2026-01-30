@@ -61,6 +61,17 @@ export class UserService {
   }
 
   /**
+   * Find user by ID (for session; no password_hash).
+   */
+  async getUserById(userId: string): Promise<User | null> {
+    const result = await pool.query<User>(
+      'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
+      [userId]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
    * Find user by email (includes password_hash for verification).
    */
   async getUserByEmail(email: string): Promise<(User & { password_hash: string | null }) | null> {

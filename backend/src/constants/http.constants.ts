@@ -39,3 +39,10 @@ export const AUTH_RATE_LIMIT = {
   WINDOW_MS: 15 * 60 * 1000, // 15 minutes
   MAX: 10, // max attempts per window per IP
 } as const;
+
+/** Refresh token httpOnly cookie (SSR + XSS-safe) */
+export const REFRESH_COOKIE = {
+  NAME: 'refresh_token',
+  MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000, // 7 days, match JWT_REFRESH_EXPIRES_IN
+  SAME_SITE: 'lax' as const,
+} as const;
