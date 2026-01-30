@@ -11,6 +11,7 @@ import { authMiddleware } from './middleware/auth';
 import { csrfProtection } from './middleware/csrf';
 import { PORT, CORS_ORIGIN, CORS_ORIGINS, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX, MAX_REQUEST_SIZE, NODE_ENV } from './config/env';
 import { HTTP_STATUS, HTTP_HEADERS, SECURITY_HEADERS } from './constants/http.constants';
+import authRoutes from './routes/auth.routes';
 import decksRoutes from './routes/decks.routes';
 import cardsRoutes from './routes/cards.routes';
 import reviewsRoutes from './routes/reviews.routes';
@@ -129,6 +130,9 @@ if (NODE_ENV !== 'production') {
   }));
 }
 
+// Auth routes (no auth/CSRF required for login/register/refresh)
+app.use('/api/auth', authRoutes);
+
 // API Routes (require authentication + CSRF protection)
 // CSRF protection applies to state-changing methods (POST, PUT, DELETE, PATCH)
 app.use('/api', csrfProtection);
@@ -165,6 +169,9 @@ async function startServer() {
       console.log(`🧪 Test FSRS: http://localhost:${PORT}/api/test-fsrs`);
     }
     console.log(`📚 API Routes:`);
+    console.log(`   - POST   /api/auth/register`);
+    console.log(`   - POST   /api/auth/login`);
+    console.log(`   - POST   /api/auth/refresh`);
     console.log(`   - GET    /api/decks`);
     console.log(`   - POST   /api/decks`);
     console.log(`   - GET    /api/decks/:id`);

@@ -38,6 +38,16 @@ export function errorHandler(
       }),
     });
   }
+
+  // Handle errors with statusCode (e.g. from other modules in tests)
+  const code = (err as { statusCode?: number }).statusCode;
+  if (typeof code === 'number' && code >= 400 && code < 600) {
+    return res.status(code).json({
+      success: false,
+      error: err.message,
+      ...(NODE_ENV === 'development' && { stack: err.stack, path: req.path }),
+    });
+  }
   
   // Handle unexpected errors
   const isDevelopment = NODE_ENV === 'development';

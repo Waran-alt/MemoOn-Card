@@ -8,5 +8,6 @@
     <include file="changesets/001-initial-schema.xml" relativeToChangelogFile="true"/>
     <include file="changesets/002-fsrs-core-schema.xml" relativeToChangelogFile="true"/>
     <include file="changesets/003-fsrs-optimizer-schema.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/004-users-password-hash.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

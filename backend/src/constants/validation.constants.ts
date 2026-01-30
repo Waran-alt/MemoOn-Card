@@ -25,4 +25,13 @@ export const VALIDATION_LIMITS = {
   
   /** Query limit minimum */
   QUERY_LIMIT_MIN: 1,
+
+  /** Password minimum length (auth) */
+  PASSWORD_MIN_LENGTH: 8,
+
+  /** Email maximum length */
+  EMAIL_MAX_LENGTH: 255,
+
+  /** User name maximum length */
+  USER_NAME_MAX_LENGTH: 255,
 } as const;

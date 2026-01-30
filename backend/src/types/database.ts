@@ -6,6 +6,8 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
+  /** Set on insert; never returned in API responses */
+  password_hash?: string | null;
   created_at: Date;
   updated_at: Date;
 }

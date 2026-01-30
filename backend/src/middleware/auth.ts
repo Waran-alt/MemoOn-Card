@@ -6,7 +6,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET, JWT_ACCESS_EXPIRES_IN } from '../config/env';
+import { JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } from '../config/env';
 import { AuthenticationError } from '../utils/errors';
 import { HTTP_HEADERS } from '../constants/http.constants';
 
@@ -143,7 +143,7 @@ export function generateRefreshToken(userId: string): string {
     userId,
   };
   
-  const expiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+  const expiresIn = JWT_REFRESH_EXPIRES_IN;
   
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn,
