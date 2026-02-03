@@ -70,54 +70,37 @@ cd backend && yarn dev
 cd frontend && yarn dev
 ```
 
-### Integrated with Portfolio (https://memoon-card.localhost)
+### Integrated with Portfolio
 
-The subdomain **https://memoon-card.localhost** is served by the Portfolio Nginx proxy. It only works when memoon-card runs **from the Portfolio root** with the generated client compose, so Nginx and memoon-card containers share the same Docker network.
+When integrated with the Portfolio monorepo, run these **from the Portfolio root**:
 
-1. **From Portfolio repo root**, generate client config and start the full stack:
+1. **Integrate** (first time or after adding/updating clients):
    ```bash
-   yarn discover:clients
-   docker-compose -f docker-compose.yml -f .generated/docker-compose.clients.yml up -d
+   yarn integrate
    ```
 
-2. **Run migrations** (from Portfolio root):
+2. **Run migrations** (if the client has a database):
    ```bash
-   yarn migrate:client memoon-card
+   yarn migrate:clients
    ```
 
-3. **If you get 502 on https://memoon-card.localhost:**  
-   Nginx cannot reach `memoon-card-frontend:3002`. Ensure you started services from **Portfolio root** with the override above (not only `docker-compose up` from this directory). If you run memoon-card from this directory (`clients/memoon-card`) with its own `docker-compose up`, those containers use a different network and Nginx will return 502. Use **http://localhost:3002** when running memoon-card standalone.
+3. **Start all services**:
+   ```bash
+   yarn start
+   ```
 
-## View and manage the database
+### Managing Docker When Working from Client Folder
 
-PostgreSQL runs in Docker. Use any of these:
+When you work inside this client directory (e.g. `clients/memoon-card/`) but the stack runs from the Portfolio root:
 
-**1. Command line (psql)** — open a shell inside the Postgres container:
+| Task                                        | From client folder                                                                | From Portfolio root                                                           |
+|---------------------------------------------|-----------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| **Rebuild** (after Dockerfile/deps changes) | `../../scripts/rebuild-client.sh` (auto-detects client)                           | `yarn clients:rebuild memoon-card`                                            |
+| **Rebuild + restart**                       | `../../scripts/rebuild-client.sh --restart`                                       | `yarn clients:rebuild memoon-card -- --restart`                               |
+| **Restart** (no rebuild)                    | `../../scripts/docker-stack.sh restart memoon-card-backend memoon-card-frontend`  | `./scripts/docker-stack.sh restart memoon-card-backend memoon-card-frontend`  |
+| **Logs**                                    | `../../scripts/docker-stack.sh logs -f memoon-card-frontend`                      | `./scripts/docker-stack.sh logs -f memoon-card-frontend`                      |
 
-```bash
-docker-compose exec postgres psql -U postgres -d memoon_card_db
-```
-
-Then run SQL (e.g. `\dt` to list tables, `\q` to quit).
-
-**2. GUI client** — connect with:
-
-| Setting   | Value                                                        |
-|-----------|--------------------------------------------------------------|
-| Host      | `localhost`                                                  |
-| Port      | `5432` (or `POSTGRES_PORT` from `.env`)                      |
-| Database  | `memoon_card_db`                                             |
-| User      | `postgres`                                                   |
-| Password  | value of `POSTGRES_PASSWORD` in `.env` (default `postgres`)  |
-
-Examples: [pgAdmin](https://www.pgadmin.org/), [DBeaver](https://dbeaver.io/), [TablePlus](https://tableplus.com/), [Beekeeper Studio](https://www.beekeeperstudio.io/).
-
-**3. Migrations**
-
-```bash
-yarn migrate:up      # apply pending migrations
-yarn migrate:status  # show migration status
-```
+**Note:** Source code changes use hot reload via volume mounts—no rebuild. Rebuild only when changing `Dockerfile`, `package.json` dependencies, or other build-time config.
 
 ## Access
 

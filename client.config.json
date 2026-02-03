@@ -12,6 +12,9 @@
     "name": "memoon_card_db",
     "user": "postgres"
   },
+  "backend": {
+    "healthPath": "/health"
+  },
   "enabled": true,
   "metadata": {
     "created": "2025-01-09",

@@ -14,7 +14,7 @@
                 <constraints primaryKey="true" nullable="false"/>
             </column>
             <column name="user_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_decks_user" references="users(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_decks_user" references="users(id)" deleteCascade="true"/>
             </column>
             <column name="title" type="varchar(255)">
                 <constraints nullable="false"/>
@@ -40,10 +40,10 @@
                 <constraints primaryKey="true" nullable="false"/>
             </column>
             <column name="user_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_cards_user" references="users(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_cards_user" references="users(id)" deleteCascade="true"/>
             </column>
             <column name="deck_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_cards_deck" references="decks(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_cards_deck" references="decks(id)" deleteCascade="true"/>
             </column>
             
             <!-- Card Content -->
@@ -113,10 +113,10 @@
                 <constraints primaryKey="true" nullable="false"/>
             </column>
             <column name="card_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_review_logs_card" references="cards(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_review_logs_card" references="cards(id)" deleteCascade="true"/>
             </column>
             <column name="user_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_review_logs_user" references="users(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_review_logs_user" references="users(id)" deleteCascade="true"/>
             </column>
             
             <!-- Review Data -->
@@ -156,7 +156,7 @@
         <!-- User Settings Table (for personalized FSRS weights) -->
         <createTable tableName="user_settings">
             <column name="user_id" type="uuid">
-                <constraints primaryKey="true" nullable="false" foreignKeyName="fk_user_settings_user" references="users(id)" onDelete="CASCADE"/>
+                <constraints primaryKey="true" nullable="false" foreignKeyName="fk_user_settings_user" references="users(id)" deleteCascade="true"/>
             </column>
             
             <!-- FSRS Configuration -->
@@ -189,10 +189,10 @@
                 <constraints primaryKey="true" nullable="false"/>
             </column>
             <column name="card_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_management_views_card" references="cards(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_management_views_card" references="cards(id)" deleteCascade="true"/>
             </column>
             <column name="user_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_management_views_user" references="users(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_management_views_user" references="users(id)" deleteCascade="true"/>
             </column>
             
             <column name="action" type="varchar(50)">
@@ -236,10 +236,10 @@
                 <constraints primaryKey="true" nullable="false"/>
             </column>
             <column name="card_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_card_flags_card" references="cards(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_card_flags_card" references="cards(id)" deleteCascade="true"/>
             </column>
             <column name="user_id" type="uuid">
-                <constraints nullable="false" foreignKeyName="fk_card_flags_user" references="users(id)" onDelete="CASCADE"/>
+                <constraints nullable="false" foreignKeyName="fk_card_flags_user" references="users(id)" deleteCascade="true"/>
             </column>
             
             <column name="reason" type="varchar(50)">
