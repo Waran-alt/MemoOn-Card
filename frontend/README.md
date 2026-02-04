@@ -41,6 +41,24 @@ The frontend is set up with:
 - **TypeScript** for type safety
 - **Tailwind CSS** for styling
 - **Axios** for API calls
+- **Vitest** for unit and component tests (aligned with backend)
+
+## Testing (Vitest)
+
+Tests use **Vitest** (same as the backend), **React Testing Library**, and **jsdom**. No Jest.
+
+```bash
+yarn test          # watch mode
+yarn test:run      # single run (CI)
+yarn test:coverage # coverage report
+yarn test:ui       # Vitest UI (browser)
+```
+
+- **Config:** `vitest.config.ts` (path alias `@/`, jsdom, coverage)
+- **Setup:** `vitest.setup.ts` (jest-dom matchers, Next.js navigation mocks)
+- **Tests:** `src/**/*.test.{ts,tsx}` (e.g. `components/__tests__/`, `store/__tests__/`)
+
+After adding new devDependencies, run `yarn install` from the project root (lockfile may need updating).
 
 ## Next Steps
 
