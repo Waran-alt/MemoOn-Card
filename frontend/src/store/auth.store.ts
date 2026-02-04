@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { getClientApiBaseUrl } from '@/lib/env';
 import type { AuthUser } from '@/types';
 
 export interface AuthState {
@@ -37,7 +38,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => set({ user: null, accessToken: null, isHydrated: true }),
 
   refreshAccess: async (): Promise<string | null> => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
+    const API_URL = getClientApiBaseUrl();
     try {
       const res = await fetch(`${API_URL}/api/auth/refresh`, {
         method: 'POST',
