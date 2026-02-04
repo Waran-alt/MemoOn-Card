@@ -24,7 +24,7 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {navItems.map(({ href, label }) => {
-            const isActive = pathname === href || (href !== '/app' && pathname.startsWith(href));
+            const isActive = pathname === href || pathname.startsWith(href + '/');
             return (
               <Link
                 key={href}
