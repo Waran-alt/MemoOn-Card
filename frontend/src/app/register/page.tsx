@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
+import { getClientApiBaseUrl } from '@/lib/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002';
+const API_URL = getClientApiBaseUrl();
 
 const PASSWORD_MIN_LENGTH = 8;
 
@@ -17,7 +18,7 @@ export default function RegisterPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +41,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           password,
-          name: name.trim() || undefined,
+          name: username.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -70,13 +71,14 @@ export default function RegisterPage() {
     <main className="flex min-h-screen flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-6">
         <h1 className="text-2xl font-bold text-center">Create account</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
           <div>
             <label htmlFor="email" className="block text-sm font-medium mb-1">
               Email
             </label>
             <input
               id="email"
+              name="email"
               type="email"
               autoComplete="email"
               value={email}
@@ -91,6 +93,7 @@ export default function RegisterPage() {
             </label>
             <input
               id="password"
+              name="password"
               type="password"
               autoComplete="new-password"
               value={password}
@@ -101,15 +104,16 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label htmlFor="name" className="block text-sm font-medium mb-1">
-              Name (optional)
+            <label htmlFor="username" className="block text-sm font-medium mb-1">
+              Username (optional)
             </label>
             <input
-              id="name"
+              id="username"
+              name="username"
               type="text"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-600"
             />
           </div>

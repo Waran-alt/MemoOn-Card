@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
 
-export function SignOutButton() {
+export function SignOutButton({ className }: { className?: string }) {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
 
@@ -19,7 +19,7 @@ export function SignOutButton() {
     <button
       type="button"
       onClick={handleClick}
-      className="text-sm text-neutral-600 hover:underline dark:text-neutral-400"
+      className={className ?? 'text-sm text-neutral-600 hover:underline dark:text-neutral-400'}
     >
       Sign out
     </button>
