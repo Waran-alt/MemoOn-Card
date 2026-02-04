@@ -6,15 +6,13 @@ import { SignOutButton } from '../SignOutButton';
 const mockPush = vi.fn();
 const mockRefresh = vi.fn();
 const mockLogout = vi.fn();
+const mockPost = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush, refresh: mockRefresh }),
-}));
-
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush, refresh: mockRefresh }) }));
 vi.mock('@/store/auth.store', () => ({
-  useAuthStore: (selector: (s: { logout: () => void }) => void) =>
-    selector({ logout: mockLogout }),
+  useAuthStore: (selector: (s: { logout: () => void }) => void) => selector({ logout: mockLogout }),
 }));
+vi.mock('@/lib/api', () => ({ default: { post: mockPost } }));
 
 describe('SignOutButton', () => {
   beforeEach(() => {
@@ -26,11 +24,12 @@ describe('SignOutButton', () => {
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
   });
 
-  it('calls logout, router.push(/login), and router.refresh on click', async () => {
+  it('calls logout API, logout, router.push(/login), and router.refresh on click', async () => {
     const user = userEvent.setup();
     render(<SignOutButton />);
     await user.click(screen.getByRole('button', { name: /sign out/i }));
 
+    expect(mockPost).toHaveBeenCalledWith('/api/auth/logout');
     expect(mockLogout).toHaveBeenCalledOnce();
     expect(mockPush).toHaveBeenCalledWith('/login');
     expect(mockRefresh).toHaveBeenCalledOnce();

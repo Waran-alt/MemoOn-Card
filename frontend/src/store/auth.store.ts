@@ -16,6 +16,8 @@ export interface AuthState {
   setUser: (user: AuthUser | null) => void;
   setAccessToken: (token: string | null) => void;
   setHydrated: (hydrated: boolean) => void;
+  /** Set user + access token + hydrated after successful login/register; then redirect in the page */
+  setAuthSuccess: (data: { accessToken: string; user: AuthUser }) => void;
   /** Set user from SSR/session (no access token); caller should call refreshAccess() for API calls */
   setFromServer: (user: AuthUser | null) => void;
   /** Clear user and token; call after failed refresh or explicit logout */
@@ -32,6 +34,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user) => set({ user }),
   setAccessToken: (token) => set({ accessToken: token }),
   setHydrated: (isHydrated) => set({ isHydrated }),
+
+  setAuthSuccess: (data) => set({ user: data.user, accessToken: data.accessToken, isHydrated: true }),
 
   setFromServer: (user) => set({ user, isHydrated: true }),
 

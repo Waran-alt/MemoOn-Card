@@ -9,6 +9,16 @@ export interface AuthUser {
   name: string | null;
 }
 
+/** Auth API success response (login, register, refresh) */
+export interface AuthApiResponse {
+  success: true;
+  data: {
+    accessToken: string;
+    refreshToken?: string;
+    user: AuthUser;
+  };
+}
+
 export interface Deck {
   id: string;
   user_id: string;

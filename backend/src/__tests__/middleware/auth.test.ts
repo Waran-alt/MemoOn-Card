@@ -35,12 +35,9 @@ describe('authMiddleware', () => {
   it('should reject request without Authorization header', () => {
     authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
 
-    expect(mockResponse.status).toHaveBeenCalledWith(401);
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'No token provided',
-    });
-    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('No token provided');
+    expect(mockResponse.status).not.toHaveBeenCalled();
   });
 
   it('should reject request with invalid Authorization format', () => {
@@ -50,11 +47,9 @@ describe('authMiddleware', () => {
 
     authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
 
-    expect(mockResponse.status).toHaveBeenCalledWith(401);
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'No token provided',
-    });
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('No token provided');
+    expect(mockResponse.status).not.toHaveBeenCalled();
   });
 
   it('should reject request with empty token', () => {
@@ -64,11 +59,9 @@ describe('authMiddleware', () => {
 
     authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
 
-    expect(mockResponse.status).toHaveBeenCalledWith(401);
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Token is required',
-    });
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Token is required');
+    expect(mockResponse.status).not.toHaveBeenCalled();
   });
 
   it('should reject request with invalid token', () => {
@@ -78,11 +71,9 @@ describe('authMiddleware', () => {
 
     authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
 
-    expect(mockResponse.status).toHaveBeenCalledWith(401);
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Invalid token',
-    });
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Invalid token');
+    expect(mockResponse.status).not.toHaveBeenCalled();
   });
 
   it('should accept valid token and attach userId', () => {
@@ -102,7 +93,6 @@ describe('authMiddleware', () => {
 
   it('should reject expired token', () => {
     const userId = 'user-123';
-    // Create an expired token
     const token = jwt.sign(
       { userId },
       'test-secret-key-minimum-32-characters-long',
@@ -115,11 +105,9 @@ describe('authMiddleware', () => {
 
     authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
 
-    expect(mockResponse.status).toHaveBeenCalledWith(401);
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Token has expired',
-    });
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Token has expired');
+    expect(mockResponse.status).not.toHaveBeenCalled();
   });
 
   it('should reject token without userId', () => {
@@ -135,11 +123,9 @@ describe('authMiddleware', () => {
 
     authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
 
-    expect(mockResponse.status).toHaveBeenCalledWith(401);
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      success: false,
-      error: 'Invalid token payload',
-    });
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Invalid token payload');
+    expect(mockResponse.status).not.toHaveBeenCalled();
   });
 });
 

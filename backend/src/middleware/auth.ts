@@ -29,81 +29,34 @@ export interface JWTPayload {
 
 /**
  * Authentication middleware
- * Verifies JWT token and extracts user ID
+ * Verifies JWT token and extracts user ID. Throws AuthenticationError for errorHandler.
  */
 export function authMiddleware(
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next(new AuthenticationError('No token provided'));
+  }
+
+  const token = authHeader.substring(HTTP_HEADERS.BEARER_PREFIX_LENGTH);
+  if (!token) return next(new AuthenticationError('Token is required'));
+
   try {
-    // Extract token from Authorization header
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        success: false,
-        error: 'No token provided',
-      });
-      return;
-    }
-    
-    const token = authHeader.substring(HTTP_HEADERS.BEARER_PREFIX_LENGTH); // Remove 'Bearer ' prefix
-    
-    if (!token) {
-      res.status(401).json({
-        success: false,
-        error: 'Token is required',
-      });
-      return;
-    }
-    
-    // Verify token
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
-      
-      if (!decoded.userId) {
-        res.status(401).json({
-          success: false,
-          error: 'Invalid token payload',
-        });
-        return;
-      }
-      
-      // Attach user ID to request
-      req.userId = decoded.userId;
-      next();
-    } catch (error) {
-      if (error instanceof jwt.TokenExpiredError) {
-        res.status(401).json({
-          success: false,
-          error: 'Token has expired',
-        });
-        return;
-      } else if (error instanceof jwt.JsonWebTokenError) {
-        res.status(401).json({
-          success: false,
-          error: 'Invalid token',
-        });
-        return;
-      }
-      throw error;
-    }
+    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    if (!decoded.userId) return next(new AuthenticationError('Invalid token payload'));
+    req.userId = decoded.userId;
+    next();
   } catch (error) {
-    if (error instanceof AuthenticationError) {
-      res.status(error.statusCode).json({
-        success: false,
-        error: error.message,
-      });
-      return;
+    if (error instanceof jwt.TokenExpiredError) {
+      return next(new AuthenticationError('Token has expired'));
     }
-    
-    // Unexpected error
-    console.error('Auth middleware error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Authentication failed',
-    });
+    if (error instanceof jwt.JsonWebTokenError) {
+      return next(new AuthenticationError('Invalid token'));
+    }
+    next(error);
   }
 }
 

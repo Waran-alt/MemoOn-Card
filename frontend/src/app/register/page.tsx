@@ -4,17 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
-import { getClientApiBaseUrl } from '@/lib/api';
-
-const API_URL = getClientApiBaseUrl();
+import apiClient, { getApiErrorMessage } from '@/lib/api';
+import type { AuthApiResponse } from '@/types';
 
 const PASSWORD_MIN_LENGTH = 8;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const setUser = useAuthStore((s) => s.setUser);
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
-  const setHydrated = useAuthStore((s) => s.setHydrated);
+  const setAuthSuccess = useAuthStore((s) => s.setAuthSuccess);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,37 +28,20 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/auth/register`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-          name: username.trim() || undefined,
-        }),
-      });
-      const data = await res.json();
+      const { data } = await apiClient.post<AuthApiResponse | { success?: boolean; error?: string }>(
+        '/api/auth/register',
+        { email: email.trim().toLowerCase(), password, name: username.trim() || undefined }
+      );
 
-      if (!res.ok) {
-        setError(data?.error ?? 'Registration failed');
+      if (data?.success && 'data' in data && data.data?.accessToken && data.data?.user) {
+        setAuthSuccess({ accessToken: data.data.accessToken, user: data.data.user });
+        router.push('/app');
+        router.refresh();
         return;
       }
-      if (!data?.success || !data?.data?.accessToken || !data?.data?.user) {
-        setError('Invalid response');
-        return;
-      }
-
-      setUser(data.data.user);
-      setAccessToken(data.data.accessToken);
-      setHydrated(true);
-      router.push('/app');
-      router.refresh();
-    } catch {
-      setError('Network error');
+      setError('error' in data && typeof data.error === 'string' ? data.error : 'Invalid response');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Registration failed'));
     } finally {
       setLoading(false);
     }

@@ -10,7 +10,7 @@ import { errorHandler, asyncHandler } from './middleware/errorHandler';
 import { requestIdMiddleware } from './middleware/requestId';
 import { authMiddleware } from './middleware/auth';
 import { csrfProtection } from './middleware/csrf';
-import { PORT, CORS_ORIGIN, CORS_ORIGINS, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS, AUTH_RATE_LIMIT_MAX, MAX_REQUEST_SIZE, NODE_ENV } from './config/env';
+import { PORT, getAllowedOrigins, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS, AUTH_RATE_LIMIT_MAX, MAX_REQUEST_SIZE, NODE_ENV } from './config/env';
 import { HTTP_STATUS, HTTP_HEADERS, SECURITY_HEADERS, AUTH_RATE_LIMIT } from './constants/http.constants';
 import authRoutes from './routes/auth.routes';
 import decksRoutes from './routes/decks.routes';
@@ -57,22 +57,11 @@ app.use(helmet({
 app.use(requestIdMiddleware);
 
 // CORS configuration
-const allowedOrigins = CORS_ORIGINS
-  ? CORS_ORIGINS.split(',').map(origin => origin.trim())
-  : [CORS_ORIGIN];
-
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    if (!origin) return callback(null, true);
+    if (getAllowedOrigins().includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   optionsSuccessStatus: HTTP_HEADERS.OPTIONS_SUCCESS_STATUS,

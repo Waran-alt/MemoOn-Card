@@ -8,18 +8,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { CORS_ORIGIN, CORS_ORIGINS } from '@/config/env';
-import { ValidationError } from '@/utils/errors';
-
-/**
- * Get allowed origins for CSRF validation
- */
-function getAllowedOrigins(): string[] {
-  if (CORS_ORIGINS) {
-    return CORS_ORIGINS.split(',').map(origin => origin.trim());
-  }
-  return [CORS_ORIGIN];
-}
+import { getAllowedOrigins } from '@/config/env';
 
 /**
  * CSRF Protection Middleware

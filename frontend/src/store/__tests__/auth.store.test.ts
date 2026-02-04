@@ -28,6 +28,16 @@ describe('auth.store', () => {
     });
   });
 
+  describe('setAuthSuccess', () => {
+    it('sets user, accessToken, and marks hydrated', () => {
+      const user = { id: '1', email: 'a@b.com', name: 'Alice' };
+      useAuthStore.getState().setAuthSuccess({ accessToken: 'token-xyz', user });
+      expect(useAuthStore.getState().user).toEqual(user);
+      expect(useAuthStore.getState().accessToken).toBe('token-xyz');
+      expect(useAuthStore.getState().isHydrated).toBe(true);
+    });
+  });
+
   describe('setFromServer', () => {
     it('sets user and marks hydrated', () => {
       const user = { id: '1', email: 'a@b.com', name: null };

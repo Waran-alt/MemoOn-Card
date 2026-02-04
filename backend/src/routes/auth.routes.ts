@@ -13,19 +13,11 @@ import { asyncHandler } from '@/middleware/errorHandler';
 import { validateRequest } from '@/middleware/validation';
 import { RegisterSchema, LoginSchema, RefreshBodySchema } from '@/schemas/auth.schemas';
 import { AuthenticationError } from '@/utils/errors';
-import { JWT_SECRET, NODE_ENV, CORS_ORIGIN, CORS_ORIGINS } from '@/config/env';
+import { JWT_SECRET, NODE_ENV, getAllowedOrigins } from '@/config/env';
 import { REFRESH_COOKIE } from '@/constants/http.constants';
 import type { Request } from 'express';
 
 const router = Router();
-
-/** Origins allowed for CORS; used to validate cookie domain is not attacker-controlled. */
-function getAllowedOrigins(): string[] {
-  if (CORS_ORIGINS) {
-    return CORS_ORIGINS.split(',').map((o) => o.trim());
-  }
-  return [CORS_ORIGIN];
-}
 
 function toUserResponse(user: { id: string; email: string; name: string | null }) {
   return { id: user.id, email: user.email, name: user.name };

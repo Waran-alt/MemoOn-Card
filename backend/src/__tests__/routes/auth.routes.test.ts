@@ -18,6 +18,7 @@ vi.mock('@/config/env', () => ({
   JWT_REFRESH_EXPIRES_IN: '7d',
   CORS_ORIGIN: 'http://localhost:3002',
   CORS_ORIGINS: 'http://localhost:3002,https://memoon-card.localhost',
+  getAllowedOrigins: () => ['http://localhost:3002', 'https://memoon-card.localhost'],
 }));
 
 vi.mock('@/services/user.service', () => ({

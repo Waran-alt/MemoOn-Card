@@ -15,7 +15,7 @@ const repoRoot =
     ? path.resolve(backendRoot, '..', '..')
     : path.resolve(backendRoot, '..');
 dotenv.config({ path: path.join(repoRoot, '.env') });
-dotenv.config({ path: path.join(backendRoot, '.env') });
+dotenv.config({ path: path.join(backendRoot, '.env'), override: true });
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -94,3 +94,11 @@ export const {
   AUTH_RATE_LIMIT_MAX,
   MAX_REQUEST_SIZE,
 } = config;
+
+/** CORS allowed origins (from CORS_ORIGINS or [CORS_ORIGIN]). */
+export function getAllowedOrigins(): string[] {
+  if (config.CORS_ORIGINS) {
+    return config.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean);
+  }
+  return [config.CORS_ORIGIN];
+}

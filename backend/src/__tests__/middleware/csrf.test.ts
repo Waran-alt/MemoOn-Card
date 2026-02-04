@@ -11,6 +11,7 @@ import { HTTP_STATUS } from '../../constants/http.constants';
 vi.mock('../../config/env', () => ({
   CORS_ORIGIN: 'http://localhost:3002',
   CORS_ORIGINS: undefined,
+  getAllowedOrigins: () => ['http://localhost:3002'],
 }));
 
 describe('csrfProtection', () => {

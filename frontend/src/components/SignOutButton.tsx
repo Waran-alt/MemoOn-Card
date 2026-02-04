@@ -1,15 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
+import apiClient from '@/lib/api';
 
 export function SignOutButton({ className }: { className?: string }) {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
 
-  function handleClick(e: React.MouseEvent) {
+  async function handleClick(e: React.MouseEvent) {
     e.preventDefault();
+    await apiClient.post('/api/auth/logout').catch(() => {});
     logout();
     router.push('/login');
     router.refresh();
