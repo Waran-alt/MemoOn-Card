@@ -6,6 +6,7 @@ node_modules/
 .yarn/unplugged
 .yarn/build-state.yml
 .yarn/install-state.gz
+.yarnrc.yml.lockfile-refresh.bak
 
 # Production builds
 dist/

@@ -30,6 +30,7 @@
     "test": "yarn workspaces foreach -A run test",
     "test:e2e": "yarn workspace @memoon-card/frontend test:e2e",
     "test:e2e:report": "yarn workspace @memoon-card/frontend test:e2e:report",
+    "lockfile:refresh": "bash scripts/lockfile-refresh.sh",
     "lint": "yarn workspaces foreach -A run lint",
     "type-check": "yarn workspaces foreach -A run type-check",
     "clean": "yarn workspaces foreach -A run clean",

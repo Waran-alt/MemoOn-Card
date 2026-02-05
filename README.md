@@ -27,18 +27,25 @@ memoon-card/
 ### Prerequisites
 
 - Node.js >= 22.0.0
-- Yarn 4.9.2+ (or npm)
+- Yarn 4.12.0+ (use Corepack: `corepack enable && corepack prepare yarn@4.12.0 --activate`)
 - Docker & Docker Compose
 - PostgreSQL 17+
+
+### Lockfile (good practice)
+
+The project uses **immutable installs**: the lockfile must not be modified by a normal `yarn install`. This keeps CI and local installs consistent.
+
+- **Install after clone:** run `yarn install` at the repo root (same as CI).
+- **If `yarn install` fails** with “lockfile would have been modified”, your local resolution may differ. Run `yarn lockfile:refresh` (requires Docker) and commit the updated `yarn.lock` if you did not change dependencies; otherwise it’s safe to commit after adding/updating deps.
+- **After adding or updating dependencies:** run `yarn lockfile:refresh`, then commit `yarn.lock` so CI keeps using the same format.
 
 ### Development Setup
 
 **Standalone Development:**
 
 ```bash
-# Install dependencies
-cd frontend && yarn install
-cd ../backend && yarn install
+# Install dependencies (from repo root)
+yarn install
 
 # Copy environment files
 cp .env .env
