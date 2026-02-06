@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import AppPage from '../page';
 import type { Deck } from '@/types';
@@ -52,7 +52,7 @@ describe('AppPage', () => {
       expect(screen.getByRole('heading', { name: 'Spanish' })).toBeInTheDocument();
     });
     expect(screen.getByText('Spanish verbs')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Spanish/ })).toHaveAttribute('href', '/app/decks/deck-1');
+    expect(screen.getByRole('link', { name: /Spanish/ })).toHaveAttribute('href', '/en/app/decks/deck-1');
   });
 
   it('opens create form when New deck is clicked', async () => {
@@ -181,7 +181,7 @@ describe('AppPage', () => {
       expect(screen.getByRole('heading', { name: 'Spanish' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'French' })).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: /Spanish/ })).toHaveAttribute('href', '/app/decks/d1');
-    expect(screen.getByRole('link', { name: /French/ })).toHaveAttribute('href', '/app/decks/d2');
+    expect(screen.getByRole('link', { name: /Spanish/ })).toHaveAttribute('href', '/en/app/decks/d1');
+    expect(screen.getByRole('link', { name: /French/ })).toHaveAttribute('href', '/en/app/decks/d2');
   });
 });

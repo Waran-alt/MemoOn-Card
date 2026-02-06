@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import { SignOutButton } from '../SignOutButton';
 
@@ -13,6 +13,12 @@ vi.mock('@/store/auth.store', () => ({
   useAuthStore: (selector: (s: { logout: () => void }) => void) => selector({ logout: mockLogout }),
 }));
 vi.mock('@/lib/api', () => ({ default: { post: mockPost } }));
+vi.mock('@/hooks/useTranslation', () => ({
+  useTranslation: () => ({
+    t: (key: string) => (key === 'signOut' ? 'Sign out' : key),
+    locale: 'en',
+  }),
+}));
 
 describe('SignOutButton', () => {
   beforeEach(() => {
@@ -31,7 +37,7 @@ describe('SignOutButton', () => {
 
     expect(mockPost).toHaveBeenCalledWith('/api/auth/logout');
     expect(mockLogout).toHaveBeenCalledOnce();
-    expect(mockPush).toHaveBeenCalledWith('/login');
+    expect(mockPush).toHaveBeenCalledWith('/en/login');
     expect(mockRefresh).toHaveBeenCalledOnce();
   });
 
@@ -49,7 +55,7 @@ describe('SignOutButton', () => {
 
     expect(mockPost).toHaveBeenCalledWith('/api/auth/logout');
     expect(mockLogout).toHaveBeenCalledOnce();
-    expect(mockPush).toHaveBeenCalledWith('/login');
+    expect(mockPush).toHaveBeenCalledWith('/en/login');
     expect(mockRefresh).toHaveBeenCalledOnce();
   });
 });

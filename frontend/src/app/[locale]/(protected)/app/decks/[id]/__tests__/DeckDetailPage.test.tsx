@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import DeckDetailPage from '../page';
 import type { Deck, Card } from '@/types';
@@ -66,7 +66,7 @@ describe('DeckDetailPage', () => {
     });
     expect(screen.getByText('A test deck')).toBeInTheDocument();
     const backLink = screen.getByRole('link', { name: '← Back to decks' });
-    expect(backLink).toHaveAttribute('href', '/app');
+    expect(backLink).toHaveAttribute('href', '/en/app');
     expect(mockGet).toHaveBeenCalledWith('/api/decks/deck-123');
     expect(mockGet).toHaveBeenCalledWith('/api/decks/deck-123/cards');
   });
@@ -77,7 +77,7 @@ describe('DeckDetailPage', () => {
       expect(screen.getByRole('heading', { name: 'My Deck' })).toBeInTheDocument();
     });
     const studyLink = screen.getByRole('link', { name: 'Study' });
-    expect(studyLink).toHaveAttribute('href', '/app/decks/deck-123/study');
+    expect(studyLink).toHaveAttribute('href', '/en/app/decks/deck-123/study');
   });
 
   it('shows empty cards state and New card button', async () => {
@@ -209,7 +209,7 @@ describe('DeckDetailPage', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Deck not found');
     });
     const backLink = screen.getByRole('link', { name: 'Back to decks' });
-    expect(backLink).toHaveAttribute('href', '/app');
+    expect(backLink).toHaveAttribute('href', '/en/app');
   });
 
   it('shows error when GET deck fails', async () => {

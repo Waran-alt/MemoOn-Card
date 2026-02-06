@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import StudyPage from '../page';
 import type { Deck, Card } from '@/types';
@@ -69,7 +69,7 @@ describe('StudyPage', () => {
       expect(screen.getByText(/No cards to study right now/)).toBeInTheDocument();
     });
     const backLinks = screen.getAllByRole('link', { name: /Back to deck/ });
-    expect(backLinks.some((el) => el.getAttribute('href') === '/app/decks/deck-123')).toBe(true);
+    expect(backLinks.some((el) => el.getAttribute('href') === '/en/app/decks/deck-123')).toBe(true);
   });
 
   it('calls deck, due, and new endpoints', async () => {
@@ -93,7 +93,7 @@ describe('StudyPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Deck not found');
     });
-    expect(screen.getByRole('link', { name: /Back to decks/ })).toHaveAttribute('href', '/app');
+    expect(screen.getByRole('link', { name: /Back to decks/ })).toHaveAttribute('href', '/en/app');
   });
 
   it('shows load error when fetch fails', async () => {
@@ -107,7 +107,7 @@ describe('StudyPage', () => {
   it('redirects to /app when id is missing', () => {
     useParams.mockReturnValue({});
     render(<StudyPage />);
-    expect(mockReplace).toHaveBeenCalledWith('/app');
+    expect(mockReplace).toHaveBeenCalledWith('/en/app');
   });
 
   it('shows card recto and Show answer, then verso and rating buttons', async () => {
