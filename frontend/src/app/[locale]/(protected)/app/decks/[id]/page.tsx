@@ -53,7 +53,7 @@ export default function DeckDetailPage() {
       })
       .catch((err) => setError(getApiErrorMessage(err, ta('failedLoadDeck'))))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, ta]);
 
   useEffect(() => {
     if (!id || !deck) return;
@@ -70,7 +70,7 @@ export default function DeckDetailPage() {
       })
       .catch((err) => setCardsError(getApiErrorMessage(err, ta('failedLoadCards'))))
       .finally(() => setCardsLoading(false));
-  }, [id, deck]);
+  }, [id, deck, ta]);
 
   function handleCreateCard(e: React.FormEvent) {
     e.preventDefault();

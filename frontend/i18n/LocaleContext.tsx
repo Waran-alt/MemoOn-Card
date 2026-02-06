@@ -109,10 +109,13 @@ export function LocaleProvider({ initialLocale, children }: LocaleProviderProps)
     }
   }, [locale]);
 
-  // Keep state in sync when the initialLocale prop changes (e.g., client-side navigation)
+  // Keep state in sync when the initialLocale prop changes (e.g., client-side navigation).
+  // Defer setState to avoid synchronous setState in effect (react-hooks/set-state-in-effect).
   useEffect(() => {
     const normalized = getBestLocale(initialLocale);
-    setLocaleState(prev => (prev !== normalized ? normalized : prev));
+    queueMicrotask(() => {
+      setLocaleState(prev => (prev !== normalized ? normalized : prev));
+    });
   }, [initialLocale]);
 
   const contextValue: LocaleContextValue = {

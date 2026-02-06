@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
 import apiClient, { getApiErrorMessage } from '@/lib/api';
@@ -23,7 +23,7 @@ export default function AppPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  function loadDecks() {
+  const loadDecks = useCallback(() => {
     setLoading(true);
     setError('');
     apiClient
@@ -35,11 +35,11 @@ export default function AppPage() {
       })
       .catch((err) => setError(getApiErrorMessage(err, ta('failedLoadDecks'))))
       .finally(() => setLoading(false));
-  }
+  }, [ta]);
 
   useEffect(() => {
     queueMicrotask(() => loadDecks());
-  }, []);
+  }, [loadDecks]);
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();

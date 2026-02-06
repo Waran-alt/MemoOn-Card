@@ -56,7 +56,7 @@ export default function StudyPage() {
       })
       .catch((err) => setError(getApiErrorMessage(err, ta('failedLoadCards'))))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, ta]);
 
   function handleRate(rating: Rating) {
     const card = queue[0];
