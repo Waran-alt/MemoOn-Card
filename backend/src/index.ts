@@ -174,27 +174,6 @@ async function startServer() {
     if (NODE_ENV !== 'production') {
       console.warn(`🧪 Test FSRS: http://localhost:${PORT}/api/test-fsrs`);
     }
-    console.warn(`📚 API Routes:`);
-    console.warn(`   - POST   /api/auth/register`);
-    console.warn(`   - POST   /api/auth/login`);
-    console.warn(`   - POST   /api/auth/refresh`);
-    console.warn(`   - GET    /api/auth/session`);
-    console.warn(`   - GET    /api/decks`);
-    console.warn(`   - POST   /api/decks`);
-    console.warn(`   - GET    /api/decks/:id`);
-    console.warn(`   - PUT    /api/decks/:id`);
-    console.warn(`   - DELETE /api/decks/:id`);
-    console.warn(`   - GET    /api/decks/:id/stats`);
-    console.warn(`   - GET    /api/decks/:deckId/cards`);
-    console.warn(`   - POST   /api/decks/:deckId/cards`);
-    console.warn(`   - GET    /api/cards/:id`);
-    console.warn(`   - PUT    /api/cards/:id`);
-    console.warn(`   - DELETE /api/cards/:id`);
-    console.warn(`   - POST   /api/cards/:id/review`);
-    console.warn(`   - POST   /api/reviews/batch`);
-    console.warn(`   - GET    /api/optimization/status`);
-    console.warn(`   - POST   /api/optimization/optimize`);
-    console.warn(`   - GET    /api/optimization/export`);
   });
 }
 
