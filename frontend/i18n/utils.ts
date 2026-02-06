@@ -25,3 +25,15 @@ export function getBestLocale(requestedLocale: string): SupportedLocale {
 export function getFallbackLocale(locale: SupportedLocale): SupportedLocale {
   return locale === FALLBACK_LOCALE ? DEFAULT_LOCALE : FALLBACK_LOCALE;
 }
+
+/** CLDR plural category for a count in a given locale (cardinal). */
+export type PluralCategory = 'zero' | 'one' | 'two' | 'few' | 'many' | 'other';
+
+export function getPluralCategory(locale: string, count: number): PluralCategory {
+  try {
+    const category = new Intl.PluralRules(locale, { type: 'cardinal' }).select(count);
+    return category as PluralCategory;
+  } catch {
+    return count === 1 ? 'one' : 'other';
+  }
+}

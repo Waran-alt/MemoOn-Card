@@ -112,10 +112,10 @@ export default function StudyPage() {
           href={`/${locale}/app/decks/${id}`}
           className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
         >
-          ← Back to deck
+          ← {ta('backToDeck')}
         </Link>
         <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 text-center dark:border-neutral-700 dark:bg-neutral-800/50">
-          <p className="text-neutral-700 dark:text-neutral-300">No cards to study right now.</p>
+          <p className="text-neutral-700 dark:text-neutral-300">{ta('noCardsToStudy')}</p>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
             Add cards to this deck or come back later for due reviews.
           </p>
@@ -123,7 +123,7 @@ export default function StudyPage() {
             href={`/${locale}/app/decks/${id}`}
             className="mt-4 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
-            Back to deck
+            {ta('backToDeck')}
           </Link>
         </div>
       </div>
@@ -137,18 +137,18 @@ export default function StudyPage() {
           href={`/${locale}/app/decks/${id}`}
           className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
         >
-          ← Back to deck
+          ← {ta('backToDeck')}
         </Link>
         <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 text-center dark:border-neutral-700 dark:bg-neutral-800/50">
-          <p className="font-medium text-neutral-900 dark:text-neutral-100">Session complete</p>
+          <p className="font-medium text-neutral-900 dark:text-neutral-100">{ta('sessionComplete')}</p>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            You reviewed {reviewedCount} card{reviewedCount !== 1 ? 's' : ''}.
+            {ta('reviewedCount', { count: reviewedCount })}
           </p>
           <Link
             href={`/${locale}/app/decks/${id}`}
             className="mt-4 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
-            Back to deck
+            {ta('backToDeck')}
           </Link>
         </div>
       </div>
@@ -165,7 +165,14 @@ export default function StudyPage() {
           ← {ta('exitStudy')}
         </Link>
         <span className="text-sm text-neutral-500 dark:text-neutral-400">
-          {ta('leftReviewed', { vars: { left: queue.length, reviewed: reviewedCount } })}
+          {ta('leftReviewed', {
+            vars: {
+              left: queue.length,
+              reviewed: reviewedCount,
+              leftLabel: ta('cardsLeft', { count: queue.length }),
+              reviewedLabel: ta('cardsReviewed', { count: reviewedCount }),
+            },
+          })}
         </span>
       </div>
 
