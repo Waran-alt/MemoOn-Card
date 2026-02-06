@@ -33,8 +33,9 @@ cd ../backend && yarn install
 ### 3. Set Up Environment Variables
 
 ```bash
-cp .env .env
-# Edit .env with your configuration
+cp env.example .env
+# Copy backend/env.example to backend/.env and frontend/env.example to frontend/.env as needed
+# Edit with your configuration (JWT, CORS, API URL, etc.)
 ```
 
 ### 4. Initialize Frontend

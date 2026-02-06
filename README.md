@@ -39,24 +39,31 @@ The project uses **immutable installs**: the lockfile must not be modified by a 
 - **If `yarn install` fails** with “lockfile would have been modified”, your local resolution may differ. Run `yarn lockfile:refresh` (requires Docker) and commit the updated `yarn.lock` if you did not change dependencies; otherwise it’s safe to commit after adding/updating deps.
 - **After adding or updating dependencies:** run `yarn lockfile:refresh`, then commit `yarn.lock` so CI keeps using the same format.
 
+### Environment
+
+Copy the example env files and set values as needed:
+
+- **Root:** `cp env.example .env` — ports, `NODE_ENV`
+- **Backend:** `backend/env.example` → `backend/.env` — JWT, CORS, rate limits
+- **Frontend:** `frontend/env.example` → `frontend/.env` — API URL; optional E2E overrides (`E2E_BASE_URL`, `E2E_TEST_PASSWORD`)
+
+See each `env.example` for comments. Never commit `.env` files.
+
 ### Development Setup
 
-**Standalone Development:**
+**Standalone:**
 
 ```bash
-# Install dependencies (from repo root)
+# From repo root
 yarn install
+# Set up .env (see Environment above)
 
-# Copy environment files
-cp .env .env
-# Edit .env with your configuration
-
-# Start services with Docker Compose
+# Full stack with Docker
 docker-compose up -d
 
-# Or run individually
-cd frontend && yarn dev
-cd ../backend && yarn dev
+# Or run backend and frontend separately
+yarn dev:backend   # backend
+yarn dev:frontend  # frontend
 ```
 
 **Integrated with Portfolio:**
@@ -88,15 +95,17 @@ liquibase update
 
 ## 🔧 Tech Stack
 
-- **Frontend**: [To be configured]
-- **Backend**: [To be configured]
-- **Database**: PostgreSQL 17
-- **Migrations**: Liquibase
-- **Containerization**: Docker & Docker Compose
+- **Frontend:** Next.js 16, TypeScript, Tailwind CSS, Zustand
+- **Backend:** Node 22, Express 5, TypeScript, Zod, JWT (access + httpOnly refresh cookie)
+- **Database:** PostgreSQL 17, Liquibase migrations
+- **SRS:** FSRS v6 (21 weights), optional Python optimizer
+- **Testing:** Vitest (unit), Playwright (e2e — see `frontend/e2e/README.md`)
 
 ## 📚 Documentation
 
-See `documentation/` directory for detailed documentation.
+- **Run the app:** This README (Quick start, Environment, Development setup).
+- **E2E tests:** `frontend/e2e/README.md` — run against a running app; env and same-origin notes.
+- **Other:** `documentation/` (setup, FSRS optimizer, etc.).
 
 ## 🔗 Links
 
