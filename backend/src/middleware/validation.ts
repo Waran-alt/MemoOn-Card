@@ -73,7 +73,7 @@ export function validateQuery(schema: ZodSchema) {
 export function validateParams(schema: ZodSchema) {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      req.params = schema.parse(req.params) as any;
+      req.params = schema.parse(req.params) as Record<string, string>;
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {

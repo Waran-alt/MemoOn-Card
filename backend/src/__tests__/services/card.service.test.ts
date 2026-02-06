@@ -3,7 +3,6 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { QueryResult } from 'pg';
 import { CardService } from '@/services/card.service';
 import { Card, CreateCardRequest } from '@/types/database';
 import { pool } from '@/config/database';

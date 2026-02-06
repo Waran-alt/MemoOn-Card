@@ -1,5 +1,4 @@
 import { pool } from '../config/database';
-import { ReviewLog } from '../types/database';
 import { FSRSState, ReviewResult, createFSRS } from './fsrs.service';
 import { CardService } from './card.service';
 import { UserSettings } from '../types/database';

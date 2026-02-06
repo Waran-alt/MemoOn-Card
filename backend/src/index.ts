@@ -169,32 +169,32 @@ async function startServer() {
   }
   
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    console.warn(`🚀 Server running on port ${PORT}`);
+    console.warn(`📊 Health check: http://localhost:${PORT}/health`);
     if (NODE_ENV !== 'production') {
-      console.log(`🧪 Test FSRS: http://localhost:${PORT}/api/test-fsrs`);
+      console.warn(`🧪 Test FSRS: http://localhost:${PORT}/api/test-fsrs`);
     }
-    console.log(`📚 API Routes:`);
-    console.log(`   - POST   /api/auth/register`);
-    console.log(`   - POST   /api/auth/login`);
-    console.log(`   - POST   /api/auth/refresh`);
-    console.log(`   - GET    /api/auth/session`);
-    console.log(`   - GET    /api/decks`);
-    console.log(`   - POST   /api/decks`);
-    console.log(`   - GET    /api/decks/:id`);
-    console.log(`   - PUT    /api/decks/:id`);
-    console.log(`   - DELETE /api/decks/:id`);
-    console.log(`   - GET    /api/decks/:id/stats`);
-    console.log(`   - GET    /api/decks/:deckId/cards`);
-    console.log(`   - POST   /api/decks/:deckId/cards`);
-    console.log(`   - GET    /api/cards/:id`);
-    console.log(`   - PUT    /api/cards/:id`);
-    console.log(`   - DELETE /api/cards/:id`);
-    console.log(`   - POST   /api/cards/:id/review`);
-    console.log(`   - POST   /api/reviews/batch`);
-    console.log(`   - GET    /api/optimization/status`);
-    console.log(`   - POST   /api/optimization/optimize`);
-    console.log(`   - GET    /api/optimization/export`);
+    console.warn(`📚 API Routes:`);
+    console.warn(`   - POST   /api/auth/register`);
+    console.warn(`   - POST   /api/auth/login`);
+    console.warn(`   - POST   /api/auth/refresh`);
+    console.warn(`   - GET    /api/auth/session`);
+    console.warn(`   - GET    /api/decks`);
+    console.warn(`   - POST   /api/decks`);
+    console.warn(`   - GET    /api/decks/:id`);
+    console.warn(`   - PUT    /api/decks/:id`);
+    console.warn(`   - DELETE /api/decks/:id`);
+    console.warn(`   - GET    /api/decks/:id/stats`);
+    console.warn(`   - GET    /api/decks/:deckId/cards`);
+    console.warn(`   - POST   /api/decks/:deckId/cards`);
+    console.warn(`   - GET    /api/cards/:id`);
+    console.warn(`   - PUT    /api/cards/:id`);
+    console.warn(`   - DELETE /api/cards/:id`);
+    console.warn(`   - POST   /api/cards/:id/review`);
+    console.warn(`   - POST   /api/reviews/batch`);
+    console.warn(`   - GET    /api/optimization/status`);
+    console.warn(`   - POST   /api/optimization/optimize`);
+    console.warn(`   - GET    /api/optimization/export`);
   });
 }
 

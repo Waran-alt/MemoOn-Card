@@ -6,7 +6,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { validateRequest, validateQuery, validateParams } from '../../middleware/validation';
-import { ValidationError } from '../../utils/errors';
 
 describe('validateRequest', () => {
   let mockRequest: Partial<Request>;

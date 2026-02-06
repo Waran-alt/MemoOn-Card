@@ -7,7 +7,6 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { authMiddleware, generateAccessToken, generateRefreshToken, getUserId, JWTPayload } from '@/middleware/auth';
 import { AuthenticationError } from '@/utils/errors';
-import { HTTP_HEADERS } from '@/constants/http.constants';
 
 // Mock JWT_SECRET
 vi.mock('@/config/env', () => ({

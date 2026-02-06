@@ -51,7 +51,7 @@ export class DeckService {
     data: Partial<CreateDeckRequest>
   ): Promise<Deck | null> {
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: (string | number | boolean | null)[] = [];
     let paramCount = 1;
 
     if (data.title !== undefined) {

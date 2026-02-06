@@ -25,7 +25,7 @@ export const pool = new Pool(dbConfig);
 
 // Test connection
 pool.on('connect', () => {
-  console.log('✅ Database connected');
+  console.warn('✅ Database connected');
 });
 
 pool.on('error', (err) => {
@@ -35,7 +35,7 @@ pool.on('error', (err) => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   await pool.end();
-  console.log('Database pool closed');
+  console.warn('Database pool closed');
   process.exit(0);
 });
 
@@ -44,7 +44,7 @@ export async function testConnection(): Promise<boolean> {
     const client = await pool.connect();
     const result = await client.query('SELECT NOW()');
     client.release();
-    console.log('✅ Database connection test successful:', result.rows[0].now);
+    console.warn('✅ Database connection test successful:', result.rows[0].now);
     return true;
   } catch (error) {
     console.error('❌ Database connection test failed:', error);

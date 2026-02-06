@@ -33,8 +33,10 @@ export default function DeckDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
-    setError('');
+    queueMicrotask(() => {
+      setLoading(true);
+      setError('');
+    });
     apiClient
       .get<{ success: boolean; data?: Deck }>(`/api/decks/${id}`)
       .then((res) => {
@@ -50,8 +52,10 @@ export default function DeckDetailPage() {
 
   useEffect(() => {
     if (!id || !deck) return;
-    setCardsLoading(true);
-    setCardsError('');
+    queueMicrotask(() => {
+      setCardsLoading(true);
+      setCardsError('');
+    });
     apiClient
       .get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`)
       .then((res) => {

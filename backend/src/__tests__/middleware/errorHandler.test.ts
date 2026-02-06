@@ -5,12 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
 import { errorHandler, asyncHandler } from '@/middleware/errorHandler';
-import {
-  AppError,
-  ValidationError,
-  NotFoundError,
-  InternalServerError,
-} from '@/utils/errors';
+import { ValidationError, NotFoundError } from '@/utils/errors';
 
 // Mock env
 vi.mock('@/config/env', () => ({

@@ -10,16 +10,6 @@ import { JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } from '../co
 import { AuthenticationError } from '../utils/errors';
 import { HTTP_HEADERS } from '../constants/http.constants';
 
-// Extend Express Request type
-declare global {
-  namespace Express {
-    interface Request {
-      userId?: string;
-      requestId?: string;
-    }
-  }
-}
-
 export interface JWTPayload {
   userId: string;
   email?: string;

@@ -33,7 +33,7 @@ export default function AppPage() {
   }
 
   useEffect(() => {
-    loadDecks();
+    queueMicrotask(() => loadDecks());
   }, []);
 
   function handleCreate(e: React.FormEvent) {

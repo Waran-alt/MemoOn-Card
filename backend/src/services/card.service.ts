@@ -3,7 +3,6 @@ import {
   Card,
   CreateCardRequest,
   UpdateCardRequest,
-  CardWithState,
 } from '../types/database';
 import { FSRSState } from '../services/fsrs.service';
 import { sanitizeHtml } from '../utils/sanitize';
@@ -79,7 +78,7 @@ export class CardService {
     data: UpdateCardRequest
   ): Promise<Card | null> {
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: (string | number | boolean | null)[] = [];
     let paramCount = 1;
 
     if (data.recto !== undefined) {

@@ -861,10 +861,10 @@ export class FSRS {
    * @param state Current FSRS state
    * @returns Reset state (stability/difficulty null, due immediately)
    */
-  resetCardStability(state: FSRSState): FSRSState {
+  resetCardStability(_state: FSRSState): FSRSState {
     return {
       stability: 0, // Will be set on next review
-      difficulty: null as any, // Will be set on next review
+      difficulty: null as unknown as number, // Will be set on next review
       lastReview: null,
       nextReview: new Date(), // Due immediately
     };

@@ -24,7 +24,7 @@ export function errorHandler(
 
   if (isExpected401) {
     // One-line log for expected "no session" / "not authenticated" checks
-    console.log(`${req.method} ${req.path} 401 (no session)`);
+    console.warn(`${req.method} ${req.path} 401 (no session)`);
   } else {
     // Log full error for unexpected failures
     console.error('Error:', {
@@ -77,7 +77,7 @@ export function errorHandler(
  * Catches async errors and passes them to error handler
  */
 export function asyncHandler(
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);

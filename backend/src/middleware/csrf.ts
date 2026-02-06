@@ -56,7 +56,7 @@ export function csrfProtection(
         });
         return;
       }
-    } catch (error) {
+    } catch {
       // Malformed referer URL
       res.status(403).json({
         success: false,

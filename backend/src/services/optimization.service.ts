@@ -9,8 +9,8 @@
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { writeFile, unlink, readFile, mkdir } from 'fs/promises';
-import { join, resolve, basename } from 'path';
+import { writeFile, unlink, mkdir } from 'fs/promises';
+import { resolve, basename } from 'path';
 import { pool } from '../config/database';
 import { UserSettings } from '../types/database';
 import { ValidationError } from '../utils/errors';
@@ -147,10 +147,10 @@ export class OptimizationService {
 
       // Build optimizer command
       // Note: FSRS Optimizer CLI accepts timezone and day_start as environment variables
-      // or we can pass them as arguments if supported
       const env = {
         ...process.env,
         TZ: timezone,
+        DAY_START: String(dayStart),
       };
 
       // Run FSRS Optimizer
@@ -256,7 +256,7 @@ export class OptimizationService {
     
     try {
       // Method 1: Try to find JSON array in output
-      const jsonMatches = output.match(/\[[\d\.,\-\s]+\]/g);
+      const jsonMatches = output.match(/\[[\d.,\-\s]+\]/g);
       if (jsonMatches) {
         for (const match of jsonMatches) {
           try {
@@ -271,7 +271,7 @@ export class OptimizationService {
       }
 
       // Method 2: Try Python list format [0.212, 1.2931, ...]
-      const pythonListMatch = output.match(/\[([\d\.,\-\s]+)\]/);
+      const pythonListMatch = output.match(/\[([\d.,\-\s]+)\]/);
       if (pythonListMatch) {
         const weights = pythonListMatch[1]
           .split(/[,\s]+/)
@@ -299,9 +299,9 @@ export class OptimizationService {
       for (const line of lines) {
         // Try various patterns
         const patterns = [
-          /weights?[:\s=]+\[([\d\.,\-\s]+)\]/i,
-          /parameters?[:\s=]+\[([\d\.,\-\s]+)\]/i,
-          /\[([\d\.,\-\s]{50,})\]/i, // Long array-like string
+          /weights?[:\s=]+\[([\d.,\-\s]+)\]/i,
+          /parameters?[:\s=]+\[([\d.,\-\s]+)\]/i,
+          /\[([\d.,\-\s]{50,})\]/i, // Long array-like string
         ];
 
         for (const pattern of patterns) {

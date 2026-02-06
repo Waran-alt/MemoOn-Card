@@ -3,7 +3,6 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { QueryResult } from 'pg';
 import { DeckService } from '@/services/deck.service';
 import { Deck, CreateDeckRequest } from '@/types/database';
 import { pool } from '@/config/database';

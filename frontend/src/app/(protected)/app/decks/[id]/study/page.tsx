@@ -33,8 +33,10 @@ export default function StudyPage() {
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
-    setError('');
+    queueMicrotask(() => {
+      setLoading(true);
+      setError('');
+    });
     Promise.all([
       apiClient.get<{ success: boolean; data?: Deck }>(`/api/decks/${id}`),
       apiClient.get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards/due`),

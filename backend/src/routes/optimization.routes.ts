@@ -128,7 +128,7 @@ router.get('/export', asyncHandler(async (req, res) => {
   await optimizationService.exportReviewLogsToCSV(userId, csvPath);
 
   // Send file as download
-  return res.download(csvPath, `revlog_${userId}.csv`, async (err) => {
+  return res.download(csvPath, `revlog_${userId}.csv`, async (err: Error | null) => {
     // Cleanup after download
     await import('fs/promises').then(fs => fs.unlink(csvPath).catch(() => {}));
     if (err) {
