@@ -1,0 +1,37 @@
+/**
+ * Deck Validation Schemas
+ */
+
+import { z } from 'zod';
+import { VALIDATION_LIMITS } from '../constants/validation.constants';
+
+export const CreateDeckSchema = z.object({
+  title: z.string()
+    .min(1, 'Title is required')
+    .max(VALIDATION_LIMITS.DECK_TITLE_MAX, `Title must be less than ${VALIDATION_LIMITS.DECK_TITLE_MAX} characters`)
+    .trim(),
+  description: z.string()
+    .max(VALIDATION_LIMITS.DECK_DESCRIPTION_MAX, `Description must be less than ${VALIDATION_LIMITS.DECK_DESCRIPTION_MAX} characters`)
+    .optional()
+    .nullable(),
+});
+
+export const UpdateDeckSchema = z.object({
+  title: z.string()
+    .min(1)
+    .max(VALIDATION_LIMITS.DECK_TITLE_MAX)
+    .trim()
+    .optional(),
+  description: z.string()
+    .max(VALIDATION_LIMITS.DECK_DESCRIPTION_MAX)
+    .optional()
+    .nullable(),
+});
+
+export const DeckIdSchema = z.object({
+  id: z.string().uuid('Invalid deck ID format'),
+});
+
+export const DeckIdParamSchema = z.object({
+  deckId: z.string().uuid('Invalid deck ID format'),
+});

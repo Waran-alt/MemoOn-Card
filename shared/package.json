@@ -1,0 +1,20 @@
+{
+  "name": "@memoon-card/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "lint": "echo \"No lint in shared\""
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

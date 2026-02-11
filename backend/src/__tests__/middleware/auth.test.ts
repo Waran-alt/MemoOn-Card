@@ -1,0 +1,181 @@
+/**
+ * Tests for authentication middleware
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { authMiddleware, generateAccessToken, generateRefreshToken, getUserId, JWTPayload } from '@/middleware/auth';
+import { AuthenticationError } from '@/utils/errors';
+
+// Mock JWT_SECRET
+vi.mock('@/config/env', () => ({
+  JWT_SECRET: 'test-secret-key-minimum-32-characters-long',
+  JWT_ACCESS_EXPIRES_IN: '15m',
+  JWT_REFRESH_EXPIRES_IN: '7d',
+}));
+
+describe('authMiddleware', () => {
+  let mockRequest: Partial<Request>;
+  let mockResponse: Partial<Response>;
+  let mockNext: NextFunction;
+
+  beforeEach(() => {
+    mockRequest = {
+      headers: {},
+    };
+    mockResponse = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+    };
+    mockNext = vi.fn();
+  });
+
+  it('should reject request without Authorization header', () => {
+    authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('No token provided');
+    expect(mockResponse.status).not.toHaveBeenCalled();
+  });
+
+  it('should reject request with invalid Authorization format', () => {
+    mockRequest.headers = {
+      authorization: 'InvalidFormat token123',
+    };
+
+    authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('No token provided');
+    expect(mockResponse.status).not.toHaveBeenCalled();
+  });
+
+  it('should reject request with empty token', () => {
+    mockRequest.headers = {
+      authorization: 'Bearer ',
+    };
+
+    authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Token is required');
+    expect(mockResponse.status).not.toHaveBeenCalled();
+  });
+
+  it('should reject request with invalid token', () => {
+    mockRequest.headers = {
+      authorization: 'Bearer invalid-token',
+    };
+
+    authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Invalid token');
+    expect(mockResponse.status).not.toHaveBeenCalled();
+  });
+
+  it('should accept valid token and attach userId', () => {
+    const userId = 'user-123';
+    const token = generateAccessToken(userId);
+
+    mockRequest.headers = {
+      authorization: `Bearer ${token}`,
+    };
+
+    authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+    expect(mockRequest.userId).toBe(userId);
+    expect(mockNext).toHaveBeenCalled();
+    expect(mockResponse.status).not.toHaveBeenCalled();
+  });
+
+  it('should reject expired token', () => {
+    const userId = 'user-123';
+    const token = jwt.sign(
+      { userId },
+      'test-secret-key-minimum-32-characters-long',
+      { expiresIn: '-1h' }
+    );
+
+    mockRequest.headers = {
+      authorization: `Bearer ${token}`,
+    };
+
+    authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Token has expired');
+    expect(mockResponse.status).not.toHaveBeenCalled();
+  });
+
+  it('should reject token without userId', () => {
+    const token = jwt.sign(
+      {},
+      'test-secret-key-minimum-32-characters-long',
+      { expiresIn: '15m' }
+    );
+
+    mockRequest.headers = {
+      authorization: `Bearer ${token}`,
+    };
+
+    authMiddleware(mockRequest as Request, mockResponse as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalledWith(expect.any(AuthenticationError));
+    expect((mockNext as ReturnType<typeof vi.fn>).mock.calls[0][0].message).toBe('Invalid token payload');
+    expect(mockResponse.status).not.toHaveBeenCalled();
+  });
+});
+
+describe('generateAccessToken', () => {
+  it('should generate valid JWT token', () => {
+    const userId = 'user-123';
+    const token = generateAccessToken(userId);
+
+    expect(token).toBeDefined();
+    expect(typeof token).toBe('string');
+
+    const decoded = jwt.verify(token, 'test-secret-key-minimum-32-characters-long') as JWTPayload;
+    expect(decoded.userId).toBe(userId);
+  });
+
+  it('should include email if provided', () => {
+    const userId = 'user-123';
+    const email = 'test@example.com';
+    const token = generateAccessToken(userId, email);
+
+    const decoded = jwt.verify(token, 'test-secret-key-minimum-32-characters-long') as JWTPayload;
+    expect(decoded.email).toBe(email);
+  });
+});
+
+describe('generateRefreshToken', () => {
+  it('should generate valid refresh token', () => {
+    const userId = 'user-123';
+    const token = generateRefreshToken(userId);
+
+    expect(token).toBeDefined();
+    expect(typeof token).toBe('string');
+
+    const decoded = jwt.verify(token, 'test-secret-key-minimum-32-characters-long') as JWTPayload;
+    expect(decoded.userId).toBe(userId);
+  });
+});
+
+describe('getUserId', () => {
+  it('should return userId from request', () => {
+    const mockRequest = {
+      userId: 'user-123',
+    } as Request;
+
+    expect(getUserId(mockRequest)).toBe('user-123');
+  });
+
+  it('should throw AuthenticationError if userId not present', () => {
+    const mockRequest = {} as Request;
+
+    expect(() => getUserId(mockRequest)).toThrow(AuthenticationError);
+    expect(() => getUserId(mockRequest)).toThrow('User not authenticated');
+  });
+});

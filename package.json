@@ -1,0 +1,72 @@
+{
+  "name": "memoon-card",
+  "version": "1.0.0",
+  "description": "MemoOn Card - Intelligent flashcard system with FSRS spaced repetition algorithm",
+  "author": "Waran-alt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Waran-alt/memoon-card.git"
+  },
+  "keywords": [
+    "flashcards",
+    "spaced-repetition",
+    "fsrs",
+    "memorization",
+    "learning"
+  ],
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "docker compose up",
+    "dev:postgres": "docker compose up postgres",
+    "dev:frontend": "yarn workspace @memoon-card/frontend dev",
+    "dev:backend": "yarn workspace @memoon-card/backend dev",
+    "build": "yarn build:frontend && yarn build:backend",
+    "build:frontend": "yarn workspace @memoon-card/frontend build",
+    "build:backend": "yarn workspace @memoon-card/backend build",
+    "test": "yarn test:frontend && yarn test:backend",
+    "test:frontend": "yarn workspace @memoon-card/frontend test:run",
+    "test:backend": "yarn workspace @memoon-card/backend test",
+    "lockfile:refresh": "bash scripts/lockfile-refresh.sh",
+    "lint": "yarn lint:frontend && yarn lint:backend",
+    "lint:frontend": "yarn workspace @memoon-card/frontend lint",
+    "lint:backend": "yarn workspace @memoon-card/backend lint",
+    "type-check": "yarn type-check:frontend && yarn type-check:backend",
+    "type-check:frontend": "yarn workspace @memoon-card/frontend type-check",
+    "type-check:backend": "yarn workspace @memoon-card/backend type-check",
+    "check": "yarn type-check && yarn lint",
+    "clean": "yarn clean:frontend && yarn clean:backend",
+    "clean:frontend": "rm -rf frontend/.next frontend/out",
+    "clean:backend": "rm -rf backend/dist",
+    "migrate:up": "liquibase --changeLogFile=migrations/changelog.xml update",
+    "migrate:status": "liquibase --changeLogFile=migrations/changelog.xml status",
+    "migrate:docker": "docker run --rm --network host -v \"$(pwd)/migrations:/liquibase/changelog\" -e LIQUIBASE_COMMAND_URL=jdbc:postgresql://localhost:5433/memoon_card_db -e LIQUIBASE_COMMAND_USERNAME=postgres -e LIQUIBASE_COMMAND_PASSWORD=postgres -e LIQUIBASE_COMMAND_CHANGELOG_FILE=changelog.xml memoon-liquibase update",
+    "postgres": "docker compose up -d postgres",
+    "postgres:down": "docker compose stop postgres",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:down:volumes": "docker compose down -v",
+    "docker:logs": "docker compose logs -f",
+    "docker:logs:backend": "docker compose logs -f backend",
+    "docker:logs:frontend": "docker compose logs -f frontend",
+    "docker:build": "docker compose build",
+    "docker:build:backend": "docker compose build backend",
+    "docker:build:frontend": "docker compose build frontend",
+    "docker:restart": "docker compose restart",
+    "docker:restart:backend": "docker compose restart backend",
+    "docker:restart:frontend": "docker compose restart frontend"
+  },
+  "packageManager": "yarn@4.12.0",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "yarn": ">=4.12.0"
+  }
+}

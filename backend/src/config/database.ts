@@ -1,0 +1,53 @@
+import { Pool, PoolConfig } from 'pg';
+import {
+  POSTGRES_HOST,
+  POSTGRES_PORT,
+  POSTGRES_DB,
+  POSTGRES_USER,
+  POSTGRES_PASSWORD,
+} from './env';
+import { DATABASE_POOL } from '../constants/database.constants';
+
+const dbConfig: PoolConfig = {
+  host: POSTGRES_HOST,
+  port: POSTGRES_PORT,
+  database: POSTGRES_DB,
+  user: POSTGRES_USER,
+  password: POSTGRES_PASSWORD,
+  max: DATABASE_POOL.MAX_CLIENTS,
+  idleTimeoutMillis: DATABASE_POOL.IDLE_TIMEOUT_MS,
+  connectionTimeoutMillis: DATABASE_POOL.CONNECTION_TIMEOUT_MS,
+  query_timeout: DATABASE_POOL.QUERY_TIMEOUT_MS,
+  statement_timeout: DATABASE_POOL.STATEMENT_TIMEOUT_MS,
+};
+
+export const pool = new Pool(dbConfig);
+
+// Test connection
+pool.on('connect', () => {
+  console.warn('✅ Database connected');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ Database connection error:', err);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await pool.end();
+  console.warn('Database pool closed');
+  process.exit(0);
+});
+
+export async function testConnection(): Promise<boolean> {
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT NOW()');
+    client.release();
+    console.warn('✅ Database connection test successful:', result.rows[0].now);
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection test failed:', error);
+    return false;
+  }
+}

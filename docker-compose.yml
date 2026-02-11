@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: memoon-card-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-memoon_card_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      # Host port 5433 to avoid conflict with another Postgres on 5432; container listens on 5432
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - memoon-card-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: memoon-card-backend
+    env_file:
+      - backend/.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${BACKEND_PORT:-4002}
+      POSTGRES_HOST: ${POSTGRES_HOST_DOCKER:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT_DOCKER:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-memoon_card_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      YARN_ENABLE_IMMUTABLE_INSTALLS: "0"
+    ports:
+      - "${BACKEND_PORT:-4002}:4002"
+    volumes:
+      - ./backend:/app/backend
+      - ./shared:/app/shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - memoon-card-network
+    # Run yarn install at /app so @memoon-card/shared resolves with mounted shared, then start backend
+    command: sh -c "cd /app && yarn install && cd backend && yarn dev"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: memoon-card-frontend
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${FRONTEND_PORT:-3002}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://memoon-card.localhost}
+      BACKEND_URL: ${BACKEND_URL_DOCKER:-http://memoon-card-backend:4002}
+      CHOKIDAR_USEPOLLING: 1
+      CHOKIDAR_INTERVAL: 1000
+      WATCHPACK_POLLING: "true"
+      WATCHPACK_POLLING_INTERVAL: 1000
+    ports:
+      - "${FRONTEND_PORT:-3002}:${FRONTEND_PORT:-3002}"
+    volumes:
+      - ./frontend:/app/frontend
+      - ./shared:/app/shared
+      - /app/node_modules
+      - /app/frontend/.next
+    depends_on:
+      - backend
+    networks:
+      - memoon-card-network
+    command: yarn dev
+
+volumes:
+  postgres_data:
+
+networks:
+  memoon-card-network:
+    driver: bridge

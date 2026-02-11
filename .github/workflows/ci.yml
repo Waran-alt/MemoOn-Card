@@ -1,0 +1,47 @@
+# CI: lint, type-check, and unit tests on push and PR.
+# E2E (Playwright) requires a running app; add a separate job or workflow if needed.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      # Backend config validation (required if any test loads env)
+      NODE_ENV: test
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      JWT_SECRET: ci-secret-minimum-32-characters-long
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "yarn"
+
+      - name: Enable Corepack and Yarn
+        run: corepack enable && corepack prepare yarn@4.12.0 --activate
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Type check
+        run: yarn type-check
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Unit tests (backend)
+        run: yarn test:backend
+
+      - name: Unit tests (frontend)
+        run: yarn test:frontend
