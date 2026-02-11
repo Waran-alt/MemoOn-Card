@@ -1,0 +1,23 @@
+{
+  "$schema": "../../scripts/client-config.schema.json",
+  "id": "memoon-card",
+  "name": "Memoon Card",
+  "description": "Memoon Card application",
+  "subdomain": "memoon-card",
+  "ports": {
+    "frontend": 3002,
+    "backend": 4002
+  },
+  "database": {
+    "name": "memoon_card_db",
+    "user": "postgres"
+  },
+  "backend": {
+    "healthPath": "/health"
+  },
+  "enabled": true,
+  "metadata": {
+    "created": "2025-01-09",
+    "version": "1.0.0"
+  }
+}
