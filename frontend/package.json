@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:install": "playwright install --with-deps"
+    "test:e2e:install": "playwright install --with-deps",
+    "layout:audit": "node e2e/layout-audit.mjs"
   },
   "dependencies": {
     "@memoon-card/shared": "file:../shared",

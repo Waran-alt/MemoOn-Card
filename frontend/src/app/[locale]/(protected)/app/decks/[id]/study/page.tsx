@@ -86,18 +86,18 @@ export default function StudyPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-500 dark:text-neutral-400">{tc('loading')}</p>;
+    return <p className="text-sm text-[var(--mc-text-secondary)]">{tc('loading')}</p>;
   }
 
   if (error || !deck) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+        <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
           {error || ta('deckNotFound')}
         </p>
         <Link
           href={`/${locale}/app`}
-          className="text-sm font-medium text-neutral-700 underline hover:no-underline dark:text-neutral-300"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] underline hover:no-underline"
         >
           {ta('backToDecks')}
         </Link>
@@ -114,18 +114,18 @@ export default function StudyPage() {
       <div className="space-y-4">
         <Link
           href={`/${locale}/app/decks/${id}`}
-          className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
         >
           ← {ta('backToDeck')}
         </Link>
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 text-center dark:border-neutral-700 dark:bg-neutral-800/50">
-          <p className="text-neutral-700 dark:text-neutral-300">{ta('noCardsToStudy')}</p>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+        <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
+          <p className="text-[var(--mc-text-primary)]">{ta('noCardsToStudy')}</p>
+          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
             Add cards to this deck or come back later for due reviews.
           </p>
           <Link
             href={`/${locale}/app/decks/${id}`}
-            className="mt-4 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            className="mt-4 inline-block rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
           >
             {ta('backToDeck')}
           </Link>
@@ -139,18 +139,18 @@ export default function StudyPage() {
       <div className="space-y-4">
         <Link
           href={`/${locale}/app/decks/${id}`}
-          className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
         >
           ← {ta('backToDeck')}
         </Link>
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-8 text-center dark:border-neutral-700 dark:bg-neutral-800/50">
-          <p className="font-medium text-neutral-900 dark:text-neutral-100">{ta('sessionComplete')}</p>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+        <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
+          <p className="font-medium text-[var(--mc-text-primary)]">{ta('sessionComplete')}</p>
+          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
             {ta('reviewedCount', { count: reviewedCount })}
           </p>
           <Link
             href={`/${locale}/app/decks/${id}`}
-            className="mt-4 inline-block rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            className="mt-4 inline-block rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
           >
             {ta('backToDeck')}
           </Link>
@@ -160,15 +160,16 @@ export default function StudyPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mc-study-page mx-auto max-w-2xl space-y-6">
+      {/* Focus anchor: peripheral elements are visually de-emphasized while studying */}
+      <div className="flex items-center justify-between opacity-70 transition-opacity duration-200">
         <Link
           href={`/${locale}/app/decks/${id}`}
-          className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
         >
           ← {ta('exitStudy')}
         </Link>
-        <span className="text-sm text-neutral-500 dark:text-neutral-400">
+        <span className="text-sm text-[var(--mc-text-secondary)]">
           {ta('leftReviewed', {
             vars: {
               left: queue.length,
@@ -180,17 +181,21 @@ export default function StudyPage() {
         </span>
       </div>
 
-      <div className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm dark:border-neutral-700 dark:bg-neutral-800/50 min-h-[280px] flex flex-col justify-center">
-        <p className="whitespace-pre-wrap text-lg text-neutral-900 dark:text-neutral-100">
+      <div
+        className={`min-h-[280px] rounded-xl border p-8 shadow-sm transition-all duration-200 flex flex-col justify-center ${
+          showAnswer ? 'mc-study-card-back' : 'mc-study-card-front'
+        }`}
+      >
+        <p className="whitespace-pre-wrap text-lg leading-relaxed text-[var(--mc-text-primary)]">
           {showAnswer ? card.verso : card.recto}
         </p>
         {card.comment && showAnswer && (
-          <p className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">{card.comment}</p>
+          <p className="mt-3 text-sm text-[var(--mc-text-secondary)]">{card.comment}</p>
         )}
       </div>
 
       {reviewError && (
-        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+        <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
           {reviewError}
         </p>
       )}
@@ -199,7 +204,7 @@ export default function StudyPage() {
           <button
             type="button"
             onClick={() => setShowAnswer(true)}
-            className="w-full rounded-lg border-2 border-neutral-900 py-3 text-sm font-medium text-neutral-900 hover:bg-neutral-100 dark:border-neutral-100 dark:text-neutral-100 dark:hover:bg-neutral-800"
+            className="w-full rounded-lg border-2 border-[var(--mc-border-subtle)] py-3 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)] transition-colors duration-200"
           >
             {ta('showAnswer')}
           </button>
@@ -211,15 +216,23 @@ export default function StudyPage() {
                 type="button"
                 disabled={submitting}
                 onClick={() => handleRate(value as Rating)}
-                className={`rounded-lg border-2 py-3 text-sm font-medium transition-colors ${
+                className={`rounded-lg border py-3 text-sm font-medium transition-colors duration-200 ${
                   value === 1
-                    ? 'border-red-300 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-700 dark:bg-red-900/20 dark:text-red-200 dark:hover:bg-red-900/30'
-                    : value === 4
-                      ? 'border-green-300 bg-green-50 text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-900/20 dark:text-green-200 dark:hover:bg-green-900/30'
-                      : 'border-neutral-300 bg-neutral-50 text-neutral-800 hover:bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-800/50 dark:text-neutral-200 dark:hover:bg-neutral-700/50'
+                    ? 'border-[var(--mc-accent-danger)]/50 bg-[var(--mc-accent-danger)]/10 text-[var(--mc-accent-danger)] hover:bg-[var(--mc-accent-danger)]/20'
+                    : value === 2
+                      ? 'border-[var(--mc-accent-warning)]/50 bg-[var(--mc-accent-warning)]/10 text-[var(--mc-accent-warning)] hover:bg-[var(--mc-accent-warning)]/20'
+                      : value === 4
+                        ? 'border-[var(--mc-accent-success)]/50 bg-[var(--mc-accent-success)]/10 text-[var(--mc-accent-success)] hover:bg-[var(--mc-accent-success)]/20'
+                        : 'border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)]'
                 } disabled:opacity-50`}
               >
-                {value === 1 ? ta('again') : value === 2 ? ta('hard') : value === 3 ? ta('good') : ta('easy')}
+                {value === 1
+                  ? ta('again')
+                  : value === 2
+                    ? ta('hard')
+                    : value === 3
+                      ? ta('good')
+                      : ta('easy')}
               </button>
             ))}
           </div>

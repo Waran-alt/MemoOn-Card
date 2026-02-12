@@ -115,18 +115,18 @@ export default function DeckDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-neutral-500 dark:text-neutral-400">{tc('loading')}</p>;
+    return <p className="text-sm text-[var(--mc-text-secondary)]">{tc('loading')}</p>;
   }
 
   if (error || !deck) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+        <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
           {error || ta('deckNotFound')}
         </p>
         <Link
           href={`/${locale}/app`}
-          className="text-sm font-medium text-neutral-700 underline hover:no-underline dark:text-neutral-300"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] underline hover:no-underline"
         >
           {ta('backToDecks')}
         </Link>
@@ -135,30 +135,30 @@ export default function DeckDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mc-study-page space-y-6">
       <div>
         <Link
           href={`/${locale}/app`}
-          className="text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
         >
           ← {ta('backToDecks')}
         </Link>
-        <h2 className="mt-2 text-xl font-semibold text-neutral-900 dark:text-neutral-100">
+        <h2 className="mt-2 text-xl font-semibold text-[var(--mc-text-primary)]">
           {deck.title}
         </h2>
         {deck.description && (
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
             {deck.description}
           </p>
         )}
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{ta('cards')}</h3>
+        <h3 className="text-sm font-medium text-[var(--mc-text-primary)]">{ta('cards')}</h3>
         <div className="flex shrink-0 gap-2">
           <Link
             href={`/${locale}/app/decks/${id}/study`}
-            className="rounded border-2 border-neutral-900 px-4 py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-100 dark:border-neutral-100 dark:text-neutral-100 dark:hover:bg-neutral-800"
+            className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)] transition-colors duration-200"
           >
             {ta('study')}
           </Link>
@@ -168,7 +168,7 @@ export default function DeckDetailPage() {
               setShowCreateCard(true);
               setCreateError('');
             }}
-            className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+            className="rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
           >
             {ta('newCard')}
           </button>
@@ -176,7 +176,7 @@ export default function DeckDetailPage() {
       </div>
 
       {cardsError && (
-        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+        <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
           {cardsError}
         </p>
       )}
@@ -184,14 +184,14 @@ export default function DeckDetailPage() {
       {showCreateCard && (
         <form
           onSubmit={handleCreateCard}
-          className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800/50"
+          className="mc-study-surface rounded-lg border p-4 shadow-sm"
         >
-          <h4 className="mb-3 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+          <h4 className="mb-3 text-sm font-medium text-[var(--mc-text-primary)]">
             {ta('createCard')}
           </h4>
           <div className="space-y-3">
             <div>
-              <label htmlFor="card-recto" className="block text-sm font-medium mb-1 text-neutral-600 dark:text-neutral-400">
+              <label htmlFor="card-recto" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
                 {ta('recto')}
               </label>
               <textarea
@@ -202,14 +202,14 @@ export default function DeckDetailPage() {
                 placeholder={ta('rectoPlaceholder')}
                 required
                 rows={2}
-                className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
               />
-              <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
                 {createRecto.length}/{CARD_CONTENT_MAX}
               </p>
             </div>
             <div>
-              <label htmlFor="card-verso" className="block text-sm font-medium mb-1 text-neutral-600 dark:text-neutral-400">
+              <label htmlFor="card-verso" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
                 {ta('verso')}
               </label>
               <textarea
@@ -220,14 +220,14 @@ export default function DeckDetailPage() {
                 placeholder={ta('versoPlaceholder')}
                 required
                 rows={2}
-                className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
               />
-              <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
                 {createVerso.length}/{CARD_CONTENT_MAX}
               </p>
             </div>
             <div>
-              <label htmlFor="card-comment" className="block text-sm font-medium mb-1 text-neutral-600 dark:text-neutral-400">
+              <label htmlFor="card-comment" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
                 {ta('commentOptional')}
               </label>
               <textarea
@@ -237,14 +237,14 @@ export default function DeckDetailPage() {
                 maxLength={CARD_COMMENT_MAX}
                 placeholder={ta('commentPlaceholder')}
                 rows={1}
-                className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
               />
-              <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
                 {createComment.length}/{CARD_COMMENT_MAX}
               </p>
             </div>
             {createError && (
-              <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+              <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
                 {createError}
               </p>
             )}
@@ -252,7 +252,7 @@ export default function DeckDetailPage() {
               <button
                 type="submit"
                 disabled={creating || !createRecto.trim() || !createVerso.trim()}
-                className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
               >
                 {creating ? tc('creating') : tc('create')}
               </button>
@@ -265,7 +265,7 @@ export default function DeckDetailPage() {
                   setCreateComment('');
                   setCreateError('');
                 }}
-                className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
               >
                 {tc('cancel')}
               </button>
@@ -275,16 +275,16 @@ export default function DeckDetailPage() {
       )}
 
       {cardsLoading ? (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">{ta('loadingCards')}</p>
+        <p className="text-sm text-[var(--mc-text-secondary)]">{ta('loadingCards')}</p>
       ) : !showCreateCard && cards.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+        <div className="rounded-lg border border-dashed border-[var(--mc-border-subtle)] p-8 text-center">
+          <p className="text-sm text-[var(--mc-text-secondary)]">
             {ta('noCardsYet')}
           </p>
           <button
             type="button"
             onClick={() => setShowCreateCard(true)}
-            className="mt-3 text-sm font-medium text-neutral-700 underline hover:no-underline dark:text-neutral-300"
+            className="mt-3 text-sm font-medium text-[var(--mc-text-secondary)] underline hover:no-underline"
           >
             {ta('newCard')}
           </button>
@@ -294,16 +294,16 @@ export default function DeckDetailPage() {
           {cards.map((card) => (
             <li
               key={card.id}
-              className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-800/50"
+              className="mc-study-surface rounded-lg border p-4 shadow-sm"
             >
-              <p className="font-medium text-neutral-900 dark:text-neutral-100">
+              <p className="font-medium text-[var(--mc-text-primary)]">
                 {truncate(card.recto, 80)}
               </p>
-              <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+              <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
                 {truncate(card.verso, 80)}
               </p>
               {card.comment && (
-                <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                <p className="mt-1 text-xs text-[var(--mc-text-secondary)]/80">
                   {truncate(card.comment, 60)}
                 </p>
               )}

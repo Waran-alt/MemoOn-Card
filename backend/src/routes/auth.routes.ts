@@ -16,8 +16,28 @@ import { AuthenticationError } from '@/utils/errors';
 import { JWT_SECRET, NODE_ENV, getAllowedOrigins } from '@/config/env';
 import { REFRESH_COOKIE } from '@/constants/http.constants';
 import type { Request } from 'express';
+import { logger } from '@/utils/logger';
 
 const router = Router();
+
+function maskEmail(email: string): string {
+  const normalized = email.trim().toLowerCase();
+  const [name, domain] = normalized.split('@');
+  if (!name || !domain) return 'invalid-email';
+  const visible = name.slice(0, 2);
+  return `${visible}${'*'.repeat(Math.max(1, name.length - 2))}@${domain}`;
+}
+
+function authMeta(req: Request, email: string): Record<string, unknown> {
+  return {
+    requestId: req.requestId,
+    path: req.path,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('user-agent') || 'unknown',
+    email: maskEmail(email),
+  };
+}
 
 function toUserResponse(user: { id: string; email: string; name: string | null }) {
   return { id: user.id, email: user.email, name: user.name };
@@ -117,14 +137,24 @@ router.post(
   validateRequest(LoginSchema),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
-    const user = await userService.getUserByEmail(email);
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const user = await userService.getUserByEmail(normalizedEmail);
 
     if (!user) {
+      logger.warn('Login failed: user not found', {
+        ...authMeta(req, normalizedEmail),
+        reason: 'user_not_found',
+      });
       throw new AuthenticationError('Invalid email or password');
     }
 
     const valid = await userService.verifyPassword(password, user.password_hash);
     if (!valid) {
+      logger.warn('Login failed: invalid password', {
+        ...authMeta(req, normalizedEmail),
+        userId: user.id,
+        reason: 'invalid_password',
+      });
       throw new AuthenticationError('Invalid email or password');
     }
 
@@ -132,6 +162,11 @@ router.post(
     const refreshToken = generateRefreshToken(user.id);
 
     setRefreshCookie(req, res, refreshToken);
+
+    logger.info('Login succeeded', {
+      ...authMeta(req, normalizedEmail),
+      userId: user.id,
+    });
 
     return res.json({
       success: true,

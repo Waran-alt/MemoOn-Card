@@ -54,9 +54,9 @@ export default function AppPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-neutral-600 dark:text-neutral-400">
+    <div className="mc-study-page mx-auto w-full max-w-5xl space-y-6">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[var(--mc-text-secondary)]">
           {ta('decksIntro')}
         </p>
         <button
@@ -65,31 +65,31 @@ export default function AppPage() {
             setShowCreate(true);
             setCreateError('');
           }}
-          className="shrink-0 rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className="shrink-0 self-start rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:self-auto"
         >
           {tc('newDeck')}
         </button>
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+        <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
           {error}
         </p>
       )}
 
       {loading ? (
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">{ta('loadingDecks')}</p>
+        <p className="text-sm text-[var(--mc-text-secondary)]">{ta('loadingDecks')}</p>
       ) : showCreate ? (
         <form
           onSubmit={handleCreate}
-          className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800/50"
+          className="mc-study-surface rounded-xl border p-5 shadow-sm"
         >
-          <h2 className="mb-3 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+          <h2 className="mb-3 text-sm font-medium text-[var(--mc-text-primary)]">
             {ta('createDeck')}
           </h2>
           <div className="space-y-3">
             <div>
-              <label htmlFor="deck-title" className="block text-sm font-medium mb-1 text-neutral-600 dark:text-neutral-400">
+              <label htmlFor="deck-title" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
                 {ta('title')}
               </label>
               <input
@@ -101,14 +101,14 @@ export default function AppPage() {
                 placeholder={ta('titlePlaceholder')}
                 required
                 autoFocus
-                className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
               />
-              <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
                 {createTitle.length}/{DECK_TITLE_MAX}
               </p>
             </div>
             <div>
-              <label htmlFor="deck-description" className="block text-sm font-medium mb-1 text-neutral-600 dark:text-neutral-400">
+              <label htmlFor="deck-description" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
                 {ta('description')}
               </label>
               <textarea
@@ -118,14 +118,14 @@ export default function AppPage() {
                 maxLength={DECK_DESCRIPTION_MAX}
                 placeholder={ta('descriptionPlaceholder')}
                 rows={2}
-                className="w-full rounded border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
+                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
               />
-              <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
                 {createDescription.length}/{DECK_DESCRIPTION_MAX}
               </p>
             </div>
             {createError && (
-              <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+              <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
                 {createError}
               </p>
             )}
@@ -133,7 +133,7 @@ export default function AppPage() {
               <button
                 type="submit"
                 disabled={creating || !createTitle.trim()}
-                className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
               >
                 {creating ? tc('creating') : tc('create')}
               </button>
@@ -145,7 +145,7 @@ export default function AppPage() {
                   setCreateDescription('');
                   setCreateError('');
                 }}
-                className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
               >
                 {tc('cancel')}
               </button>
@@ -155,14 +155,14 @@ export default function AppPage() {
       ) : null}
 
       {!loading && !showCreate && decks.length === 0 && (
-        <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center dark:border-neutral-700">
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+        <div className="rounded-xl border border-dashed border-[var(--mc-border-subtle)] p-8 text-center">
+          <p className="text-sm text-[var(--mc-text-secondary)]">
             {ta('noDecks')}
           </p>
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="mt-3 text-sm font-medium text-neutral-700 underline hover:no-underline dark:text-neutral-300"
+            className="mt-3 text-sm font-medium text-[var(--mc-text-secondary)] underline hover:no-underline"
           >
             {tc('newDeck')}
           </button>
@@ -170,22 +170,22 @@ export default function AppPage() {
       )}
 
       {!loading && decks.length > 0 && (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="m-0 list-none grid gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
           {decks.map((deck) => (
             <li key={deck.id}>
               <Link
                 href={`/${locale}/app/decks/${deck.id}`}
-                className="block rounded-lg border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-300 hover:shadow dark:border-neutral-700 dark:bg-neutral-800/50 dark:hover:border-neutral-600"
+                className="mc-study-surface block rounded-xl border p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow"
               >
-                <h3 className="font-medium text-neutral-900 dark:text-neutral-100">
+                <h3 className="font-medium text-[var(--mc-text-primary)]">
                   {deck.title}
                 </h3>
                 {deck.description ? (
-                  <p className="mt-1 line-clamp-2 text-sm text-neutral-500 dark:text-neutral-400">
+                  <p className="mt-1 line-clamp-2 text-sm text-[var(--mc-text-secondary)]">
                     {deck.description}
                   </p>
                 ) : (
-                  <p className="mt-1 text-sm text-neutral-400 dark:text-neutral-500">
+                  <p className="mt-1 text-sm text-[var(--mc-text-secondary)]/80">
                     {ta('noDescription')}
                   </p>
                 )}

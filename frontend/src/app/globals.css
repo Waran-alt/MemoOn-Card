@@ -1,21 +1,62 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --font-sans: Inter, Geist, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* MemoOn Card - Citadel tokens */
+  --mc-bg-base: #f8fafc;
+  --mc-bg-surface: #ffffff;
+  --mc-bg-card-front: #f8fafc;
+  --mc-bg-card-back: #eef2f7;
+  --mc-text-primary: #0f172a;
+  --mc-text-secondary: #475569;
+  --mc-border-subtle: #cbd5e1;
+  --mc-accent-success: #10b981;
+  --mc-accent-warning: #f59e0b;
+  --mc-accent-danger: #dc2626;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #1a1f2b;
+    --foreground: #e2e8f0;
+
+    --mc-bg-base: #1a1f2b;
+    --mc-bg-surface: #232a3a;
+    --mc-bg-card-front: #232a3a;
+    --mc-bg-card-back: #2a3346;
+    --mc-text-primary: #e2e8f0;
+    --mc-text-secondary: #a8b3c7;
+    --mc-border-subtle: #334155;
+    --mc-accent-success: #34d399;
+    --mc-accent-warning: #fbbf24;
+    --mc-accent-danger: #f87171;
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+.mc-study-page {
+  color: var(--mc-text-primary);
+}
+
+.mc-study-surface {
+  background: var(--mc-bg-surface);
+  border-color: var(--mc-border-subtle);
+}
+
+.mc-study-card-front {
+  background: var(--mc-bg-card-front);
+  border-color: var(--mc-border-subtle);
+}
+
+.mc-study-card-back {
+  background: var(--mc-bg-card-back);
+  border-color: var(--mc-border-subtle);
 }

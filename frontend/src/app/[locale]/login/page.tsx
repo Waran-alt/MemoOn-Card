@@ -49,12 +49,12 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-6">
-        <h1 className="text-2xl font-bold text-center">{ta('signInTitle')}</h1>
+    <main className="mc-study-page flex min-h-screen flex-col items-center justify-center bg-[var(--mc-bg-base)] p-6">
+      <div className="mc-study-surface w-full max-w-sm space-y-6 rounded-xl border p-6 shadow-sm">
+        <h1 className="text-center text-2xl font-bold text-[var(--mc-text-primary)]">{ta('signInTitle')}</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-1">
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
               {tc('email')}
             </label>
             <input
@@ -65,11 +65,11 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-600"
+              className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium mb-1">
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
               {tc('password')}
             </label>
             <input
@@ -80,23 +80,23 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-600"
+              className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
             />
           </div>
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+            <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
               {error}
             </p>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded bg-neutral-900 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            className="w-full rounded bg-[var(--mc-accent-success)] py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
           >
             {loading ? ta('signingIn') : tc('signIn')}
           </button>
         </form>
-        <p className="text-center text-sm text-neutral-600 dark:text-neutral-400">
+        <p className="text-center text-sm text-[var(--mc-text-secondary)]">
           {tc('noAccount')}{' '}
           <Link href={`/${locale}/register`} className="underline hover:no-underline">
             {tc('register')}
