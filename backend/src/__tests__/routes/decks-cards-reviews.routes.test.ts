@@ -251,4 +251,215 @@ describe('Deck/Card/Review routes', () => {
       expect(reviewServiceMock.batchReview).toHaveBeenCalledWith(reviews, mockUserId);
     });
   });
+
+  describe('Deck GET routes', () => {
+    it('gets all decks for user', async () => {
+      const mockDecks = [
+        { id: mockDeckId, user_id: mockUserId, title: 'Spanish', description: null },
+        { id: 'deck-2', user_id: mockUserId, title: 'French', description: 'Daily' },
+      ];
+      deckServiceMock.getDecksByUserId.mockResolvedValueOnce(mockDecks);
+
+      const res = await request(app).get('/api/decks');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual(mockDecks);
+      expect(deckServiceMock.getDecksByUserId).toHaveBeenCalledWith(mockUserId);
+    });
+
+    it('gets a specific deck by id', async () => {
+      const mockDeck = {
+        id: mockDeckId,
+        user_id: mockUserId,
+        title: 'Spanish',
+        description: 'Daily practice',
+      };
+      deckServiceMock.getDeckById.mockResolvedValueOnce(mockDeck);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual(mockDeck);
+      expect(deckServiceMock.getDeckById).toHaveBeenCalledWith(mockDeckId, mockUserId);
+    });
+
+    it('returns 404 when deck not found', async () => {
+      deckServiceMock.getDeckById.mockResolvedValueOnce(null);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}`);
+
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('gets deck statistics', async () => {
+      const mockStats = {
+        totalCards: 50,
+        dueCards: 10,
+        newCards: 5,
+        totalReviews: 200,
+      };
+      deckServiceMock.getDeckStats.mockResolvedValueOnce(mockStats);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}/stats`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual(mockStats);
+      expect(deckServiceMock.getDeckStats).toHaveBeenCalledWith(mockDeckId, mockUserId);
+    });
+  });
+
+  describe('Card GET routes', () => {
+    it('gets all cards in a deck', async () => {
+      const mockCards = [
+        {
+          id: mockCardId,
+          deck_id: mockDeckId,
+          user_id: mockUserId,
+          recto: 'Hola',
+          verso: 'Hello',
+        },
+        {
+          id: 'card-2',
+          deck_id: mockDeckId,
+          user_id: mockUserId,
+          recto: 'Adios',
+          verso: 'Goodbye',
+        },
+      ];
+      cardServiceMock.getCardsByDeckId.mockResolvedValueOnce(mockCards);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}/cards`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual(mockCards);
+      expect(cardServiceMock.getCardsByDeckId).toHaveBeenCalledWith(mockDeckId, mockUserId);
+    });
+
+    it('gets due cards for a deck', async () => {
+      const dueDate = new Date(Date.now() - 1000);
+      const mockDueCards = [
+        {
+          id: mockCardId,
+          deck_id: mockDeckId,
+          user_id: mockUserId,
+          next_review: dueDate,
+        },
+      ];
+      cardServiceMock.getDueCards.mockResolvedValueOnce(mockDueCards);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}/cards/due`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].id).toBe(mockCardId);
+      expect(res.body.data[0].next_review).toBe(dueDate.toISOString());
+      expect(cardServiceMock.getDueCards).toHaveBeenCalledWith(mockDeckId, mockUserId);
+    });
+
+    it('gets new cards for a deck with default limit', async () => {
+      const mockNewCards = [
+        {
+          id: mockCardId,
+          deck_id: mockDeckId,
+          user_id: mockUserId,
+          stability: null,
+        },
+      ];
+      cardServiceMock.getNewCards.mockResolvedValueOnce(mockNewCards);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}/cards/new`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual(mockNewCards);
+      expect(cardServiceMock.getNewCards).toHaveBeenCalledWith(mockDeckId, mockUserId, 20);
+    });
+
+    it('gets new cards for a deck with custom limit', async () => {
+      const mockNewCards = [
+        {
+          id: mockCardId,
+          deck_id: mockDeckId,
+          user_id: mockUserId,
+          stability: null,
+        },
+      ];
+      cardServiceMock.getNewCards.mockResolvedValueOnce(mockNewCards);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}/cards/new?limit=50`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(cardServiceMock.getNewCards).toHaveBeenCalledWith(mockDeckId, mockUserId, 50);
+    });
+
+    it('gets a specific card by id', async () => {
+      const mockCard = {
+        id: mockCardId,
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+        recto: 'Hola',
+        verso: 'Hello',
+      };
+      cardServiceMock.getCardById.mockResolvedValueOnce(mockCard);
+
+      const res = await request(app).get(`/api/cards/${mockCardId}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual(mockCard);
+      expect(cardServiceMock.getCardById).toHaveBeenCalledWith(mockCardId, mockUserId);
+    });
+
+    it('returns 404 when card not found', async () => {
+      cardServiceMock.getCardById.mockResolvedValueOnce(null);
+
+      const res = await request(app).get(`/api/cards/${mockCardId}`);
+
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('Card reset stability', () => {
+    it('resets card stability', async () => {
+      const nextReviewDate = new Date();
+      const mockCard = {
+        id: mockCardId,
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+        stability: null,
+        difficulty: null,
+        last_review: null,
+        next_review: nextReviewDate,
+      };
+      cardServiceMock.resetCardStability.mockResolvedValueOnce(mockCard);
+
+      const res = await request(app).post(`/api/cards/${mockCardId}/reset-stability`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.id).toBe(mockCardId);
+      expect(res.body.data.stability).toBeNull();
+      expect(res.body.data.difficulty).toBeNull();
+      expect(res.body.data.last_review).toBeNull();
+      expect(res.body.data.next_review).toBe(nextReviewDate.toISOString());
+      expect(cardServiceMock.resetCardStability).toHaveBeenCalledWith(mockCardId, mockUserId);
+    });
+
+    it('returns 404 when card not found for reset', async () => {
+      cardServiceMock.resetCardStability.mockResolvedValueOnce(null);
+
+      const res = await request(app).post(`/api/cards/${mockCardId}/reset-stability`);
+
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+  });
 });
