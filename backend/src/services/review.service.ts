@@ -1,7 +1,7 @@
 import { pool } from '../config/database';
 import { FSRSState, ReviewResult, createFSRS } from './fsrs.service';
 import { CardService } from './card.service';
-import { UserSettings } from '../types/database';
+import { UserSettings, Card } from '../types/database';
 import { FSRS_V6_DEFAULT_WEIGHTS, FSRS_CONSTANTS } from '../constants/fsrs.constants';
 
 export class ReviewService {
@@ -188,5 +188,35 @@ export class ReviewService {
       }))
     );
     return results;
+  }
+
+  /**
+   * Apply management penalty (push next review forward) when user saw card content
+   * outside of study (e.g. while editing). New cards (stability null) are unchanged.
+   */
+  async applyManagementPenaltyToCard(
+    cardId: string,
+    userId: string,
+    revealedForSeconds: number = 30
+  ): Promise<Card | null> {
+    const card = await this.cardService.getCardById(cardId, userId);
+    if (!card) return null;
+    if (card.stability === null) return card; // New card, nothing to postpone
+
+    const settings = await this.getUserSettings(userId);
+    const fsrs = createFSRS({
+      weights: settings.weights,
+      targetRetention: settings.targetRetention,
+    });
+
+    const state: FSRSState = {
+      stability: card.stability,
+      difficulty: card.difficulty!,
+      lastReview: card.last_review,
+      nextReview: card.next_review,
+    };
+    const newState = fsrs.applyManagementPenalty(state, revealedForSeconds);
+    await this.cardService.updateCardState(cardId, userId, newState);
+    return this.cardService.getCardById(cardId, userId);
   }
 }

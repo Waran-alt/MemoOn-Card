@@ -7,12 +7,13 @@ import type { Deck, Card } from '@/types';
 const mockGet = vi.hoisted(() => vi.fn());
 const mockPost = vi.hoisted(() => vi.fn());
 const mockReplace = vi.fn();
+const mockPush = vi.fn();
 // Allow missing id in one test to verify redirect
 const useParams = vi.fn<() => { id?: string }>(() => ({ id: 'deck-123' }));
 
 vi.mock('next/navigation', () => ({
   useParams: () => useParams(),
-  useRouter: vi.fn(() => ({ replace: mockReplace })),
+  useRouter: vi.fn(() => ({ replace: mockReplace, push: mockPush })),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -69,8 +70,10 @@ describe('StudyPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/No cards to study right now/)).toBeInTheDocument();
     });
-    const backLinks = screen.getAllByRole('link', { name: /Back to deck/ });
-    expect(backLinks.some((el) => el.getAttribute('href') === '/en/app/decks/deck-123')).toBe(true);
+    const backButtons = screen.getAllByRole('button', { name: /Back to deck/ });
+    expect(backButtons.length).toBeGreaterThanOrEqual(1);
+    await userEvent.click(backButtons[0]);
+    expect(mockPush).toHaveBeenCalledWith('/en/app/decks/deck-123');
   });
 
   it('calls deck, due, and new endpoints', async () => {

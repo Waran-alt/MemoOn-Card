@@ -1,20 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
 import apiClient, { getApiErrorMessage, isRequestCancelled } from '@/lib/api';
 import type { Deck, Card } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
-import { VALIDATION_LIMITS } from '@memoon-card/shared';
+import { CardFormFields } from './CardFormFields';
 
-const { CARD_CONTENT_MAX, CARD_COMMENT_MAX } = VALIDATION_LIMITS;
+const LAST_STUDIED_KEY = (deckId: string) => `memoon_last_studied_${deckId}`;
 
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max) + '…';
+function cardMatchesSearch(card: Card, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    card.recto.toLowerCase().includes(q) ||
+    card.verso.toLowerCase().includes(q) ||
+    (card.comment?.toLowerCase().includes(q) ?? false)
+  );
 }
+
+type ConfirmType = 'delete' | 'treatAsNew' | 'expandDelay';
 
 export default function DeckDetailPage() {
   const params = useParams();
@@ -35,6 +42,21 @@ export default function DeckDetailPage() {
   const [createComment, setCreateComment] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
+  const [showRevealAllDialog, setShowRevealAllDialog] = useState(false);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [editRecto, setEditRecto] = useState('');
+  const [editVerso, setEditVerso] = useState('');
+  const [editComment, setEditComment] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState<{ type: ConfirmType; cardId: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState('');
+  const [lastStudiedIds, setLastStudiedIds] = useState<Set<string>>(new Set());
+  const [showOnlyReviewed, setShowOnlyReviewed] = useState(false);
+  const [reviewedBannerDismissed, setReviewedBannerDismissed] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -68,6 +90,20 @@ export default function DeckDetailPage() {
       .then((res) => {
         if (res.data?.success && Array.isArray(res.data.data)) {
           setCards(res.data.data);
+          try {
+            const raw = typeof window !== 'undefined' ? window.sessionStorage.getItem(LAST_STUDIED_KEY(id)) : null;
+            if (raw) {
+              const ids = JSON.parse(raw) as unknown;
+              if (Array.isArray(ids) && ids.every((x) => typeof x === 'string')) {
+                const set = new Set(ids as string[]);
+                setLastStudiedIds(set);
+                setRevealedCardIds((prev) => new Set([...prev, ...set]));
+                setReviewedBannerDismissed(false);
+              }
+            }
+          } catch {
+            // ignore invalid stored data
+          }
         }
       })
       .catch((err) => {
@@ -77,6 +113,159 @@ export default function DeckDetailPage() {
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, deck]);
+
+  const revealOne = useCallback((cardId: string) => {
+    setRevealedCardIds((prev) => new Set(prev).add(cardId));
+  }, []);
+
+  const revealAll = useCallback(() => {
+    setRevealedCardIds(new Set(cards.map((c) => c.id)));
+    setShowRevealAllDialog(false);
+  }, [cards]);
+
+  const displayCards = useMemo(() => {
+    const q = appliedSearchQuery.trim();
+    if (q) {
+      return cards.filter((c) => cardMatchesSearch(c, q));
+    }
+    if (showOnlyReviewed && lastStudiedIds.size > 0) {
+      return cards.filter((c) => lastStudiedIds.has(c.id));
+    }
+    return cards;
+  }, [cards, appliedSearchQuery, showOnlyReviewed, lastStudiedIds]);
+
+  const isRevealed = useCallback(
+    (cardId: string) => {
+      if (appliedSearchQuery.trim()) return true;
+      return revealedCardIds.has(cardId);
+    },
+    [appliedSearchQuery, revealedCardIds]
+  );
+
+  function handleApplySearch() {
+    setAppliedSearchQuery(searchQuery.trim());
+  }
+
+  function handleClearSearch() {
+    setSearchQuery('');
+    setAppliedSearchQuery('');
+  }
+
+  function dismissReviewedBanner() {
+    setReviewedBannerDismissed(true);
+    try {
+      if (typeof window !== 'undefined') window.sessionStorage.removeItem(LAST_STUDIED_KEY(id));
+    } catch {
+      // ignore
+    }
+    setLastStudiedIds(new Set());
+  }
+
+  const openEditModal = useCallback((card: Card) => {
+    setEditingCard(card);
+    setEditRecto(card.recto);
+    setEditVerso(card.verso);
+    setEditComment(card.comment ?? '');
+    setEditError('');
+  }, []);
+
+  const closeEditModal = useCallback(() => {
+    setEditingCard(null);
+    setEditError('');
+  }, []);
+
+  const closeCreateModal = useCallback(() => {
+    setShowCreateCard(false);
+    setCreateRecto('');
+    setCreateVerso('');
+    setCreateComment('');
+    setCreateError('');
+  }, []);
+
+  function handleEditCard(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingCard) return;
+    setEditError('');
+    const recto = editRecto.trim();
+    const verso = editVerso.trim();
+    if (!recto || !verso) {
+      setEditError(ta('frontBackRequired'));
+      return;
+    }
+    setEditSaving(true);
+    apiClient
+      .put<{ success: boolean; data?: Card }>(`/api/cards/${editingCard.id}`, {
+        recto,
+        verso,
+        comment: editComment.trim() || undefined,
+      })
+      .then((res) => {
+        if (res.data?.success && res.data.data) {
+          setCards((prev) =>
+            prev.map((c) => (c.id === editingCard.id ? res.data!.data! : c))
+          );
+          closeEditModal();
+        } else {
+          setEditError(tc('invalidResponse'));
+        }
+      })
+      .catch((err) => setEditError(getApiErrorMessage(err, ta('failedUpdateCard'))))
+      .finally(() => setEditSaving(false));
+  }
+
+  function runConfirmAction() {
+    if (!confirmDialog) return;
+    const cardId = confirmDialog.cardId;
+    setActionLoading(true);
+    const done = () => {
+      setActionLoading(false);
+      setConfirmDialog(null);
+    };
+    if (confirmDialog.type === 'delete') {
+      apiClient
+        .delete(`/api/cards/${cardId}`)
+        .then(() => {
+          setCards((prev) => prev.filter((c) => c.id !== cardId));
+          setRevealedCardIds((prev) => {
+            const next = new Set(prev);
+            next.delete(cardId);
+            return next;
+          });
+        })
+        .catch(() => {})
+        .finally(done);
+      return;
+    }
+    if (confirmDialog.type === 'treatAsNew') {
+      apiClient
+        .post<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/reset-stability`)
+        .then((res) => {
+          if (res.data?.success && res.data.data) {
+            setCards((prev) =>
+              prev.map((c) => (c.id === cardId ? res.data!.data! : c))
+            );
+          }
+        })
+        .catch(() => {})
+        .finally(done);
+      return;
+    }
+    if (confirmDialog.type === 'expandDelay') {
+      apiClient
+        .post<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/postpone`, {
+          revealedForSeconds: 30,
+        })
+        .then((res) => {
+          if (res.data?.success && res.data.data) {
+            setCards((prev) =>
+              prev.map((c) => (c.id === cardId ? res.data!.data! : c))
+            );
+          }
+        })
+        .catch(() => {})
+        .finally(done);
+    }
+  }
 
   function handleCreateCard(e: React.FormEvent) {
     e.preventDefault();
@@ -97,10 +286,7 @@ export default function DeckDetailPage() {
       .then((res) => {
         if (res.data?.success && res.data.data) {
           setCards((prev) => [res.data!.data!, ...prev]);
-          setCreateRecto('');
-          setCreateVerso('');
-          setCreateComment('');
-          setShowCreateCard(false);
+          closeCreateModal();
         } else {
           setCreateError(tc('invalidResponse'));
         }
@@ -182,96 +368,56 @@ export default function DeckDetailPage() {
       )}
 
       {showCreateCard && (
-        <form
-          onSubmit={handleCreateCard}
-          className="mc-study-surface rounded-lg border p-4 shadow-sm"
+        <div
+          data-testid="create-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-card-title"
+          onClick={closeCreateModal}
         >
-          <h4 className="mb-3 text-sm font-medium text-[var(--mc-text-primary)]">
-            {ta('createCard')}
-          </h4>
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="card-recto" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
-                {ta('recto')}
-              </label>
-              <textarea
-                id="card-recto"
-                value={createRecto}
-                onChange={(e) => setCreateRecto(e.target.value)}
-                maxLength={CARD_CONTENT_MAX}
-                placeholder={ta('rectoPlaceholder')}
-                required
-                rows={2}
-                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
+          <div
+            className="mx-4 max-w-lg rounded-lg border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="create-card-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
+              {ta('createCard')}
+            </h3>
+            <form onSubmit={handleCreateCard} className="mt-3">
+              <CardFormFields
+                idPrefix="card"
+                recto={createRecto}
+                verso={createVerso}
+                comment={createComment}
+                onRectoChange={setCreateRecto}
+                onVersoChange={setCreateVerso}
+                onCommentChange={setCreateComment}
+                t={ta}
               />
-              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
-                {createRecto.length}/{CARD_CONTENT_MAX}
-              </p>
-            </div>
-            <div>
-              <label htmlFor="card-verso" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
-                {ta('verso')}
-              </label>
-              <textarea
-                id="card-verso"
-                value={createVerso}
-                onChange={(e) => setCreateVerso(e.target.value)}
-                maxLength={CARD_CONTENT_MAX}
-                placeholder={ta('versoPlaceholder')}
-                required
-                rows={2}
-                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
-              />
-              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
-                {createVerso.length}/{CARD_CONTENT_MAX}
-              </p>
-            </div>
-            <div>
-              <label htmlFor="card-comment" className="mb-1 block text-sm font-medium text-[var(--mc-text-secondary)]">
-                {ta('commentOptional')}
-              </label>
-              <textarea
-                id="card-comment"
-                value={createComment}
-                onChange={(e) => setCreateComment(e.target.value)}
-                maxLength={CARD_COMMENT_MAX}
-                placeholder={ta('commentPlaceholder')}
-                rows={1}
-                className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
-              />
-              <p className="mt-0.5 text-xs text-[var(--mc-text-secondary)]">
-                {createComment.length}/{CARD_COMMENT_MAX}
-              </p>
-            </div>
-            {createError && (
-              <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
-                {createError}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={creating || !createRecto.trim() || !createVerso.trim()}
-                className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
-              >
-                {creating ? tc('creating') : tc('create')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateCard(false);
-                  setCreateRecto('');
-                  setCreateVerso('');
-                  setCreateComment('');
-                  setCreateError('');
-                }}
-                className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
-              >
-                {tc('cancel')}
-              </button>
-            </div>
+              {createError && (
+                <p className="mt-3 text-sm text-[var(--mc-accent-danger)]" role="alert">
+                  {createError}
+                </p>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="submit"
+                  disabled={creating || !createRecto.trim() || !createVerso.trim()}
+                  className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
+                >
+                  {creating ? tc('creating') : tc('create')}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeCreateModal}
+                  className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                >
+                  {tc('cancel')}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       )}
 
       {cardsLoading ? (
@@ -290,26 +436,315 @@ export default function DeckDetailPage() {
           </button>
         </div>
       ) : (
-        <ul className="space-y-3">
-          {cards.map((card) => (
-            <li
-              key={card.id}
-              className="mc-study-surface rounded-lg border p-4 shadow-sm"
+        <>
+          {lastStudiedIds.size > 0 && !reviewedBannerDismissed && (
+            <div className="mb-4 rounded-lg border border-[var(--mc-accent-primary)]/30 bg-[var(--mc-accent-primary)]/5 p-3">
+              <p className="text-sm text-[var(--mc-text-primary)]">
+                {ta('manageReviewedBanner', { vars: { count: String(lastStudiedIds.size) } })}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOnlyReviewed(!showOnlyReviewed)}
+                  className="text-sm font-medium text-[var(--mc-accent-primary)] underline hover:no-underline"
+                >
+                  {showOnlyReviewed ? ta('showAllCards') : ta('showOnlyReviewed')}
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissReviewedBanner}
+                  className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
+                >
+                  {ta('dismiss')}
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplySearch(); } }}
+              placeholder={ta('searchCardsPlaceholder')}
+              aria-label={ta('searchCardsPlaceholder')}
+              className="min-w-[200px] max-w-full flex-1 rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
+            />
+            <button
+              type="button"
+              onClick={handleApplySearch}
+              className="rounded border border-[var(--mc-border-subtle)] px-3 py-2 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)]"
             >
-              <p className="font-medium text-[var(--mc-text-primary)]">
-                {truncate(card.recto, 80)}
-              </p>
-              <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
-                {truncate(card.verso, 80)}
-              </p>
-              {card.comment && (
-                <p className="mt-1 text-xs text-[var(--mc-text-secondary)]/80">
-                  {truncate(card.comment, 60)}
+              {ta('applySearch')}
+            </button>
+            {appliedSearchQuery.trim() && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
+              >
+                {ta('clearSearch')}
+              </button>
+            )}
+            {!appliedSearchQuery.trim() && (
+              <>
+                <p className="text-xs text-[var(--mc-text-secondary)]">
+                  {ta('cardsContentHidden')}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowRevealAllDialog(true)}
+                  className="text-xs font-medium text-[var(--mc-accent-primary)] underline hover:no-underline"
+                >
+                  {ta('revealAll')}
+                </button>
+              </>
+            )}
+          </div>
+          <ul className="space-y-3">
+            {displayCards.length === 0 ? (
+              <li className="rounded-lg border border-dashed border-[var(--mc-border-subtle)] p-4 text-center text-sm text-[var(--mc-text-secondary)]">
+                {appliedSearchQuery.trim() ? ta('searchNoMatch') : showOnlyReviewed ? ta('noReviewedCards') : ta('noCardsYet')}
+              </li>
+            ) : (
+              displayCards.map((card) => {
+                const revealed = isRevealed(card.id);
+                const globalIndex = cards.findIndex((c) => c.id === card.id) + 1;
+                return (
+                  <li
+                    key={card.id}
+                    className="mc-study-surface rounded-lg border p-4 shadow-sm"
+                  >
+                    {!revealed ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-[var(--mc-text-primary)]">
+                          {ta('cardLabel', { vars: { n: String(globalIndex) } })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => revealOne(card.id)}
+                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                        >
+                          {ta('revealCard')}
+                        </button>
+                      </div>
+                    ) : (
+                    <>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-[var(--mc-text-primary)]">
+                          {ta('recto')}: {card.recto}
+                        </p>
+                        <p className="text-sm text-[var(--mc-text-secondary)]">
+                          {ta('verso')}: {card.verso}
+                        </p>
+                        {card.comment && (
+                          <p className="text-xs text-[var(--mc-text-muted)]">
+                            {ta('commentOptional')}: {card.comment}
+                          </p>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(card)}
+                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                        >
+                          {ta('editCard')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmDialog({ type: 'delete', cardId: card.id })
+                          }
+                          className="rounded border border-[var(--mc-accent-danger)] px-3 py-1.5 text-sm font-medium text-[var(--mc-accent-danger)] hover:bg-[var(--mc-accent-danger)]/10"
+                        >
+                          {ta('deleteCard')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmDialog({
+                              type: 'treatAsNew',
+                              cardId: card.id,
+                            })
+                          }
+                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                        >
+                          {ta('treatAsNew')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmDialog({
+                              type: 'expandDelay',
+                              cardId: card.id,
+                            })
+                          }
+                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                        >
+                          {ta('expandDelay')}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </li>
+              );
+            })
+            )}
+          </ul>
+        </>
+      )}
+
+      {showRevealAllDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reveal-all-title"
+          onClick={() => setShowRevealAllDialog(false)}
+        >
+          <div
+            className="mx-4 max-w-md rounded-lg border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="reveal-all-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
+              {ta('revealAllDialogTitle')}
+            </h3>
+            <p className="mt-2 text-sm text-[var(--mc-text-secondary)]">
+              {ta('revealAllDialogMessage')}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                href={`/${locale}/app/decks/${id}/study`}
+                className="rounded bg-[var(--mc-accent-primary)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                {ta('revealAllStudyFirst')}
+              </Link>
+              <button
+                type="button"
+                onClick={revealAll}
+                className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)]"
+              >
+                {ta('revealAllConfirm')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowRevealAllDialog(false)}
+                className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+              >
+                {tc('cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingCard && (
+        <div
+          data-testid="edit-modal-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-card-title"
+          onClick={closeEditModal}
+        >
+          <div
+            className="mx-4 max-w-lg rounded-lg border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="edit-card-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
+              {ta('editCardTitle')}
+            </h3>
+            <form onSubmit={handleEditCard} className="mt-3">
+              <CardFormFields
+                idPrefix="edit"
+                recto={editRecto}
+                verso={editVerso}
+                comment={editComment}
+                onRectoChange={setEditRecto}
+                onVersoChange={setEditVerso}
+                onCommentChange={setEditComment}
+                t={ta}
+              />
+              {editError && (
+                <p className="mt-3 text-sm text-[var(--mc-accent-danger)]" role="alert">
+                  {editError}
                 </p>
               )}
-            </li>
-          ))}
-        </ul>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="submit"
+                  disabled={editSaving || !editRecto.trim() || !editVerso.trim()}
+                  className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
+                >
+                  {editSaving ? tc('saving') : tc('save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                >
+                  {tc('cancel')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-dialog-title"
+          onClick={() => setConfirmDialog(null)}
+        >
+          <div
+            className="mx-4 max-w-md rounded-lg border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="confirm-dialog-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
+              {confirmDialog.type === 'delete' && ta('deleteCardConfirmTitle')}
+              {confirmDialog.type === 'treatAsNew' && ta('treatAsNewConfirmTitle')}
+              {confirmDialog.type === 'expandDelay' && ta('expandDelayConfirmTitle')}
+            </h3>
+            <p className="mt-2 text-sm text-[var(--mc-text-secondary)]">
+              {confirmDialog.type === 'delete' && ta('deleteCardConfirmMessage')}
+              {confirmDialog.type === 'treatAsNew' && ta('treatAsNewConfirmMessage')}
+              {confirmDialog.type === 'expandDelay' && ta('expandDelayConfirmMessage')}
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                disabled={actionLoading}
+                className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] disabled:opacity-50"
+              >
+                {tc('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={runConfirmAction}
+                disabled={actionLoading}
+                className="rounded px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                style={
+                  confirmDialog.type === 'delete'
+                    ? { backgroundColor: 'var(--mc-accent-danger)' }
+                    : { backgroundColor: 'var(--mc-accent-primary)' }
+                }
+              >
+                {actionLoading
+                  ? tc('loading')
+                  : confirmDialog.type === 'delete'
+                    ? ta('deleteConfirm')
+                    : confirmDialog.type === 'treatAsNew'
+                      ? ta('treatAsNewConfirm')
+                      : ta('expandDelayConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

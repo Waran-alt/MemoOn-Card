@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
@@ -11,6 +11,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 
 const SESSION_NEW_LIMIT = 20;
 const SESSION_MAX = 50; // cap a single session so it’s not endless
+
+const LAST_STUDIED_KEY = (deckId: string) => `memoon_last_studied_${deckId}`;
 
 const RATING_VALUES: Rating[] = [1, 2, 3, 4];
 type RatingStats = Record<Rating, number>;
@@ -39,6 +41,7 @@ export default function StudyPage() {
   const [reviewedCount, setReviewedCount] = useState(0);
   const [ratingStats, setRatingStats] = useState<RatingStats>(INITIAL_RATING_STATS);
   const [sessionStartedAt] = useState(() => Date.now());
+  const sessionCardIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -62,6 +65,7 @@ export default function StudyPage() {
         const seen = new Set(due.map((c) => c.id));
         const extraNew = newCards.filter((c) => !seen.has(c.id));
         const combined = [...due, ...extraNew].slice(0, SESSION_MAX);
+        sessionCardIdsRef.current = combined.map((c) => c.id);
         setQueue(combined);
       })
       .catch((err) => {
@@ -71,6 +75,18 @@ export default function StudyPage() {
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  function goToDeck() {
+    try {
+      const ids = sessionCardIdsRef.current;
+      if (ids?.length && typeof window !== 'undefined') {
+        window.sessionStorage.setItem(LAST_STUDIED_KEY(id), JSON.stringify(ids));
+      }
+    } catch {
+      // ignore
+    }
+    router.push(`/${locale}/app/decks/${id}`);
+  }
 
   function handleRate(rating: Rating) {
     const card = queue[0];
@@ -123,23 +139,25 @@ export default function StudyPage() {
   if (noCards) {
     return (
       <div className="space-y-4">
-        <Link
-          href={`/${locale}/app/decks/${id}`}
+        <button
+          type="button"
+          onClick={goToDeck}
           className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)"
         >
           ← {ta('backToDeck')}
-        </Link>
+        </button>
         <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
           <p className="text-(--mc-text-primary)">{ta('noCardsToStudy')}</p>
           <p className="mt-1 text-sm text-(--mc-text-secondary)">
             Add cards to this deck or come back later for due reviews.
           </p>
-          <Link
-            href={`/${locale}/app/decks/${id}`}
+          <button
+            type="button"
+            onClick={goToDeck}
             className="mt-4 inline-block rounded bg-(--mc-accent-success) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
           >
             {ta('backToDeck')}
-          </Link>
+          </button>
         </div>
       </div>
     );
@@ -152,12 +170,13 @@ export default function StudyPage() {
     const elapsedSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 1000));
     return (
       <div className="space-y-4">
-        <Link
-          href={`/${locale}/app/decks/${id}`}
+        <button
+          type="button"
+          onClick={goToDeck}
           className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)"
         >
           ← {ta('backToDeck')}
-        </Link>
+        </button>
         <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
           <p className="font-medium text-(--mc-text-primary)">{ta('sessionComplete')}</p>
           <p className="mt-1 text-sm text-(--mc-text-secondary)">
@@ -185,12 +204,13 @@ export default function StudyPage() {
               <p className="font-medium text-(--mc-text-primary)">{ratingStats[4]}</p>
             </div>
           </div>
-          <Link
-            href={`/${locale}/app/decks/${id}`}
+          <button
+            type="button"
+            onClick={goToDeck}
             className="mt-4 inline-block rounded bg-(--mc-accent-success) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
           >
             {ta('backToDeck')}
-          </Link>
+          </button>
         </div>
       </div>
     );
@@ -200,12 +220,13 @@ export default function StudyPage() {
     <div className="mc-study-page mx-auto max-w-2xl space-y-6">
       {/* Focus anchor: peripheral elements are visually de-emphasized while studying */}
       <div className="flex items-center justify-between opacity-70 transition-opacity duration-200">
-        <Link
-          href={`/${locale}/app/decks/${id}`}
+        <button
+          type="button"
+          onClick={goToDeck}
           className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)"
         >
           ← {ta('exitStudy')}
-        </Link>
+        </button>
         <span className="text-sm text-(--mc-text-secondary)">
           {ta('leftReviewed', {
             vars: {

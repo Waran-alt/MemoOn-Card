@@ -118,9 +118,10 @@ describe('DeckDetailPage', () => {
       });
     });
     await waitFor(() => {
-      expect(screen.getByText('Front text')).toBeInTheDocument();
-      expect(screen.getByText('Back text')).toBeInTheDocument();
+      expect(screen.getByText('Card 1')).toBeInTheDocument();
     });
+    expect(screen.queryByText('Front text')).not.toBeInTheDocument();
+    expect(screen.queryByText('Back text')).not.toBeInTheDocument();
   });
 
   it('disables Create button when front or back is empty', async () => {
@@ -173,7 +174,7 @@ describe('DeckDetailPage', () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  it('displays multiple cards when GET cards returns list', async () => {
+  it('displays multiple cards as placeholders without showing content', async () => {
     const cards: Card[] = [
       { ...mockCard, id: 'c1', recto: 'One', verso: '1' },
       { ...mockCard, id: 'c2', recto: 'Two', verso: '2' },
@@ -184,11 +185,13 @@ describe('DeckDetailPage', () => {
     });
     render(<DeckDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('One')).toBeInTheDocument();
-      expect(screen.getByText('Two')).toBeInTheDocument();
+      expect(screen.getByText('Card 1')).toBeInTheDocument();
+      expect(screen.getByText('Card 2')).toBeInTheDocument();
     });
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+    expect(screen.queryByText('Two')).not.toBeInTheDocument();
+    expect(screen.queryByText('1')).not.toBeInTheDocument();
+    expect(screen.queryByText('2')).not.toBeInTheDocument();
   });
 
   it('shows cards load error when GET cards fails', async () => {
@@ -223,6 +226,156 @@ describe('DeckDetailPage', () => {
     render(<DeckDetailPage />);
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Failed to load deck');
+    });
+  });
+
+  it('filters cards by search only after clicking Search button and reveals matching card content', async () => {
+    const cards: Card[] = [
+      { ...mockCard, id: 'c1', recto: 'Apple', verso: 'Fruit', comment: null },
+      { ...mockCard, id: 'c2', recto: 'Banana', verso: 'Yellow', comment: null },
+    ];
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Card 1')).toBeInTheDocument();
+      expect(screen.getByText('Card 2')).toBeInTheDocument();
+    });
+    const searchInput = screen.getByRole('searchbox', { name: /Search cards/ });
+    await userEvent.type(searchInput, 'Apple');
+    expect(screen.queryByText(/Apple/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Apple/)).toBeInTheDocument();
+    expect(screen.getByText(/Fruit/)).toBeInTheDocument();
+    expect(screen.queryByText(/Banana/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Yellow/)).not.toBeInTheDocument();
+  });
+
+  it('shows no match message when search matches no cards after applying search', async () => {
+    const cards: Card[] = [
+      { ...mockCard, id: 'c1', recto: 'Alpha', verso: 'First', comment: null },
+    ];
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Card 1')).toBeInTheDocument();
+    });
+    const searchInput = screen.getByRole('searchbox', { name: /Search cards/ });
+    await userEvent.type(searchInput, 'xyz-nonexistent');
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => {
+      expect(screen.getByText(/No cards match your search/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Alpha')).not.toBeInTheDocument();
+  });
+
+  it('shows reviewed banner and Show only reviewed filter when returning from study', async () => {
+    const cards: Card[] = [
+      { ...mockCard, id: 'c1', recto: 'Reviewed', verso: 'Back', comment: null },
+      { ...mockCard, id: 'c2', recto: 'Other', verso: 'Card', comment: null },
+    ];
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem('memoon_last_studied_deck-123', JSON.stringify(['c1']));
+    }
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/You just reviewed 1 cards/)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Show only reviewed' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
+    // Reviewed card (c1) is revealed (content + Edit); other (c2) is still placeholder
+    await waitFor(() => {
+      expect(screen.getByText(/Reviewed/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+    expect(screen.getByText('Card 2')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show only reviewed' }));
+    await waitFor(() => {
+      expect(screen.getByText(/Reviewed/)).toBeInTheDocument();
+      expect(screen.queryByText(/Other/)).not.toBeInTheDocument();
+      expect(screen.queryByText('Card 2')).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Show all cards' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => {
+      expect(screen.queryByText(/You just reviewed/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('closes create modal when clicking outside the modal box', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: [] } });
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'My Deck' })).toBeInTheDocument();
+    });
+    const newCardButtons = screen.getAllByRole('button', { name: /New card/ });
+    await userEvent.click(newCardButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create card' })).toBeInTheDocument();
+    });
+    const overlay = screen.getByTestId('create-modal-overlay');
+    await userEvent.click(overlay);
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Create card' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps create modal open when clicking inside the modal box', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: [] } });
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'My Deck' })).toBeInTheDocument();
+    });
+    const newCardButtons = screen.getAllByRole('button', { name: /New card/ });
+    await userEvent.click(newCardButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create card' })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('heading', { name: 'Create card' }));
+    expect(screen.getByRole('heading', { name: 'Create card' })).toBeInTheDocument();
+  });
+
+  it('closes edit modal when clicking outside the modal box', async () => {
+    const cards: Card[] = [
+      { ...mockCard, id: 'c1', recto: 'Q', verso: 'A', comment: null },
+    ];
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem('memoon_last_studied_deck-123', JSON.stringify(['c1']));
+    }
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/Q/)).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Edit card' })).toBeInTheDocument();
+    });
+    const overlay = screen.getByTestId('edit-modal-overlay');
+    await userEvent.click(overlay);
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Edit card' })).not.toBeInTheDocument();
     });
   });
 });
