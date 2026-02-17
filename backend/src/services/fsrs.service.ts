@@ -177,131 +177,6 @@ export class FSRS {
   }
 
   /**
-   * Calculate initial Stability (S₀) for a new card
-   * 
-   * @param rating User's rating (1-4)
-   * @returns Initial stability in days
-   */
-  private calculateInitialStability(rating: Rating): number {
-    return calculateInitialStabilityCore(this.config.weights, rating);
-  }
-
-  /**
-   * Calculate initial Difficulty (D₀) for a new card
-   * 
-   * FSRS-6 formula: D₀(G) = w₄ - e^(w₅ * (G - 1)) + 1
-   * where w₄ = D₀(1), i.e., the initial difficulty when the first rating is Again.
-   * 
-   * Source: https://expertium.github.io/Algorithm.html
-   * 
-   * @param rating User's rating (1-4)
-   * @returns Initial difficulty (1.0 to 10.0)
-   */
-  private calculateInitialDifficulty(rating: Rating): number {
-    return calculateInitialDifficultyCore(this.config.weights, rating);
-  }
-
-  /**
-   * Update Difficulty after a review
-   * 
-   * FSRS-6 formula with linear damping and mean reversion:
-   * 1. ΔD(G) = -w₆ * (G - 3)
-   * 2. D' = D + ΔD * (10 - D) / 9  (linear damping)
-   * 3. D'' = w₇ * D₀(4) + (1 - w₇) * D'  (mean reversion)
-   * 
-   * In FSRS-6, D₀(4) (Easy) is the target of mean reversion.
-   * Source: https://expertium.github.io/Algorithm.html
-   * 
-   * @param currentDifficulty Current difficulty
-   * @param rating User's rating (1-4)
-   * @returns New difficulty
-   */
-  private updateDifficulty(currentDifficulty: number, rating: Rating): number {
-    return updateDifficultyCore(this.config.weights, currentDifficulty, rating);
-  }
-
-  /**
-   * Update Stability after a successful review (G > 1)
-   * 
-   * @param currentStability Current stability
-   * @param difficulty Current difficulty
-   * @param retrievability Current retrievability
-   * @returns New stability
-   */
-  private updateStabilitySuccess(
-    currentStability: number,
-    difficulty: number,
-    retrievability: number
-  ): number {
-    return updateStabilitySuccessCore(
-      this.config.weights,
-      currentStability,
-      difficulty,
-      retrievability
-    );
-  }
-
-  /**
-   * Update Stability after a failed review (G = 1)
-   * 
-   * FSRS-6 formula: S'_f(D,S,R) = min(w₁₁ * D^(-w₁₂) * ((S + 1)^w₁₃ - 1) * e^(w₁₄ * (1 - R)), S)
-   * 
-   * The min(..., S) ensures that post-lapse stability can never be greater than
-   * stability before the lapse.
-   * 
-   * Source: https://expertium.github.io/Algorithm.html
-   * 
-   * @param currentStability Current stability
-   * @param difficulty Current difficulty
-   * @param retrievability Current retrievability
-   * @returns New stability
-   */
-  private updateStabilityFailure(
-    currentStability: number,
-    difficulty: number,
-    retrievability: number
-  ): number {
-    return updateStabilityFailureCore(
-      this.config.weights,
-      currentStability,
-      difficulty,
-      retrievability
-    );
-  }
-
-  /**
-   * Calculate interval (days) until next review
-   * 
-   * @param stability Current stability
-   * @param rating User's rating (for Hard/Easy modifiers)
-   * @returns Interval in days
-   */
-  private calculateInterval(stability: number, rating: Rating): number {
-    return calculateIntervalCore(this.config.weights, this.config.targetRetention, stability, rating);
-  }
-
-  /**
-   * Update Stability for same-day reviews (FSRS v6)
-   * 
-   * Formula: S'(S,G) = S * e^(w₁₇ * (G - 3 + w₁₈)) * S^(-w₁₉)
-   * 
-   * @param currentStability Current stability
-   * @param lastReview Last review date
-   * @param now Current date
-   * @param rating User's rating (1-4)
-   * @returns Adjusted stability for same-day review
-   */
-  private updateStabilitySameDay(
-    currentStability: number,
-    lastReview: Date,
-    now: Date,
-    rating: Rating
-  ): number {
-    const elapsedHours = getElapsedHours(lastReview, now);
-    return updateStabilitySameDayCore(this.config.weights, currentStability, elapsedHours, rating);
-  }
-
-  /**
    * Review a card and update its state
    * 
    * Note: Only actual reviews with ratings affect FSRS state. Management views
@@ -321,9 +196,14 @@ export class FSRS {
 
     if (!state || state.stability === 0) {
       // New card - initialize
-      const stability = this.calculateInitialStability(rating);
-      const difficulty = this.calculateInitialDifficulty(rating);
-      const interval = this.calculateInterval(stability, rating);
+      const stability = calculateInitialStabilityCore(this.config.weights, rating);
+      const difficulty = calculateInitialDifficultyCore(this.config.weights, rating);
+      const interval = calculateIntervalCore(
+        this.config.weights,
+        this.config.targetRetention,
+        stability,
+        rating
+      );
 
       newState = {
         stability,
@@ -340,20 +220,22 @@ export class FSRS {
       const retrievability = this.calculateRetrievability(elapsedDays, state.stability);
 
       // Update difficulty
-      const newDifficulty = this.updateDifficulty(state.difficulty, rating);
+      const newDifficulty = updateDifficultyCore(this.config.weights, state.difficulty, rating);
 
       // Update stability
       let newStability: number;
       if (rating === 1) {
         // Failed
-        newStability = this.updateStabilityFailure(
+        newStability = updateStabilityFailureCore(
+          this.config.weights,
           state.stability,
           newDifficulty,
           retrievability
         );
       } else {
         // Passed
-        newStability = this.updateStabilitySuccess(
+        newStability = updateStabilitySuccessCore(
+          this.config.weights,
           state.stability,
           newDifficulty,
           retrievability
@@ -364,16 +246,21 @@ export class FSRS {
       // Only applies if reviewed within 24 hours on the same day
       if (isSameDayReview && elapsedHours < 24) {
         // Apply same-day review formula (FSRS v6)
-        newStability = this.updateStabilitySameDay(
+        newStability = updateStabilitySameDayCore(
+          this.config.weights,
           newStability,
-          state.lastReview!,
-          now,
+          getElapsedHours(state.lastReview!, now),
           rating
         );
       }
 
       // Calculate interval
-      const interval = this.calculateInterval(newStability, rating);
+      const interval = calculateIntervalCore(
+        this.config.weights,
+        this.config.targetRetention,
+        newStability,
+        rating
+      );
 
       newState = {
         stability: newStability,
