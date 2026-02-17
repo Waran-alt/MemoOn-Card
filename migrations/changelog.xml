@@ -15,5 +15,9 @@
     <include file="changesets/008-fsrs-phase1-metrics.xml" relativeToChangelogFile="true"/>
     <include file="changesets/009-user-weight-snapshots.xml" relativeToChangelogFile="true"/>
     <include file="changesets/010-weight-snapshot-activation-audit.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/011-day1-short-loop-and-events.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/012-card-journey-events.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/013-refresh-token-sessions.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/014-consistency-and-review-indexes.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

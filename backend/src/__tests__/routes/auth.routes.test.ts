@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import authRoutes from '@/routes/auth.routes';
 import { errorHandler } from '@/middleware/errorHandler';
 import { userService } from '@/services/user.service';
+import { refreshTokenService } from '@/services/refresh-token.service';
 import { User } from '@/types/database';
 
 vi.mock('@/config/env', () => ({
@@ -27,6 +28,15 @@ vi.mock('@/services/user.service', () => ({
     getUserById: vi.fn(),
     getUserByEmail: vi.fn(),
     verifyPassword: vi.fn(),
+  },
+}));
+
+vi.mock('@/services/refresh-token.service', () => ({
+  refreshTokenService: {
+    createSession: vi.fn(),
+    validateActiveToken: vi.fn(),
+    rotateSession: vi.fn(),
+    revokeToken: vi.fn(),
   },
 }));
 
@@ -56,8 +66,9 @@ describe('Auth routes', () => {
   });
 
   describe('POST /api/auth/register', () => {
-    it('should return 201 with accessToken, refreshToken, and user', async () => {
+    it('should return 201 with accessToken and user', async () => {
       vi.mocked(userService.createUser).mockResolvedValueOnce(mockUser);
+      vi.mocked(refreshTokenService.createSession).mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/auth/register')
@@ -74,12 +85,12 @@ describe('Auth routes', () => {
       });
       expect(res.body.data.accessToken).toBeDefined();
       expect(typeof res.body.data.accessToken).toBe('string');
-      expect(res.body.data.refreshToken).toBeDefined();
       expect(userService.createUser).toHaveBeenCalledWith(
         'user@example.com',
         'password123',
         'Test User'
       );
+      expect(refreshTokenService.createSession).toHaveBeenCalledTimes(1);
     });
 
     it('should return error when email already exists', async () => {
@@ -124,6 +135,7 @@ describe('Auth routes', () => {
     it('should return 201 when name (username) is omitted', async () => {
       const userNoName = { ...mockUser, email: 'noname@example.com', name: null };
       vi.mocked(userService.createUser).mockResolvedValueOnce(userNoName);
+      vi.mocked(refreshTokenService.createSession).mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/auth/register')
@@ -147,10 +159,11 @@ describe('Auth routes', () => {
   });
 
   describe('POST /api/auth/login', () => {
-    it('should return 200 with tokens and user when credentials valid', async () => {
+    it('should return 200 with access token and user when credentials valid', async () => {
       const userWithHash = { ...mockUser, password_hash: 'hashed' };
       vi.mocked(userService.getUserByEmail).mockResolvedValueOnce(userWithHash);
       vi.mocked(userService.verifyPassword).mockResolvedValueOnce(true);
+      vi.mocked(refreshTokenService.createSession).mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/auth/login')
@@ -167,15 +180,17 @@ describe('Auth routes', () => {
         name: 'Test User',
       });
       expect(res.body.data.accessToken).toBeDefined();
-      expect(res.body.data.refreshToken).toBeDefined();
+      expect(res.body.data.refreshToken).toBeUndefined();
       expect(userService.getUserByEmail).toHaveBeenCalledWith('user@example.com');
       expect(userService.verifyPassword).toHaveBeenCalledWith('password123', 'hashed');
+      expect(refreshTokenService.createSession).toHaveBeenCalledTimes(1);
     });
 
     it('should set refresh cookie with httpOnly in response', async () => {
       const userWithHash = { ...mockUser, password_hash: 'hashed' };
       vi.mocked(userService.getUserByEmail).mockResolvedValueOnce(userWithHash);
       vi.mocked(userService.verifyPassword).mockResolvedValueOnce(true);
+      vi.mocked(refreshTokenService.createSession).mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/auth/login')
@@ -232,48 +247,9 @@ describe('Auth routes', () => {
   });
 
   describe('POST /api/auth/refresh', () => {
-    it('should return 200 with new tokens for valid refresh token', async () => {
+    it('should return 200 for valid refresh token in cookie', async () => {
       vi.mocked(userService.getUserById).mockResolvedValueOnce(mockUser);
-
-      const jwt = await import('jsonwebtoken');
-      const validRefreshToken = jwt.default.sign(
-        { userId: mockUserId },
-        'test-secret-minimum-32-characters-long',
-        { expiresIn: '7d' }
-      );
-
-      const res = await request(app)
-        .post('/api/auth/refresh')
-        .send({ refreshToken: validRefreshToken });
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.accessToken).toBeDefined();
-      expect(typeof res.body.data.accessToken).toBe('string');
-      expect(res.body.data.refreshToken).toBeDefined();
-      expect(typeof res.body.data.refreshToken).toBe('string');
-    });
-
-    it('should return error for invalid refresh token', async () => {
-      const res = await request(app)
-        .post('/api/auth/refresh')
-        .send({ refreshToken: 'invalid-token' });
-
-      expect(res.status).toBeGreaterThanOrEqual(400);
-      if (res.body?.error || res.body?.message) {
-        const errorMsg = (res.body.error ?? res.body.message) as string;
-        expect(errorMsg).toMatch(/invalid|expired|token|unauthorized/i);
-      }
-    });
-
-    it('should return 401 when refreshToken missing', async () => {
-      const res = await request(app).post('/api/auth/refresh').send({});
-
-      expect(res.status).toBe(401);
-    });
-
-    it('should return 200 when valid refresh token is in cookie (not body)', async () => {
-      vi.mocked(userService.getUserById).mockResolvedValueOnce(mockUser);
+      vi.mocked(refreshTokenService.rotateSession).mockResolvedValueOnce();
 
       const jwt = await import('jsonwebtoken');
       const validRefreshToken = jwt.default.sign(
@@ -290,14 +266,73 @@ describe('Auth routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.accessToken).toBeDefined();
-      expect(res.body.data.refreshToken).toBeDefined();
+      expect(typeof res.body.data.accessToken).toBe('string');
+      expect(res.body.data.refreshToken).toBeUndefined();
+      expect(refreshTokenService.rotateSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return error for invalid refresh token', async () => {
+      const res = await request(app)
+        .post('/api/auth/refresh')
+        .set('Cookie', 'refresh_token=invalid-token')
+        .send({});
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      if (res.body?.error || res.body?.message) {
+        const errorMsg = (res.body.error ?? res.body.message) as string;
+        expect(errorMsg).toMatch(/invalid|expired|token|unauthorized/i);
+      }
+    });
+
+    it('should return 401 when refreshToken missing', async () => {
+      const res = await request(app).post('/api/auth/refresh').send({});
+
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 401 when refresh token is only in body', async () => {
+      const jwt = await import('jsonwebtoken');
+      const validRefreshToken = jwt.default.sign(
+        { userId: mockUserId },
+        'test-secret-minimum-32-characters-long',
+        { expiresIn: '7d' }
+      );
+      const res = await request(app)
+        .post('/api/auth/refresh')
+        .send({ refreshToken: validRefreshToken });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('should return 200 when valid refresh token is in cookie', async () => {
+      vi.mocked(userService.getUserById).mockResolvedValueOnce(mockUser);
+      vi.mocked(refreshTokenService.rotateSession).mockResolvedValueOnce();
+
+      const jwt = await import('jsonwebtoken');
+      const validRefreshToken = jwt.default.sign(
+        { userId: mockUserId },
+        'test-secret-minimum-32-characters-long',
+        { expiresIn: '7d' }
+      );
+
+      const res = await request(app)
+        .post('/api/auth/refresh')
+        .set('Cookie', `refresh_token=${validRefreshToken}`)
+        .send({});
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.accessToken).toBeDefined();
+      expect(res.body.data.refreshToken).toBeUndefined();
       expect(userService.getUserById).toHaveBeenCalledWith(mockUserId);
+      expect(refreshTokenService.rotateSession).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('GET /api/auth/session', () => {
     it('should return 200 with user when valid refresh cookie present', async () => {
       vi.mocked(userService.getUserById).mockResolvedValueOnce(mockUser);
+      vi.mocked(refreshTokenService.validateActiveToken).mockResolvedValueOnce();
 
       const jwt = await import('jsonwebtoken');
       const validRefreshToken = jwt.default.sign(
@@ -318,6 +353,7 @@ describe('Auth routes', () => {
         name: 'Test User',
       });
       expect(userService.getUserById).toHaveBeenCalledWith(mockUserId);
+      expect(refreshTokenService.validateActiveToken).toHaveBeenCalledTimes(1);
     });
 
     it('should return 401 when no cookie present', async () => {
@@ -357,6 +393,7 @@ describe('Auth routes', () => {
         password_hash: 'hashed',
       });
       vi.mocked(userService.verifyPassword).mockResolvedValueOnce(true);
+      vi.mocked(refreshTokenService.createSession).mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/auth/login')
@@ -378,6 +415,7 @@ describe('Auth routes', () => {
         password_hash: 'hashed',
       });
       vi.mocked(userService.verifyPassword).mockResolvedValueOnce(true);
+      vi.mocked(refreshTokenService.createSession).mockResolvedValueOnce();
 
       const res = await request(app)
         .post('/api/auth/login')

@@ -27,7 +27,8 @@ import {
   TIME_MULTIPLIERS,
   RISK_CALCULATION,
 } from '../constants/management.constants';
-import { INTERVAL_THRESHOLDS, TIME_CONSTANTS, CONTENT_CHANGE_THRESHOLDS, API_LIMITS } from '../constants/app.constants';
+import { INTERVAL_THRESHOLDS, TIME_CONSTANTS, API_LIMITS } from '../constants/app.constants';
+import { detectContentChange } from './fsrs-content.utils';
 
 // ============================================================================
 // Types
@@ -47,6 +48,15 @@ export interface ReviewResult {
   retrievability: number; // 0.0 to 1.0
   interval: number;       // Days until next review
   message: string;        // Human-readable message
+  shortLoopDecision?: {
+    enabled: boolean;
+    action: 'reinsert_today' | 'defer' | 'graduate_to_fsrs';
+    reason: string;
+    nextGapSeconds: number | null;
+    loopIteration: number;
+    fatigueScore: number | null;
+    importanceMode: 'light' | 'default' | 'intensive';
+  };
 }
 
 export interface FSRSConfig {
@@ -838,19 +848,7 @@ export class FSRS {
     isSignificant: boolean; // >30% change
     shouldReset: boolean;    // >50% change
   } {
-    if (oldContent === newContent) {
-      return { changePercent: 0, isSignificant: false, shouldReset: false };
-    }
-
-    // Simple similarity calculation (can be improved with diff algorithms)
-    const similarity = this.calculateSimilarity(oldContent, newContent);
-    const changePercent = (1 - similarity) * 100;
-
-    return {
-      changePercent,
-      isSignificant: changePercent > CONTENT_CHANGE_THRESHOLDS.SIGNIFICANT,
-      shouldReset: changePercent > CONTENT_CHANGE_THRESHOLDS.RESET,
-    };
+    return detectContentChange(oldContent, newContent);
   }
 
   /**
@@ -868,50 +866,6 @@ export class FSRS {
       lastReview: null,
       nextReview: new Date(), // Due immediately
     };
-  }
-
-  /**
-   * Calculate similarity between two strings
-   * Simple implementation using Levenshtein distance
-   */
-  private calculateSimilarity(str1: string, str2: string): number {
-    if (str1 === str2) return 1;
-    if (str1.length === 0 || str2.length === 0) return 0;
-
-    const maxLength = Math.max(str1.length, str2.length);
-    const distance = this.levenshteinDistance(str1, str2);
-    return 1 - distance / maxLength;
-  }
-
-  /**
-   * Calculate Levenshtein distance between two strings
-   */
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix: number[][] = [];
-
-    for (let i = 0; i <= str2.length; i++) {
-      matrix[i] = [i];
-    }
-
-    for (let j = 0; j <= str1.length; j++) {
-      matrix[0][j] = j;
-    }
-
-    for (let i = 1; i <= str2.length; i++) {
-      for (let j = 1; j <= str1.length; j++) {
-        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
-      }
-    }
-
-    return matrix[str2.length][str1.length];
   }
 
   private addHours(date: Date, hours: number): Date {

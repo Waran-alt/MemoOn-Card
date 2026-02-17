@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const loggerInfo = vi.hoisted(() => vi.fn());
+const loggerDebug = vi.hoisted(() => vi.fn());
 const loggerError = vi.hoisted(() => vi.fn());
 const serializeError = vi.hoisted(() => vi.fn((err: unknown) => ({ message: String(err) })));
 
 async function loadDatabaseModule() {
   vi.resetModules();
   loggerInfo.mockClear();
+  loggerDebug.mockClear();
   loggerError.mockClear();
   serializeError.mockClear();
 
@@ -32,6 +34,7 @@ async function loadDatabaseModule() {
   vi.doMock('@/utils/logger', () => ({
     logger: {
       info: loggerInfo,
+      debug: loggerDebug,
       error: loggerError,
     },
     serializeError,

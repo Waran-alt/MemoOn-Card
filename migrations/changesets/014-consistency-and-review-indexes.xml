@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="014-consistency-and-review-indexes" author="assistant">
+        <comment>
+            Add indexes to speed up journey consistency checks and review-log day windows.
+        </comment>
+
+        <createIndex tableName="review_logs" indexName="idx_review_logs_user_review_date_id">
+            <column name="user_id"/>
+            <column name="review_date"/>
+            <column name="id"/>
+        </createIndex>
+
+        <createIndex tableName="card_journey_events" indexName="idx_cje_user_type_time_card_session">
+            <column name="user_id"/>
+            <column name="event_type"/>
+            <column name="event_time"/>
+            <column name="card_id"/>
+            <column name="session_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

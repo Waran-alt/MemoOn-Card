@@ -15,6 +15,7 @@ import { RegisterSchema, LoginSchema, RefreshBodySchema } from '@/schemas/auth.s
 import { AuthenticationError } from '@/utils/errors';
 import { JWT_SECRET, NODE_ENV, getAllowedOrigins } from '@/config/env';
 import { REFRESH_COOKIE } from '@/constants/http.constants';
+import { refreshTokenService } from '@/services/refresh-token.service';
 import type { Request } from 'express';
 import { logger } from '@/utils/logger';
 
@@ -43,12 +44,17 @@ function toUserResponse(user: { id: string; email: string; name: string | null }
   return { id: user.id, email: user.email, name: user.name };
 }
 
-/** Read refresh token from httpOnly cookie or body (e.g. for non-cookie clients). */
+function getSessionMeta(req: Request): { userAgent?: string; ipAddress?: string } {
+  return {
+    userAgent: req.get('user-agent') || undefined,
+    ipAddress: req.ip || undefined,
+  };
+}
+
+/** Read refresh token from httpOnly cookie only. */
 function getRefreshTokenFromRequest(req: Request): string | undefined {
   const fromCookie = req.cookies?.[REFRESH_COOKIE.NAME];
-  const fromBody = req.body?.refreshToken;
   if (typeof fromCookie === 'string' && fromCookie) return fromCookie;
-  if (typeof fromBody === 'string' && fromBody) return fromBody;
   return undefined;
 }
 
@@ -114,6 +120,7 @@ router.post(
 
     const accessToken = generateAccessToken(user.id, user.email);
     const refreshToken = generateRefreshToken(user.id);
+    await refreshTokenService.createSession(user.id, refreshToken, getSessionMeta(req));
 
     setRefreshCookie(req, res, refreshToken);
 
@@ -121,7 +128,6 @@ router.post(
       success: true,
       data: {
         accessToken,
-        refreshToken,
         user: toUserResponse(user),
       },
     });
@@ -160,6 +166,7 @@ router.post(
 
     const accessToken = generateAccessToken(user.id, user.email);
     const refreshToken = generateRefreshToken(user.id);
+    await refreshTokenService.createSession(user.id, refreshToken, getSessionMeta(req));
 
     setRefreshCookie(req, res, refreshToken);
 
@@ -172,7 +179,6 @@ router.post(
       success: true,
       data: {
         accessToken,
-        refreshToken,
         user: toUserResponse(user),
       },
     });
@@ -181,7 +187,7 @@ router.post(
 
 /**
  * POST /api/auth/refresh
- * Exchange refresh token (from httpOnly cookie or body) for new access + refresh tokens
+ * Exchange refresh token from httpOnly cookie for a new access token + rotated cookie
  */
 router.post(
   '/refresh',
@@ -190,7 +196,7 @@ router.post(
     const token = getRefreshTokenFromRequest(req);
 
     if (!token) {
-      throw new AuthenticationError('Refresh token required (cookie or body)');
+      throw new AuthenticationError('Refresh token cookie required');
     }
 
     let decoded: JWTPayload;
@@ -211,6 +217,12 @@ router.post(
 
     const accessToken = generateAccessToken(decoded.userId, user.email);
     const newRefreshToken = generateRefreshToken(decoded.userId);
+    await refreshTokenService.rotateSession(
+      decoded.userId,
+      token,
+      newRefreshToken,
+      getSessionMeta(req)
+    );
 
     setRefreshCookie(req, res, newRefreshToken);
 
@@ -218,7 +230,6 @@ router.post(
       success: true,
       data: {
         accessToken,
-        refreshToken: newRefreshToken,
         user: toUserResponse(user),
       },
     });
@@ -253,6 +264,7 @@ router.get(
     if (!user) {
       throw new AuthenticationError('User not found');
     }
+    await refreshTokenService.validateActiveToken(decoded.userId, token);
 
     return res.json({
       success: true,
@@ -268,6 +280,17 @@ router.get(
 router.post(
   '/logout',
   asyncHandler(async (_req, res) => {
+    const token = getRefreshTokenFromRequest(_req);
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+        if (decoded.userId) {
+          await refreshTokenService.revokeToken(decoded.userId, token);
+        }
+      } catch {
+        // Cookie may already be invalid/expired.
+      }
+    }
     clearRefreshCookie(_req, res);
     return res.status(204).send();
   })

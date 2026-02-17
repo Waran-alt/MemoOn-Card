@@ -23,10 +23,16 @@ const dbConfig: PoolConfig = {
 };
 
 export const pool = new Pool(dbConfig);
+let hasLoggedFirstConnection = false;
 
 // Test connection
 pool.on('connect', () => {
-  logger.info('Database connected', {
+  // Avoid noisy logs in environments with frequent pool churn.
+  if (hasLoggedFirstConnection) {
+    return;
+  }
+  hasLoggedFirstConnection = true;
+  logger.debug('Database connected (first pool client)', {
     host: POSTGRES_HOST,
     port: POSTGRES_PORT,
     database: POSTGRES_DB,

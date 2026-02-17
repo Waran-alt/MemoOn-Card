@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="012-card-journey-events" author="developer">
+        <comment>Add immutable card journey event ledger for user-facing history</comment>
+
+        <!--
+            Intentionally no FK on card_id/deck_id:
+            we keep history rows even after a card/deck is deleted,
+            so users can still inspect past journey timelines.
+        -->
+
+        <createTable tableName="card_journey_events">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_journey_user" references="users(id)" deleteCascade="true"/>
+            </column>
+            <column name="card_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deck_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="session_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="event_type" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_time" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="review_log_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="causation_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="payload_json" type="jsonb" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint
+            tableName="card_journey_events"
+            columnNames="user_id,idempotency_key"
+            constraintName="uk_card_journey_user_idempotency"/>
+
+        <sql>
+            ALTER TABLE card_journey_events
+            ADD CONSTRAINT chk_card_journey_actor
+            CHECK (actor IN ('user', 'system'));
+        </sql>
+        <sql>
+            ALTER TABLE card_journey_events
+            ADD CONSTRAINT chk_card_journey_source
+            CHECK (source IN ('ui', 'review_service', 'study_events', 'cards_route', 'decks_route'));
+        </sql>
+
+        <createIndex indexName="idx_card_journey_user_card_time" tableName="card_journey_events">
+            <column name="user_id"/>
+            <column name="card_id"/>
+            <column name="event_time"/>
+        </createIndex>
+        <createIndex indexName="idx_card_journey_user_session_time" tableName="card_journey_events">
+            <column name="user_id"/>
+            <column name="session_id"/>
+            <column name="event_time"/>
+        </createIndex>
+        <createIndex indexName="idx_card_journey_review_log" tableName="card_journey_events">
+            <column name="review_log_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

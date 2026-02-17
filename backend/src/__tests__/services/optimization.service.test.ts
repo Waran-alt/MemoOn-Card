@@ -23,6 +23,7 @@ vi.mock('util', () => ({
 vi.mock('@/config/database', () => ({
   pool: {
     query: vi.fn(),
+    connect: vi.fn(),
   },
 }));
 
@@ -52,6 +53,11 @@ describe('OptimizationService', () => {
     service = new OptimizationService();
     serviceAccess = service as unknown as typeof serviceAccess;
     vi.clearAllMocks();
+    const mockClient = {
+      query: pool.query,
+      release: vi.fn(),
+    };
+    (pool.connect as ReturnType<typeof vi.fn>).mockResolvedValue(mockClient);
     mockMkdir.mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
     mockUnlink.mockResolvedValue(undefined);
@@ -325,6 +331,64 @@ describe('OptimizationService', () => {
       expect(pool.query).toHaveBeenNthCalledWith(6, 'COMMIT');
       expect(result?.activated_by).toBe(userId);
       expect(result?.activation_reason).toBe('bad calibration');
+    });
+  });
+
+  describe('applyAdaptiveTargetRetention', () => {
+    it('applies adaptive target and creates adaptive snapshot', async () => {
+      const settingsRow = {
+        user_id: userId,
+        fsrs_weights: Array.from({ length: 21 }, (_, i) => i + 0.1),
+        target_retention: 0.9,
+      };
+      const insertedSnapshot = {
+        id: 'snap-adaptive-1',
+        user_id: userId,
+        version: 5,
+        source: 'adaptive_policy',
+        is_active: true,
+        target_retention: 0.91,
+      };
+
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [settingsRow] }) // settings FOR UPDATE
+        .mockResolvedValueOnce({ rows: [] }) // recent adaptive snapshot
+        .mockResolvedValueOnce({ rows: [{ next_version: '5' }] }) // next version
+        .mockResolvedValueOnce({ rows: [] }) // update user_settings
+        .mockResolvedValueOnce({ rows: [] }) // deactivate previous active
+        .mockResolvedValueOnce({ rows: [insertedSnapshot] }) // insert returning
+        .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+      const result = await service.applyAdaptiveTargetRetention(userId, 0.91, 'policy apply');
+
+      expect(result).toMatchObject({
+        id: 'snap-adaptive-1',
+        source: 'adaptive_policy',
+        target_retention: 0.91,
+      });
+      expect(pool.query).toHaveBeenNthCalledWith(1, 'BEGIN');
+      expect(pool.query).toHaveBeenNthCalledWith(
+        7,
+        expect.stringContaining("'adaptive_policy'"),
+        expect.arrayContaining([userId, 5, settingsRow.fsrs_weights, 0.91, userId])
+      );
+      expect(pool.query).toHaveBeenNthCalledWith(8, 'COMMIT');
+    });
+
+    it('blocks apply when target delta exceeds max guardrail', async () => {
+      const settingsRow = {
+        user_id: userId,
+        fsrs_weights: Array.from({ length: 21 }, (_, i) => i + 0.1),
+        target_retention: 0.9,
+      };
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [settingsRow] }) // settings FOR UPDATE
+        .mockResolvedValueOnce({ rows: [] }); // ROLLBACK
+
+      await expect(service.applyAdaptiveTargetRetention(userId, 0.95)).rejects.toBeInstanceOf(ValidationError);
+      expect(pool.query).toHaveBeenNthCalledWith(3, 'ROLLBACK');
     });
   });
 

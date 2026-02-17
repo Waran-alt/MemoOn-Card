@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="011-day1-short-loop-and-events" author="developer">
+        <comment>Add study event stream, short-loop state, importance, and review observability columns</comment>
+
+        <createTable tableName="study_events">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_study_events_user" references="users(id)" deleteCascade="true"/>
+            </column>
+            <column name="deck_id" type="uuid">
+                <constraints nullable="true" foreignKeyName="fk_study_events_deck" references="decks(id)" deleteCascade="true"/>
+            </column>
+            <column name="card_id" type="uuid">
+                <constraints nullable="true" foreignKeyName="fk_study_events_card" references="cards(id)" deleteCascade="true"/>
+            </column>
+            <column name="session_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="client_event_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="event_type" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_version" type="integer" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at_client" type="bigint">
+                <constraints nullable="true"/>
+            </column>
+            <column name="received_at_server" type="bigint" defaultValueComputed="CAST(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000 AS BIGINT)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sequence_in_session" type="integer">
+                <constraints nullable="true"/>
+            </column>
+            <column name="payload_json" type="jsonb" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint
+            tableName="study_events"
+            columnNames="user_id,client_event_id"
+            constraintName="uk_study_events_user_client_event_id"/>
+
+        <createIndex indexName="idx_study_events_user_received_at" tableName="study_events">
+            <column name="user_id"/>
+            <column name="received_at_server"/>
+        </createIndex>
+        <createIndex indexName="idx_study_events_session_sequence" tableName="study_events">
+            <column name="session_id"/>
+            <column name="sequence_in_session"/>
+        </createIndex>
+        <createIndex indexName="idx_study_events_card_received_at" tableName="study_events">
+            <column name="card_id"/>
+            <column name="received_at_server"/>
+        </createIndex>
+        <createIndex indexName="idx_study_events_event_type" tableName="study_events">
+            <column name="event_type"/>
+        </createIndex>
+
+        <createTable tableName="card_daily_loop_state">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_daily_loop_user" references="users(id)" deleteCascade="true"/>
+            </column>
+            <column name="card_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_daily_loop_card" references="cards(id)" deleteCascade="true"/>
+            </column>
+            <column name="loop_date" type="date">
+                <constraints nullable="false"/>
+            </column>
+            <column name="session_id" type="uuid">
+                <constraints nullable="true"/>
+            </column>
+            <column name="is_active" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="iteration" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reviews_today" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="consecutive_successes" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="consecutive_failures" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_rating" type="integer">
+                <constraints nullable="true"/>
+            </column>
+            <column name="last_gap_seconds" type="integer">
+                <constraints nullable="true"/>
+            </column>
+            <column name="next_short_loop_at" type="timestamp with time zone">
+                <constraints nullable="true"/>
+            </column>
+            <column name="fatigue_score" type="decimal(6,4)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="importance_multiplier" type="decimal(6,4)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="difficulty_multiplier" type="decimal(6,4)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="confidence_multiplier" type="decimal(6,4)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamp with time zone" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint
+            tableName="card_daily_loop_state"
+            columnNames="user_id,card_id,loop_date"
+            constraintName="uk_card_daily_loop_state_user_card_date"/>
+
+        <createIndex indexName="idx_card_daily_loop_user_date" tableName="card_daily_loop_state">
+            <column name="user_id"/>
+            <column name="loop_date"/>
+        </createIndex>
+        <createIndex indexName="idx_card_daily_loop_next_short_loop_at" tableName="card_daily_loop_state">
+            <column name="next_short_loop_at"/>
+        </createIndex>
+
+        <addColumn tableName="cards">
+            <column name="is_important" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="importance_updated_at" type="timestamp with time zone">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <addColumn tableName="user_settings">
+            <column name="study_intensity_mode" type="varchar(16)" defaultValue="default">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            ALTER TABLE user_settings
+            ADD CONSTRAINT chk_user_settings_study_intensity_mode
+            CHECK (study_intensity_mode IN ('light', 'default', 'intensive'));
+        </sql>
+
+        <addColumn tableName="review_logs">
+            <column name="loop_iteration" type="integer">
+                <constraints nullable="true"/>
+            </column>
+            <column name="adaptive_gap_seconds" type="integer">
+                <constraints nullable="true"/>
+            </column>
+            <column name="fatigue_score_at_review" type="decimal(6,4)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="importance_mode" type="varchar(16)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="policy_decision_code" type="varchar(64)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <sql>
+            ALTER TABLE review_logs
+            ADD CONSTRAINT chk_review_logs_importance_mode
+            CHECK (importance_mode IS NULL OR importance_mode IN ('light', 'default', 'intensive'));
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

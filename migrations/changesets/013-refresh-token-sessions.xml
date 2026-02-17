@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="013-create-refresh-token-sessions" author="assistant">
+        <createTable tableName="refresh_token_sessions">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token_hash" type="VARCHAR(64)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMPTZ">
+                <constraints nullable="false"/>
+            </column>
+            <column name="revoked_at" type="TIMESTAMPTZ"/>
+            <column name="replaced_by_id" type="UUID"/>
+            <column name="user_agent" type="TEXT"/>
+            <column name="ip_address" type="VARCHAR(64)"/>
+            <column name="last_used_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="NOW()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+            baseTableName="refresh_token_sessions"
+            baseColumnNames="user_id"
+            referencedTableName="users"
+            referencedColumnNames="id"
+            onDelete="CASCADE"
+            constraintName="fk_refresh_token_sessions_user"/>
+
+        <addForeignKeyConstraint
+            baseTableName="refresh_token_sessions"
+            baseColumnNames="replaced_by_id"
+            referencedTableName="refresh_token_sessions"
+            referencedColumnNames="id"
+            onDelete="SET NULL"
+            constraintName="fk_refresh_token_sessions_replaced_by"/>
+
+        <createIndex tableName="refresh_token_sessions" indexName="idx_refresh_token_sessions_user_active">
+            <column name="user_id"/>
+            <column name="revoked_at"/>
+            <column name="expires_at"/>
+        </createIndex>
+
+        <createIndex tableName="refresh_token_sessions" indexName="idx_refresh_token_sessions_user_created">
+            <column name="user_id"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

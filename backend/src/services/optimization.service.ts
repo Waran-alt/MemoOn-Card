@@ -73,6 +73,8 @@ interface SnapshotMeta {
  * FSRS Optimization Service
  */
 export class OptimizationService {
+  private static readonly ADAPTIVE_TARGET_MAX_DELTA = 0.02;
+  private static readonly ADAPTIVE_TARGET_COOLDOWN_DAYS = 7;
   /**
    * Export review logs to CSV format for FSRS Optimizer
    */
@@ -384,10 +386,10 @@ export class OptimizationService {
    */
   private async updateUserWeights(userId: string, weights: number[], meta: SnapshotMeta): Promise<void> {
     const now = new Date();
-
-    await pool.query('BEGIN');
+    const client = await pool.connect();
     try {
-      const versionResult = await pool.query<{ next_version: string }>(
+      await client.query('BEGIN');
+      const versionResult = await client.query<{ next_version: string }>(
         `
         SELECT COALESCE(MAX(version), 0) + 1 AS next_version
         FROM user_weight_snapshots
@@ -397,7 +399,7 @@ export class OptimizationService {
       );
       const nextVersion = parseInt(versionResult.rows[0].next_version, 10);
 
-      await pool.query(
+      await client.query(
         `
         INSERT INTO user_settings (user_id, fsrs_weights, target_retention, last_optimized_at, review_count_since_optimization, updated_at)
         VALUES ($1, $2::float8[], $3, $4, 0, $5)
@@ -412,7 +414,7 @@ export class OptimizationService {
         [userId, weights, meta.targetRetention, now, now]
       );
 
-      await pool.query(
+      await client.query(
         `
         UPDATE user_weight_snapshots
         SET is_active = false
@@ -421,7 +423,7 @@ export class OptimizationService {
         [userId]
       );
 
-      await pool.query(
+      await client.query(
         `
         INSERT INTO user_weight_snapshots (
           user_id, version, weights, target_retention, source,
@@ -446,10 +448,12 @@ export class OptimizationService {
         ]
       );
 
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
+    } finally {
+      client.release();
     }
   }
 
@@ -478,9 +482,10 @@ export class OptimizationService {
       throw new ValidationError('Invalid snapshot version');
     }
 
-    await pool.query('BEGIN');
+    const client = await pool.connect();
     try {
-      const snapshotResult = await pool.query<UserWeightSnapshot>(
+      await client.query('BEGIN');
+      const snapshotResult = await client.query<UserWeightSnapshot>(
         `
         SELECT
           id, user_id, version, weights, target_retention, source,
@@ -494,13 +499,13 @@ export class OptimizationService {
       );
 
       if (snapshotResult.rows.length === 0) {
-        await pool.query('ROLLBACK');
+        await client.query('ROLLBACK');
         return null;
       }
 
       const snapshot = snapshotResult.rows[0];
 
-      await pool.query(
+      await client.query(
         `
         UPDATE user_weight_snapshots
         SET is_active = false
@@ -509,7 +514,7 @@ export class OptimizationService {
         [userId]
       );
 
-      await pool.query(
+      await client.query(
         `
         UPDATE user_weight_snapshots
         SET is_active = true, activated_by = $3, activated_at = NOW(), activation_reason = $4
@@ -518,7 +523,7 @@ export class OptimizationService {
         [userId, version, userId, reason ?? 'manual_rollback']
       );
 
-      await pool.query(
+      await client.query(
         `
         INSERT INTO user_settings (
           user_id, fsrs_weights, target_retention, last_optimized_at, review_count_since_optimization, updated_at
@@ -533,7 +538,7 @@ export class OptimizationService {
         [userId, snapshot.weights, snapshot.target_retention]
       );
 
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
 
       return {
         ...snapshot,
@@ -543,8 +548,114 @@ export class OptimizationService {
         activation_reason: reason ?? 'manual_rollback',
       };
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async applyAdaptiveTargetRetention(
+    userId: string,
+    recommendedTarget: number,
+    reason: string = 'adaptive_target_apply'
+  ): Promise<UserWeightSnapshot> {
+    validateUserId(userId);
+    const now = new Date();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const settingsResult = await client.query<UserSettings>(
+        'SELECT * FROM user_settings WHERE user_id = $1 FOR UPDATE',
+        [userId]
+      );
+      const settings = settingsResult.rows[0];
+      const currentTarget = settings?.target_retention ?? 0.9;
+      const weights = settings?.fsrs_weights ?? [];
+
+      if (!settings || weights.length === 0) {
+        throw new ValidationError('Cannot apply adaptive target without existing user settings');
+      }
+
+      const targetDelta = Math.abs(recommendedTarget - currentTarget);
+      if (targetDelta > OptimizationService.ADAPTIVE_TARGET_MAX_DELTA) {
+        throw new ValidationError(
+          `Adaptive target change too large (${targetDelta.toFixed(3)}). Maximum allowed is ${OptimizationService.ADAPTIVE_TARGET_MAX_DELTA}`
+        );
+      }
+
+      const recentAdaptiveResult = await client.query<{ created_at: Date }>(
+        `
+        SELECT created_at
+        FROM user_weight_snapshots
+        WHERE user_id = $1 AND source = 'adaptive_policy'
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [userId]
+      );
+      if (recentAdaptiveResult.rows.length > 0) {
+        const last = recentAdaptiveResult.rows[0].created_at;
+        const days = (Date.now() - last.getTime()) / (1000 * 60 * 60 * 24);
+        if (days < OptimizationService.ADAPTIVE_TARGET_COOLDOWN_DAYS) {
+          throw new ValidationError(
+            `Adaptive target cooldown active. Try again in ${Math.ceil(OptimizationService.ADAPTIVE_TARGET_COOLDOWN_DAYS - days)} day(s)`
+          );
+        }
+      }
+
+      const versionResult = await client.query<{ next_version: string }>(
+        `
+        SELECT COALESCE(MAX(version), 0) + 1 AS next_version
+        FROM user_weight_snapshots
+        WHERE user_id = $1
+        `,
+        [userId]
+      );
+      const nextVersion = parseInt(versionResult.rows[0].next_version, 10);
+
+      await client.query(
+        `
+        UPDATE user_settings
+        SET target_retention = $2, updated_at = $3
+        WHERE user_id = $1
+        `,
+        [userId, recommendedTarget, now]
+      );
+
+      await client.query(
+        `
+        UPDATE user_weight_snapshots
+        SET is_active = false
+        WHERE user_id = $1 AND is_active = true
+        `,
+        [userId]
+      );
+
+      const snapshotInsert = await client.query<UserWeightSnapshot>(
+        `
+        INSERT INTO user_weight_snapshots (
+          user_id, version, weights, target_retention, source,
+          review_count_used, new_reviews_since_last, days_since_last_opt,
+          optimizer_method, is_active, activated_by, activated_at, activation_reason, created_at
+        )
+        VALUES ($1, $2, $3::float8[], $4, 'adaptive_policy', NULL, NULL, NULL, NULL, true, $5, $6, $7, $8)
+        RETURNING
+          id, user_id, version, weights, target_retention, source,
+          review_count_used, new_reviews_since_last, days_since_last_opt,
+          optimizer_method, is_active, activated_by, activated_at, activation_reason, created_at
+        `,
+        [userId, nextVersion, weights, recommendedTarget, userId, now, reason, now]
+      );
+
+      await client.query('COMMIT');
+      return snapshotInsert.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
     }
   }
 
