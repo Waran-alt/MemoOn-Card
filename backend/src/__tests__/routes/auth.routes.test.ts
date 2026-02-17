@@ -327,6 +327,33 @@ describe('Auth routes', () => {
       expect(userService.getUserById).toHaveBeenCalledWith(mockUserId);
       expect(refreshTokenService.rotateSession).toHaveBeenCalledTimes(1);
     });
+
+    it('should return 401 when refresh token reuse is detected', async () => {
+      vi.mocked(userService.getUserById).mockResolvedValueOnce(mockUser);
+      const { AuthenticationError: AE } = await import('@/utils/errors');
+      vi.mocked(refreshTokenService.rotateSession).mockRejectedValueOnce(
+        new AE('Refresh token reuse detected')
+      );
+
+      const jwt = await import('jsonwebtoken');
+      const validRefreshToken = jwt.default.sign(
+        { userId: mockUserId },
+        'test-secret-minimum-32-characters-long',
+        { expiresIn: '7d' }
+      );
+
+      const res = await request(app)
+        .post('/api/auth/refresh')
+        .set('Cookie', `refresh_token=${validRefreshToken}`)
+        .send({});
+
+      expect(res.status).toBe(401);
+      expect(refreshTokenService.rotateSession).toHaveBeenCalledTimes(1);
+      if (res.body?.error || res.body?.message) {
+        const errorMsg = (res.body.error ?? res.body.message) as string;
+        expect(errorMsg).toMatch(/reuse|revoked|unauthorized/i);
+      }
+    });
   });
 
   describe('GET /api/auth/session', () => {
@@ -383,6 +410,22 @@ describe('Auth routes', () => {
       const setCookie = res.headers['set-cookie'];
       const cookieStr = Array.isArray(setCookie) ? setCookie.join(' ') : String(setCookie ?? '');
       expect(cookieStr).toMatch(/refresh_token=;/);
+    });
+
+    it('should revoke refresh session when valid token cookie is present', async () => {
+      const jwt = await import('jsonwebtoken');
+      const validRefreshToken = jwt.default.sign(
+        { userId: mockUserId },
+        'test-secret-minimum-32-characters-long',
+        { expiresIn: '7d' }
+      );
+
+      const res = await request(app)
+        .post('/api/auth/logout')
+        .set('Cookie', `refresh_token=${validRefreshToken}`);
+
+      expect(res.status).toBe(204);
+      expect(refreshTokenService.revokeToken).toHaveBeenCalledWith(mockUserId, validRefreshToken);
     });
   });
 
