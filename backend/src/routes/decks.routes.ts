@@ -8,10 +8,12 @@ import { CreateDeckSchema, UpdateDeckSchema, DeckIdSchema } from '@/schemas/deck
 import { CreateCardSchema, GetCardsQuerySchema } from '@/schemas/card.schemas';
 import { NotFoundError } from '@/utils/errors';
 import { API_LIMITS } from '@/constants/app.constants';
+import { CardJourneyService } from '@/services/card-journey.service';
 
 const router = Router();
 const deckService = new DeckService();
 const cardService = new CardService();
+const cardJourneyService = new CardJourneyService();
 
 /**
  * GET /api/decks
@@ -136,6 +138,21 @@ router.post('/:id/cards', validateParams(DeckIdSchema), validateRequest(CreateCa
   const userId = getUserId(req);
   const deckId = String(req.params.id);
   const card = await cardService.createCard(deckId, userId, req.body);
+  await cardJourneyService.appendEvent(userId, {
+    cardId: card.id,
+    deckId,
+    eventType: 'card_created',
+    eventTime: Date.now(),
+    actor: 'user',
+    source: 'decks_route',
+    idempotencyKey: `card-created:${card.id}:${req.requestId ?? Date.now()}`,
+    payload: {
+      reverse: card.reverse,
+      hasComment: card.comment != null,
+      hasRectoImage: card.recto_image != null,
+      hasVersoImage: card.verso_image != null,
+    },
+  });
   return res.status(201).json({ success: true, data: card });
 }));
 

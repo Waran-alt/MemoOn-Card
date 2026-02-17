@@ -18,6 +18,7 @@ import cardsRoutes from './routes/cards.routes';
 import reviewsRoutes from './routes/reviews.routes';
 import optimizationRoutes from './routes/optimization.routes';
 import fsrsMetricsRoutes from './routes/fsrs-metrics.routes';
+import studyRoutes from './routes/study.routes';
 import { FsrsMetricsJobService } from './services/fsrs-metrics-job.service';
 import { logger, serializeError } from './utils/logger';
 
@@ -153,6 +154,7 @@ app.use('/api', csrfProtection);
 app.use('/api/decks', authMiddleware, decksRoutes);
 app.use('/api/cards', authMiddleware, cardsRoutes);
 app.use('/api/reviews', authMiddleware, reviewsRoutes);
+app.use('/api/study', authMiddleware, studyRoutes);
 app.use('/api/optimization', authMiddleware, optimizationRoutes);
 app.use('/api/optimization/metrics', authMiddleware, fsrsMetricsRoutes);
 

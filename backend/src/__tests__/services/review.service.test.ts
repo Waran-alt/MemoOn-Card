@@ -8,6 +8,7 @@ import { FSRS_CONSTANTS, FSRS_V6_DEFAULT_WEIGHTS } from '@/constants/fsrs.consta
 vi.mock('@/config/database', () => ({
   pool: {
     query: vi.fn(),
+    connect: vi.fn(),
   },
 }));
 
@@ -19,6 +20,20 @@ describe('ReviewService', () => {
   beforeEach(() => {
     service = new ReviewService();
     vi.clearAllMocks();
+    (pool.query as ReturnType<typeof vi.fn>).mockImplementation(async (query: unknown) => {
+      const sql = String(query);
+      if (/\bfrom\s+cards\b/i.test(sql)) {
+        return { rows: [{ id: cardId }] };
+      }
+      if (/\bfrom\s+decks\b/i.test(sql)) {
+        return { rows: [{ id: '33333333-3333-4333-8333-333333333333' }] };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+    (pool.connect as ReturnType<typeof vi.fn>).mockResolvedValue({
+      query: pool.query,
+      release: vi.fn(),
+    });
   });
 
   it('returns default settings when user settings do not exist', async () => {
@@ -46,6 +61,22 @@ describe('ReviewService', () => {
     expect(result.weights).toHaveLength(21);
     expect(result.weights.slice(0, 3)).toEqual([1, 2, 3]);
     expect(result.weights[20]).toBe(1);
+  });
+
+  it('falls back to default target retention when stored value is null', async () => {
+    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      rows: [
+        {
+          fsrs_weights: [1, 2, 3],
+          target_retention: null,
+        },
+      ],
+    });
+
+    const result = await service.getUserSettings(userId);
+
+    expect(result.targetRetention).toBe(FSRS_CONSTANTS.DEFAULT_TARGET_RETENTION);
+    expect(result.weights).toHaveLength(21);
   });
 
   it('returns null when card is not found', async () => {
@@ -109,15 +140,17 @@ describe('ReviewService', () => {
       reviewCard: vi.fn().mockReturnValue(mockedReview),
       calculateRetrievability: vi.fn().mockReturnValue(0.9),
     } as unknown as ReturnType<typeof fsrsModule.createFSRS>);
-    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
 
     const result = await service.reviewCard(cardId, userId, 3);
 
     expect(result).toEqual(mockedReview);
-    expect(serviceAccess.cardService.updateCardState).toHaveBeenCalledWith(cardId, userId, mockedReview.state);
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE cards'),
+      expect.arrayContaining([cardId, userId])
+    );
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO review_logs'),
-      expect.arrayContaining([cardId, userId, 3, 3])
+      expect.arrayContaining([cardId, userId, 3, expect.any(Number)])
     );
   });
 

@@ -3,12 +3,30 @@ import { FSRSState, ReviewResult, createFSRS } from './fsrs.service';
 import { CardService } from './card.service';
 import { UserSettings, Card } from '../types/database';
 import { FSRS_V6_DEFAULT_WEIGHTS, FSRS_CONSTANTS } from '../constants/fsrs.constants';
+import { ShortLoopPolicyService, StudyIntensityMode } from './short-loop-policy.service';
+import { StudyEventsService } from './study-events.service';
+import { CardJourneyService } from './card-journey.service';
+
+type ReviewTiming = {
+  shownAt?: number;
+  revealedAt?: number;
+  sessionId?: string;
+  sequenceInSession?: number;
+  clientEventId?: string;
+  intensityMode?: StudyIntensityMode;
+};
 
 export class ReviewService {
   private cardService: CardService;
+  private shortLoopPolicy: ShortLoopPolicyService;
+  private studyEventsService: StudyEventsService;
+  private journeyService: CardJourneyService;
 
   constructor() {
     this.cardService = new CardService();
+    this.shortLoopPolicy = new ShortLoopPolicyService();
+    this.studyEventsService = new StudyEventsService();
+    this.journeyService = new CardJourneyService();
   }
 
   /**
@@ -32,14 +50,25 @@ export class ReviewService {
     }
 
     const settings = result.rows[0];
+    const rawTargetRetention = Number(settings.target_retention);
+    const targetRetention =
+      Number.isFinite(rawTargetRetention) &&
+      rawTargetRetention >= 0.5 &&
+      rawTargetRetention <= 0.99
+        ? rawTargetRetention
+        : FSRS_CONSTANTS.DEFAULT_TARGET_RETENTION;
+
     // Ensure weights array has 21 elements (pad or truncate if needed)
-    const weights = settings.fsrs_weights.length >= 21
-      ? settings.fsrs_weights.slice(0, 21)
-      : [...settings.fsrs_weights, ...Array(21 - settings.fsrs_weights.length).fill(1.0)];
-    
+    const normalizedWeights = Array.isArray(settings.fsrs_weights)
+      ? settings.fsrs_weights.map((weight) => (Number.isFinite(weight) ? weight : 1.0))
+      : [];
+    const weights = normalizedWeights.length >= 21
+      ? normalizedWeights.slice(0, 21)
+      : [...normalizedWeights, ...Array(21 - normalizedWeights.length).fill(1.0)];
+
     return {
       weights,
-      targetRetention: settings.target_retention,
+      targetRetention,
     };
   }
 
@@ -50,7 +79,7 @@ export class ReviewService {
     cardId: string,
     userId: string,
     rating: 1 | 2 | 3 | 4,
-    timing?: { shownAt?: number; revealedAt?: number; sessionId?: string }
+    timing?: ReviewTiming
   ): Promise<ReviewResult | null> {
     // Get card
     const card = await this.cardService.getCardById(cardId, userId);
@@ -80,11 +109,120 @@ export class ReviewService {
     // Review card
     const reviewResult = fsrs.reviewCard(currentState, rating);
 
-    // Update card state
-    await this.cardService.updateCardState(cardId, userId, reviewResult.state);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // Log review
-    await this.logReview(cardId, userId, rating, reviewResult, currentState, undefined, undefined, timing);
+      await client.query(
+        `UPDATE cards
+         SET stability = $1,
+             difficulty = $2,
+             last_review = $3,
+             next_review = $4,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5 AND user_id = $6`,
+        [
+          reviewResult.state.stability,
+          reviewResult.state.difficulty,
+          reviewResult.state.lastReview,
+          reviewResult.state.nextReview,
+          cardId,
+          userId,
+        ]
+      );
+
+      const shortLoopDecision = await this.shortLoopPolicy.evaluateAndPersist({
+        client,
+        userId,
+        card,
+        rating,
+        sessionId: timing?.sessionId,
+        intensityMode: timing?.intensityMode,
+      });
+
+      const reviewLogId = await this.logReview(
+        client,
+        cardId,
+        userId,
+        rating,
+        reviewResult,
+        currentState,
+        undefined,
+        undefined,
+        timing,
+        shortLoopDecision
+      );
+
+      await this.studyEventsService.logEvents(userId, [
+        {
+          eventType: 'rating_submitted',
+          clientEventId: timing?.clientEventId,
+          sessionId: timing?.sessionId,
+          cardId,
+          deckId: card.deck_id,
+          occurredAtClient: timing?.revealedAt ?? timing?.shownAt,
+          sequenceInSession: timing?.sequenceInSession,
+          payload: {
+            rating,
+            reviewIntervalDays: reviewResult.interval,
+            shortLoopDecision,
+          },
+        },
+        {
+          eventType: 'short_loop_decision',
+          sessionId: timing?.sessionId,
+          cardId,
+          deckId: card.deck_id,
+          sequenceInSession: timing?.sequenceInSession,
+          payload: shortLoopDecision,
+        },
+      ], client);
+
+      const idBase =
+        timing?.clientEventId ??
+        `${cardId}:${rating}:${timing?.sessionId ?? 'none'}:${timing?.sequenceInSession ?? 0}:${Date.now()}`;
+      await this.journeyService.appendEvents(
+        userId,
+        [
+          {
+            cardId,
+            deckId: card.deck_id,
+            sessionId: timing?.sessionId,
+            eventType: 'rating_submitted',
+            eventTime: timing?.revealedAt ?? timing?.shownAt ?? Date.now(),
+            actor: 'user',
+            source: 'review_service',
+            idempotencyKey: `review:${idBase}`,
+            reviewLogId,
+            payload: {
+              rating,
+              reviewIntervalDays: reviewResult.interval,
+              shortLoopDecision,
+            },
+          },
+          {
+            cardId,
+            deckId: card.deck_id,
+            sessionId: timing?.sessionId,
+            eventType: 'short_loop_decision',
+            eventTime: Date.now(),
+            actor: 'system',
+            source: 'review_service',
+            idempotencyKey: `review-decision:${idBase}`,
+            payload: shortLoopDecision as unknown as Record<string, unknown>,
+          },
+        ],
+        client
+      );
+
+      await client.query('COMMIT');
+      reviewResult.shortLoopDecision = shortLoopDecision;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
 
     return reviewResult;
   }
@@ -104,6 +242,7 @@ export class ReviewService {
    * - review_duration: Time spent reviewing in milliseconds
    */
   private async logReview(
+    client: { query: typeof pool.query },
     cardId: string,
     userId: string,
     rating: 1 | 2 | 3 | 4,
@@ -111,8 +250,9 @@ export class ReviewService {
     previousState: FSRSState | null,
     reviewDuration?: number, // Time spent reviewing in milliseconds
     reviewState?: 0 | 1 | 2 | 3, // Learning phase
-    timing?: { shownAt?: number; revealedAt?: number; sessionId?: string }
-  ): Promise<void> {
+    timing?: ReviewTiming,
+    shortLoopDecision?: ReviewResult['shortLoopDecision']
+  ): Promise<string> {
     const now = new Date();
     const reviewTime = now.getTime(); // Timestamp in milliseconds (UTC)
     const duration =
@@ -155,14 +295,16 @@ export class ReviewService {
 
     const scheduledDays = reviewResult.interval;
 
-    await pool.query(
+    const insertResult = await client.query<{ id: string }>(
       `INSERT INTO review_logs (
         card_id, user_id, rating, review_time, review_state, review_duration,
         shown_at, revealed_at, session_id,
+        loop_iteration, adaptive_gap_seconds, fatigue_score_at_review, importance_mode, policy_decision_code,
         scheduled_days, elapsed_days, review_date,
         stability_before, difficulty_before, retrievability_before
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      RETURNING id`,
       [
         cardId,
         userId,
@@ -173,6 +315,11 @@ export class ReviewService {
         timing?.shownAt ?? null,
         timing?.revealedAt ?? null,
         timing?.sessionId ?? null,
+        shortLoopDecision?.loopIteration ?? null,
+        shortLoopDecision?.nextGapSeconds ?? null,
+        shortLoopDecision?.fatigueScore ?? null,
+        shortLoopDecision?.importanceMode ?? null,
+        shortLoopDecision?.reason ?? null,
         scheduledDays,
         elapsedDays,
         now,
@@ -181,6 +328,7 @@ export class ReviewService {
         retrievabilityBefore,
       ]
     );
+    return String(insertResult.rows[0]?.id);
   }
 
   /**
@@ -197,6 +345,34 @@ export class ReviewService {
       }))
     );
     return results;
+  }
+
+  async getUserStudyIntensity(
+    userId: string
+  ): Promise<'light' | 'default' | 'intensive'> {
+    const result = await pool.query<{ study_intensity_mode: string }>(
+      'SELECT study_intensity_mode FROM user_settings WHERE user_id = $1',
+      [userId]
+    );
+    const value = result.rows[0]?.study_intensity_mode;
+    if (value === 'light' || value === 'intensive') return value;
+    return 'default';
+  }
+
+  async updateUserStudyIntensity(
+    userId: string,
+    intensityMode: 'light' | 'default' | 'intensive'
+  ): Promise<'light' | 'default' | 'intensive'> {
+    await pool.query(
+      `INSERT INTO user_settings (user_id, fsrs_weights, target_retention, study_intensity_mode, updated_at)
+       VALUES ($1, $2::float8[], $3, $4, NOW())
+       ON CONFLICT (user_id)
+       DO UPDATE SET
+         study_intensity_mode = $4,
+         updated_at = NOW()`,
+      [userId, FSRS_V6_DEFAULT_WEIGHTS, FSRS_CONSTANTS.DEFAULT_TARGET_RETENTION, intensityMode]
+    );
+    return intensityMode;
   }
 
   /**

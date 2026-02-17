@@ -35,6 +35,8 @@ export interface Card {
   reverse: boolean;
   stability: number | null;
   difficulty: number | null;
+  is_important?: boolean;
+  importance_updated_at?: Date | null;
   last_review: Date | null;
   next_review: Date;
   created_at: Date;
@@ -64,6 +66,11 @@ export interface ReviewLog {
   shown_at?: number | null; // Client timestamp in milliseconds when card was shown
   revealed_at?: number | null; // Client timestamp in milliseconds when answer was revealed
   session_id?: string | null; // Groups reviews from a single study session
+  loop_iteration?: number | null;
+  adaptive_gap_seconds?: number | null;
+  fatigue_score_at_review?: number | null;
+  importance_mode?: string | null;
+  policy_decision_code?: string | null;
   scheduled_days: number; // Interval scheduled for next review
   elapsed_days: number; // Days elapsed since last review
   stability_before: number | null;
@@ -118,6 +125,94 @@ export interface UserSettings {
   // FSRS Optimizer requirements
   timezone?: string; // IANA timezone (e.g., "America/New_York")
   day_start?: number; // Hour (0-23) when user's day starts
+  study_intensity_mode?: 'light' | 'default' | 'intensive';
+}
+
+export interface RefreshTokenSession {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: Date;
+  revoked_at: Date | null;
+  replaced_by_id: string | null;
+  user_agent: string | null;
+  ip_address: string | null;
+  last_used_at: Date;
+  created_at: Date;
+}
+
+export type StudyEventType =
+  | 'session_start'
+  | 'session_end'
+  | 'card_shown'
+  | 'answer_revealed'
+  | 'rating_submitted'
+  | 'short_loop_decision'
+  | 'importance_toggled';
+
+export interface StudyEvent {
+  id: string;
+  user_id: string;
+  deck_id: string | null;
+  card_id: string | null;
+  session_id: string | null;
+  client_event_id: string | null;
+  event_type: StudyEventType;
+  event_version: number;
+  occurred_at_client: number | null;
+  received_at_server: number;
+  sequence_in_session: number | null;
+  payload_json: Record<string, unknown>;
+  created_at: Date;
+}
+
+export interface CardDailyLoopState {
+  id: string;
+  user_id: string;
+  card_id: string;
+  loop_date: string;
+  session_id: string | null;
+  is_active: boolean;
+  iteration: number;
+  reviews_today: number;
+  consecutive_successes: number;
+  consecutive_failures: number;
+  last_rating: number | null;
+  last_gap_seconds: number | null;
+  next_short_loop_at: Date | null;
+  fatigue_score: number | null;
+  importance_multiplier: number | null;
+  difficulty_multiplier: number | null;
+  confidence_multiplier: number | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export type CardJourneyEventType =
+  | 'card_created'
+  | 'card_updated'
+  | 'card_deleted'
+  | 'card_shown'
+  | 'answer_revealed'
+  | 'rating_submitted'
+  | 'short_loop_decision'
+  | 'importance_toggled';
+
+export interface CardJourneyEvent {
+  id: string;
+  user_id: string;
+  card_id: string;
+  deck_id: string | null;
+  session_id: string | null;
+  event_type: CardJourneyEventType;
+  event_time: number;
+  actor: 'user' | 'system';
+  source: 'ui' | 'review_service' | 'study_events' | 'cards_route' | 'decks_route';
+  idempotency_key: string;
+  review_log_id: string | null;
+  causation_id: string | null;
+  payload_json: Record<string, unknown>;
+  created_at: Date;
 }
 
 export interface UserWeightSnapshot {

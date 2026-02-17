@@ -3,18 +3,24 @@ import { CardService } from '@/services/card.service';
 import { ReviewService } from '@/services/review.service';
 import { getUserId } from '@/middleware/auth';
 import { asyncHandler } from '@/middleware/errorHandler';
-import { validateRequest, validateParams } from '@/middleware/validation';
+import { validateRequest, validateParams, validateQuery } from '@/middleware/validation';
 import {
   UpdateCardSchema,
   ReviewCardSchema,
   CardIdSchema,
   PostponeCardSchema,
+  UpdateCardImportanceSchema,
+  UpdateStudyIntensitySchema,
+  CardHistoryQuerySchema,
+  CardHistorySummaryQuerySchema,
 } from '@/schemas/card.schemas';
 import { NotFoundError, ValidationError } from '@/utils/errors';
+import { CardJourneyService } from '@/services/card-journey.service';
 
 const router = Router();
 const cardService = new CardService();
 const reviewService = new ReviewService();
+const cardJourneyService = new CardJourneyService();
 
 /**
  * GET /api/cards/:id
@@ -33,6 +39,44 @@ router.get('/:id', validateParams(CardIdSchema), asyncHandler(async (req, res) =
 }));
 
 /**
+ * GET /api/cards/:id/history
+ * Fetch full journey timeline for a card.
+ */
+router.get('/:id/history', validateParams(CardIdSchema), validateQuery(CardHistoryQuerySchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const card = await cardService.getCardById(cardId, userId);
+  if (!card) {
+    throw new NotFoundError('Card');
+  }
+  const validated = (req as { validatedQuery?: { limit?: number; beforeEventTime?: number } }).validatedQuery;
+  const history = await cardJourneyService.getCardHistory(userId, cardId, {
+    limit: validated?.limit,
+    beforeEventTime: validated?.beforeEventTime,
+  });
+  return res.json({ success: true, data: history });
+}));
+
+/**
+ * GET /api/cards/:id/history/summary
+ * Fetch aggregated journey summary for a card.
+ */
+router.get('/:id/history/summary', validateParams(CardIdSchema), validateQuery(CardHistorySummaryQuerySchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const card = await cardService.getCardById(cardId, userId);
+  if (!card) {
+    throw new NotFoundError('Card');
+  }
+  const validated = (req as { validatedQuery?: { days?: number; sessionLimit?: number } }).validatedQuery;
+  const summary = await cardJourneyService.getCardHistorySummary(userId, cardId, {
+    days: validated?.days,
+    sessionLimit: validated?.sessionLimit,
+  });
+  return res.json({ success: true, data: summary });
+}));
+
+/**
  * PUT /api/cards/:id
  * Update a card
  */
@@ -44,6 +88,17 @@ router.put('/:id', validateParams(CardIdSchema), validateRequest(UpdateCardSchem
   if (!card) {
     throw new NotFoundError('Card');
   }
+
+  await cardJourneyService.appendEvent(userId, {
+    cardId,
+    deckId: card.deck_id,
+    eventType: 'card_updated',
+    eventTime: Date.now(),
+    actor: 'user',
+    source: 'cards_route',
+    idempotencyKey: `card-updated:${cardId}:${req.requestId ?? Date.now()}`,
+    payload: req.body as Record<string, unknown>,
+  });
   
   return res.json({ success: true, data: card });
 }));
@@ -55,10 +110,26 @@ router.put('/:id', validateParams(CardIdSchema), validateRequest(UpdateCardSchem
 router.delete('/:id', validateParams(CardIdSchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);
   const cardId = String(req.params.id);
+  const card = await cardService.getCardById(cardId, userId);
   const deleted = await cardService.deleteCard(cardId, userId);
   
   if (!deleted) {
     throw new NotFoundError('Card');
+  }
+
+  if (card) {
+    await cardJourneyService.appendEvent(userId, {
+      cardId,
+      deckId: card.deck_id,
+      eventType: 'card_deleted',
+      eventTime: Date.now(),
+      actor: 'user',
+      source: 'cards_route',
+      idempotencyKey: `card-deleted:${cardId}:${req.requestId ?? Date.now()}`,
+      payload: {
+        deckId: card.deck_id,
+      },
+    });
   }
   
   return res.json({ success: true, message: 'Card deleted' });
@@ -71,15 +142,20 @@ router.delete('/:id', validateParams(CardIdSchema), asyncHandler(async (req, res
 router.post('/:id/review', validateParams(CardIdSchema), validateRequest(ReviewCardSchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);
   const cardId = String(req.params.id);
-  const { rating, shownAt, revealedAt, sessionId } = req.body;
+  const { rating, shownAt, revealedAt, sessionId, sequenceInSession, clientEventId, intensityMode } = req.body;
   
   if (![1, 2, 3, 4].includes(rating)) {
     throw new ValidationError('Valid rating (1-4) is required');
   }
   
   const timing =
-    shownAt != null || revealedAt != null || sessionId != null
-      ? { shownAt, revealedAt, sessionId }
+    shownAt != null ||
+    revealedAt != null ||
+    sessionId != null ||
+    sequenceInSession != null ||
+    clientEventId != null ||
+    intensityMode != null
+      ? { shownAt, revealedAt, sessionId, sequenceInSession, clientEventId, intensityMode }
       : undefined;
   const result = await reviewService.reviewCard(cardId, userId, rating, timing);
   
@@ -123,6 +199,55 @@ router.post('/:id/postpone', validateParams(CardIdSchema), validateRequest(Postp
   }
   
   return res.json({ success: true, data: card });
+}));
+
+/**
+ * PATCH /api/cards/:id/importance
+ * Toggle per-card importance used by Day-1 policy.
+ */
+router.patch('/:id/importance', validateParams(CardIdSchema), validateRequest(UpdateCardImportanceSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const cardId = String(req.params.id);
+  const { isImportant } = req.body as { isImportant: boolean };
+  const card = await cardService.updateCardImportance(cardId, userId, isImportant);
+
+  if (!card) {
+    throw new NotFoundError('Card');
+  }
+
+  await cardJourneyService.appendEvent(userId, {
+    cardId,
+    deckId: card.deck_id,
+    eventType: 'importance_toggled',
+    eventTime: Date.now(),
+    actor: 'user',
+    source: 'cards_route',
+    idempotencyKey: `importance:${cardId}:${isImportant}:${Date.now()}`,
+    payload: { isImportant },
+  });
+
+  return res.json({ success: true, data: card });
+}));
+
+/**
+ * GET /api/cards/settings/study-intensity
+ * Get user-level study intensity profile.
+ */
+router.get('/settings/study-intensity', asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const intensityMode = await reviewService.getUserStudyIntensity(userId);
+  return res.json({ success: true, data: { intensityMode } });
+}));
+
+/**
+ * PUT /api/cards/settings/study-intensity
+ * Update user-level study intensity profile.
+ */
+router.put('/settings/study-intensity', validateRequest(UpdateStudyIntensitySchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const { intensityMode } = req.body as { intensityMode: 'light' | 'default' | 'intensive' };
+  const updated = await reviewService.updateUserStudyIntensity(userId, intensityMode);
+  return res.json({ success: true, data: { intensityMode: updated } });
 }));
 
 export default router;

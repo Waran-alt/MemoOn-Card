@@ -6,23 +6,29 @@
 
 import { Router } from 'express';
 import { OptimizationService } from '@/services/optimization.service';
+import { AdaptiveRetentionService } from '@/services/adaptive-retention.service';
+import { FsrsMetricsService } from '@/services/fsrs-metrics.service';
 import { getUserId } from '@/middleware/auth';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { validateParams, validateQuery, validateRequest } from '@/middleware/validation';
 import {
+  ApplyAdaptiveTargetSchema,
+  OptimizationShortLoopSummaryQuerySchema,
   OptimizationActivateSnapshotSchema,
   OptimizationSnapshotVersionParamSchema,
   OptimizationSnapshotsQuerySchema,
   OptimizeWeightsSchema,
 } from '@/schemas/optimization.schemas';
 import { logger, serializeError } from '@/utils/logger';
-import { NotFoundError } from '@/utils/errors';
+import { NotFoundError, ValidationError as AppValidationError } from '@/utils/errors';
 
 const router = Router();
 const optimizationService = new OptimizationService();
+const adaptiveRetentionService = new AdaptiveRetentionService();
+const fsrsMetricsService = new FsrsMetricsService();
 
 type RequestWithValidatedQuery = Express.Request & {
-  validatedQuery?: { limit?: number };
+  validatedQuery?: { limit?: number; days?: number };
 };
 
 /**
@@ -183,6 +189,56 @@ router.get('/snapshots', validateQuery(OptimizationSnapshotsQuerySchema), asyncH
     data: {
       limit,
       snapshots,
+    },
+  });
+}));
+
+/**
+ * GET /api/optimization/adaptive-target
+ * Read-only recommendation for adaptive target retention.
+ */
+router.get('/adaptive-target', asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const recommendation = await adaptiveRetentionService.computeRecommendedTarget(userId);
+  return res.json({ success: true, data: recommendation });
+}));
+
+/**
+ * GET /api/optimization/short-loop/summary
+ * Observability summary derived from raw study events + review logs.
+ */
+router.get('/short-loop/summary', validateQuery(OptimizationShortLoopSummaryQuerySchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const query = req as RequestWithValidatedQuery;
+  const days = query.validatedQuery?.days;
+  const summary = await fsrsMetricsService.getDay1ShortLoopSummary(userId, days);
+  return res.json({ success: true, data: summary });
+}));
+
+/**
+ * POST /api/optimization/adaptive-target/apply
+ * Apply recommended adaptive target retention with guardrails.
+ */
+router.post('/adaptive-target/apply', validateRequest(ApplyAdaptiveTargetSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const recommendation = await adaptiveRetentionService.computeRecommendedTarget(userId);
+  if (!recommendation.enabled) {
+    throw new AppValidationError('Adaptive retention is disabled');
+  }
+  if (recommendation.confidence === 'low') {
+    throw new AppValidationError('Adaptive retention recommendation confidence is too low');
+  }
+  const { reason } = req.body as { reason?: string };
+  const applied = await optimizationService.applyAdaptiveTargetRetention(
+    userId,
+    recommendation.recommendedTarget,
+    reason ?? 'adaptive_target_apply'
+  );
+  return res.json({
+    success: true,
+    data: {
+      recommendation,
+      appliedSnapshot: applied,
     },
   });
 }));

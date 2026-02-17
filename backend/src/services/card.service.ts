@@ -221,4 +221,24 @@ export class CardService {
     );
     return result.rows[0] || null;
   }
+
+  /**
+   * Mark or unmark card importance.
+   */
+  async updateCardImportance(
+    cardId: string,
+    userId: string,
+    isImportant: boolean
+  ): Promise<Card | null> {
+    const result = await pool.query<Card>(
+      `UPDATE cards
+       SET is_important = $1,
+           importance_updated_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3
+       RETURNING *`,
+      [isImportant, cardId, userId]
+    );
+    return result.rows[0] || null;
+  }
 }

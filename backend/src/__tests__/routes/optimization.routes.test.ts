@@ -14,6 +14,15 @@ const optimizationServiceMock = vi.hoisted(() => ({
   exportReviewLogsToCSV: vi.fn(),
   getWeightSnapshots: vi.fn(),
   activateSnapshotVersion: vi.fn(),
+  applyAdaptiveTargetRetention: vi.fn(),
+}));
+
+const adaptiveRetentionServiceMock = vi.hoisted(() => ({
+  computeRecommendedTarget: vi.fn(),
+}));
+
+const fsrsMetricsServiceMock = vi.hoisted(() => ({
+  getDay1ShortLoopSummary: vi.fn(),
 }));
 
 vi.mock('@/middleware/auth', () => ({
@@ -22,6 +31,14 @@ vi.mock('@/middleware/auth', () => ({
 
 vi.mock('@/services/optimization.service', () => ({
   OptimizationService: vi.fn().mockImplementation(() => optimizationServiceMock),
+}));
+
+vi.mock('@/services/adaptive-retention.service', () => ({
+  AdaptiveRetentionService: vi.fn().mockImplementation(() => adaptiveRetentionServiceMock),
+}));
+
+vi.mock('@/services/fsrs-metrics.service', () => ({
+  FsrsMetricsService: vi.fn().mockImplementation(() => fsrsMetricsServiceMock),
 }));
 
 function createApp() {
@@ -306,6 +323,109 @@ describe('Optimization routes', () => {
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(optimizationServiceMock.activateSnapshotVersion).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Adaptive target retention', () => {
+    it('GET /api/optimization/adaptive-target returns recommendation', async () => {
+      adaptiveRetentionServiceMock.computeRecommendedTarget.mockResolvedValue({
+        enabled: true,
+        currentTarget: 0.9,
+        recommendedTarget: 0.91,
+        confidence: 'medium',
+        reasons: ['observed_below_predicted'],
+        windowMeta: { reviewCount: 420, sessionCount: 25, reliability: 'high' },
+      });
+
+      const res = await request(app).get('/api/optimization/adaptive-target');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.recommendedTarget).toBe(0.91);
+      expect(adaptiveRetentionServiceMock.computeRecommendedTarget).toHaveBeenCalledWith(mockUserId);
+    });
+
+    it('POST /api/optimization/adaptive-target/apply applies recommendation', async () => {
+      adaptiveRetentionServiceMock.computeRecommendedTarget.mockResolvedValue({
+        enabled: true,
+        currentTarget: 0.9,
+        recommendedTarget: 0.91,
+        confidence: 'high',
+        reasons: ['observed_below_predicted'],
+        windowMeta: { reviewCount: 600, sessionCount: 40, reliability: 'high' },
+      });
+      optimizationServiceMock.applyAdaptiveTargetRetention.mockResolvedValue({
+        version: 3,
+        source: 'adaptive_policy',
+      });
+
+      const res = await request(app)
+        .post('/api/optimization/adaptive-target/apply')
+        .send({ reason: 'load balancing' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(optimizationServiceMock.applyAdaptiveTargetRetention).toHaveBeenCalledWith(
+        mockUserId,
+        0.91,
+        'load balancing'
+      );
+    });
+
+    it('POST /api/optimization/adaptive-target/apply blocks low confidence', async () => {
+      adaptiveRetentionServiceMock.computeRecommendedTarget.mockResolvedValue({
+        enabled: true,
+        currentTarget: 0.9,
+        recommendedTarget: 0.9,
+        confidence: 'low',
+        reasons: ['insufficient_evidence'],
+        windowMeta: { reviewCount: 40, sessionCount: 3, reliability: 'low' },
+      });
+
+      const res = await request(app).post('/api/optimization/adaptive-target/apply').send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(optimizationServiceMock.applyAdaptiveTargetRetention).not.toHaveBeenCalled();
+    });
+
+    it('POST /api/optimization/adaptive-target/apply blocks when feature is disabled', async () => {
+      adaptiveRetentionServiceMock.computeRecommendedTarget.mockResolvedValue({
+        enabled: false,
+        currentTarget: 0.9,
+        recommendedTarget: 0.9,
+        confidence: 'low',
+        reasons: ['adaptive_retention_disabled'],
+        windowMeta: { reviewCount: 0, sessionCount: 0, reliability: 'low' },
+      });
+
+      const res = await request(app).post('/api/optimization/adaptive-target/apply').send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(optimizationServiceMock.applyAdaptiveTargetRetention).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Short-loop summary', () => {
+    it('GET /api/optimization/short-loop/summary returns observability metrics', async () => {
+      fsrsMetricsServiceMock.getDay1ShortLoopSummary.mockResolvedValue({
+        days: 30,
+        reinsertDecisionCount: 12,
+        deferDecisionCount: 3,
+        graduateDecisionCount: 9,
+        firstDayRereviews: 20,
+        firstReviewCards: 18,
+        nextDayRecallRate: 0.84,
+        lapse48hRate: 0.16,
+      });
+
+      const res = await request(app).get('/api/optimization/short-loop/summary?days=30');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.reinsertDecisionCount).toBe(12);
+      expect(fsrsMetricsServiceMock.getDay1ShortLoopSummary).toHaveBeenCalledWith(mockUserId, 30);
     });
   });
 });

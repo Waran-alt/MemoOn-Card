@@ -13,6 +13,7 @@ const {
   deckServiceMock,
   cardServiceMock,
   reviewServiceMock,
+  cardJourneyServiceMock,
 } = vi.hoisted(() => ({
   mockUserId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   mockDeckId: '11111111-1111-4111-8111-111111111111',
@@ -34,10 +35,18 @@ const {
     getDueCards: vi.fn(),
     getNewCards: vi.fn(),
     resetCardStability: vi.fn(),
+    updateCardImportance: vi.fn(),
   },
   reviewServiceMock: {
     reviewCard: vi.fn(),
     batchReview: vi.fn(),
+    getUserStudyIntensity: vi.fn(),
+    updateUserStudyIntensity: vi.fn(),
+  },
+  cardJourneyServiceMock: {
+    appendEvent: vi.fn(),
+    getCardHistory: vi.fn(),
+    getCardHistorySummary: vi.fn(),
   },
 }));
 
@@ -55,6 +64,10 @@ vi.mock('@/services/card.service', () => ({
 
 vi.mock('@/services/review.service', () => ({
   ReviewService: vi.fn().mockImplementation(() => reviewServiceMock),
+}));
+
+vi.mock('@/services/card-journey.service', () => ({
+  CardJourneyService: vi.fn().mockImplementation(() => cardJourneyServiceMock),
 }));
 
 function createApp() {
@@ -153,6 +166,13 @@ describe('Deck/Card/Review routes', () => {
           comment: null,
         })
       );
+      expect(cardJourneyServiceMock.appendEvent).toHaveBeenCalledWith(
+        mockUserId,
+        expect.objectContaining({
+          cardId: mockCardId,
+          eventType: 'card_created',
+        })
+      );
     });
 
     it('updates a card', async () => {
@@ -173,9 +193,21 @@ describe('Deck/Card/Review routes', () => {
         mockUserId,
         { recto: 'Bonjour' }
       );
+      expect(cardJourneyServiceMock.appendEvent).toHaveBeenCalledWith(
+        mockUserId,
+        expect.objectContaining({
+          cardId: mockCardId,
+          eventType: 'card_updated',
+        })
+      );
     });
 
     it('deletes a card', async () => {
+      cardServiceMock.getCardById.mockResolvedValueOnce({
+        id: mockCardId,
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+      });
       cardServiceMock.deleteCard.mockResolvedValueOnce(true);
 
       const res = await request(app).delete(`/api/cards/${mockCardId}`);
@@ -183,6 +215,13 @@ describe('Deck/Card/Review routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(cardServiceMock.deleteCard).toHaveBeenCalledWith(mockCardId, mockUserId);
+      expect(cardJourneyServiceMock.appendEvent).toHaveBeenCalledWith(
+        mockUserId,
+        expect.objectContaining({
+          cardId: mockCardId,
+          eventType: 'card_deleted',
+        })
+      );
     });
   });
 
@@ -209,7 +248,8 @@ describe('Deck/Card/Review routes', () => {
       expect(reviewServiceMock.reviewCard).toHaveBeenCalledWith(
         mockCardId,
         mockUserId,
-        3
+        3,
+        undefined
       );
     });
 
@@ -460,6 +500,89 @@ describe('Deck/Card/Review routes', () => {
 
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('Card importance and intensity controls', () => {
+    it('updates card importance', async () => {
+      cardServiceMock.updateCardImportance = vi.fn().mockResolvedValueOnce({
+        id: mockCardId,
+        user_id: mockUserId,
+        is_important: true,
+      });
+
+      const res = await request(app)
+        .patch(`/api/cards/${mockCardId}/importance`)
+        .send({ isImportant: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(cardServiceMock.updateCardImportance).toHaveBeenCalledWith(mockCardId, mockUserId, true);
+      expect(cardJourneyServiceMock.appendEvent).toHaveBeenCalled();
+    });
+
+    it('gets card history', async () => {
+      cardServiceMock.getCardById.mockResolvedValueOnce({
+        id: mockCardId,
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+      });
+      cardJourneyServiceMock.getCardHistory.mockResolvedValueOnce([
+        {
+          id: 'aaaa',
+          event_type: 'rating_submitted',
+        },
+      ]);
+      const res = await request(app).get(`/api/cards/${mockCardId}/history?limit=10`);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(cardJourneyServiceMock.getCardHistory).toHaveBeenCalledWith(
+        mockUserId,
+        mockCardId,
+        expect.objectContaining({ limit: 10 })
+      );
+    });
+
+    it('gets card history summary', async () => {
+      cardServiceMock.getCardById.mockResolvedValueOnce({
+        id: mockCardId,
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+      });
+      cardJourneyServiceMock.getCardHistorySummary = vi.fn().mockResolvedValueOnce({
+        cardId: mockCardId,
+        days: 30,
+        totalEvents: 5,
+        byEventType: [{ eventType: 'rating_submitted', count: 3 }],
+        byDay: [{ day: '2026-02-16', count: 5 }],
+        bySession: [],
+      });
+
+      const res = await request(app).get(`/api/cards/${mockCardId}/history/summary?days=30&sessionLimit=5`);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(cardJourneyServiceMock.getCardHistorySummary).toHaveBeenCalledWith(
+        mockUserId,
+        mockCardId,
+        expect.objectContaining({ days: 30, sessionLimit: 5 })
+      );
+    });
+
+    it('gets user study intensity', async () => {
+      reviewServiceMock.getUserStudyIntensity.mockResolvedValueOnce('intensive');
+      const res = await request(app).get('/api/cards/settings/study-intensity');
+      expect(res.status).toBe(200);
+      expect(res.body.data.intensityMode).toBe('intensive');
+    });
+
+    it('updates user study intensity', async () => {
+      reviewServiceMock.updateUserStudyIntensity.mockResolvedValueOnce('light');
+      const res = await request(app)
+        .put('/api/cards/settings/study-intensity')
+        .send({ intensityMode: 'light' });
+      expect(res.status).toBe(200);
+      expect(res.body.data.intensityMode).toBe('light');
+      expect(reviewServiceMock.updateUserStudyIntensity).toHaveBeenCalledWith(mockUserId, 'light');
     });
   });
 });

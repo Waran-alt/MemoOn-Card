@@ -57,6 +57,22 @@ const EnvSchema = z.object({
   FSRS_METRICS_JOB_ENABLED: z.enum(['true', 'false']).optional(),
   FSRS_METRICS_JOB_INTERVAL_MINUTES: z.string().regex(/^\d+$/).transform(Number).optional(),
   FSRS_METRICS_JOB_BACKFILL_DAYS: z.string().regex(/^\d+$/).transform(Number).optional(),
+
+  // Adaptive target retention (Phase 3)
+  ADAPTIVE_RETENTION_ENABLED: z.enum(['true', 'false']).optional(),
+  ADAPTIVE_RETENTION_MIN: z.string().regex(/^\d*\.?\d+$/).transform(Number).optional(),
+  ADAPTIVE_RETENTION_MAX: z.string().regex(/^\d*\.?\d+$/).transform(Number).optional(),
+  ADAPTIVE_RETENTION_DEFAULT: z.string().regex(/^\d*\.?\d+$/).transform(Number).optional(),
+  ADAPTIVE_RETENTION_STEP: z.string().regex(/^\d*\.?\d+$/).transform(Number).optional(),
+
+  // Day-1 short-loop policy and telemetry
+  DAY1_SHORT_LOOP_ENABLED: z.enum(['true', 'false']).optional(),
+  DAY1_SHORT_LOOP_MIN_GAP_SECONDS: z.string().regex(/^\d+$/).transform(Number).optional(),
+  DAY1_SHORT_LOOP_MAX_GAP_SECONDS: z.string().regex(/^\d+$/).transform(Number).optional(),
+  DAY1_SHORT_LOOP_MAX_REPS_LIGHT: z.string().regex(/^\d+$/).transform(Number).optional(),
+  DAY1_SHORT_LOOP_MAX_REPS_DEFAULT: z.string().regex(/^\d+$/).transform(Number).optional(),
+  DAY1_SHORT_LOOP_MAX_REPS_INTENSIVE: z.string().regex(/^\d+$/).transform(Number).optional(),
+  DAY1_SHORT_LOOP_FATIGUE_THRESHOLD: z.string().regex(/^\d*\.?\d+$/).transform(Number).optional(),
 });
 
 type Env = z.infer<typeof EnvSchema>;
@@ -106,6 +122,18 @@ export const {
   FSRS_METRICS_JOB_ENABLED,
   FSRS_METRICS_JOB_INTERVAL_MINUTES,
   FSRS_METRICS_JOB_BACKFILL_DAYS,
+  ADAPTIVE_RETENTION_ENABLED,
+  ADAPTIVE_RETENTION_MIN,
+  ADAPTIVE_RETENTION_MAX,
+  ADAPTIVE_RETENTION_DEFAULT,
+  ADAPTIVE_RETENTION_STEP,
+  DAY1_SHORT_LOOP_ENABLED,
+  DAY1_SHORT_LOOP_MIN_GAP_SECONDS,
+  DAY1_SHORT_LOOP_MAX_GAP_SECONDS,
+  DAY1_SHORT_LOOP_MAX_REPS_LIGHT,
+  DAY1_SHORT_LOOP_MAX_REPS_DEFAULT,
+  DAY1_SHORT_LOOP_MAX_REPS_INTENSIVE,
+  DAY1_SHORT_LOOP_FATIGUE_THRESHOLD,
 } = config;
 
 /** CORS allowed origins (from CORS_ORIGINS or [CORS_ORIGIN]). */

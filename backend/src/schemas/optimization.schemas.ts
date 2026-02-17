@@ -19,6 +19,7 @@ const DaysQuerySchema = z.object({
 export const FsrsMetricsDailyQuerySchema = DaysQuerySchema;
 export const FsrsMetricsSummaryQuerySchema = DaysQuerySchema;
 export const FsrsMetricsSessionsQuerySchema = DaysQuerySchema;
+export const OptimizationShortLoopSummaryQuerySchema = DaysQuerySchema;
 
 export const FsrsMetricsRefreshSchema = z.object({
   days: z.number().int().min(1).max(180).optional(),
@@ -35,5 +36,9 @@ export const OptimizationSnapshotVersionParamSchema = z.object({
 });
 
 export const OptimizationActivateSnapshotSchema = z.object({
+  reason: z.string().trim().min(1).max(255).optional(),
+}).default({});
+
+export const ApplyAdaptiveTargetSchema = z.object({
   reason: z.string().trim().min(1).max(255).optional(),
 }).default({});

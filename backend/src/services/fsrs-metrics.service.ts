@@ -100,6 +100,17 @@ export interface SessionWindowMetric {
   avgFatigueSlope: number | null;
 }
 
+export interface Day1ShortLoopSummary {
+  days: number;
+  reinsertDecisionCount: number;
+  deferDecisionCount: number;
+  graduateDecisionCount: number;
+  firstDayRereviews: number;
+  firstReviewCards: number;
+  nextDayRecallRate: number | null;
+  lapse48hRate: number | null;
+}
+
 export class FsrsMetricsService {
   private normalizeDays(days?: number): number {
     return Number.isInteger(days) && days && days > 0 ? days : DEFAULT_DAYS;
@@ -503,6 +514,88 @@ export class FsrsMetricsService {
         avgBrierScore: toNumber(sessionRow.avg_brier_score),
         avgFatigueSlope: toNumber(sessionRow.avg_fatigue_slope),
       },
+    };
+  }
+
+  async getDay1ShortLoopSummary(userId: string, days?: number): Promise<Day1ShortLoopSummary> {
+    const normalizedDays = this.normalizeDays(days);
+
+    const decisionsResult = await pool.query(
+      `
+      SELECT
+        COUNT(*) FILTER (WHERE payload_json->>'action' = 'reinsert_today')::int AS reinsert_count,
+        COUNT(*) FILTER (WHERE payload_json->>'action' = 'defer')::int AS defer_count,
+        COUNT(*) FILTER (WHERE payload_json->>'action' = 'graduate_to_fsrs')::int AS graduate_count
+      FROM study_events
+      WHERE user_id = $1
+        AND event_type = 'short_loop_decision'
+        AND created_at >= NOW() - ($2::int * INTERVAL '1 day')
+      `,
+      [userId, normalizedDays]
+    );
+
+    const day1Result = await pool.query(
+      `
+      WITH first_reviews AS (
+        SELECT card_id, MIN(review_time) AS first_review_time
+        FROM review_logs
+        WHERE user_id = $1
+        GROUP BY card_id
+      ),
+      first_review_rows AS (
+        SELECT rl.card_id, rl.review_time, rl.rating
+        FROM review_logs rl
+        JOIN first_reviews fr
+          ON fr.card_id = rl.card_id AND fr.first_review_time = rl.review_time
+        WHERE rl.user_id = $1
+          AND rl.review_date >= NOW() - ($2::int * INTERVAL '1 day')
+      ),
+      day1_repeats AS (
+        SELECT fr.card_id, COUNT(*)::int AS rereview_count
+        FROM first_review_rows fr
+        JOIN review_logs rl
+          ON rl.card_id = fr.card_id
+         AND rl.user_id = $1
+         AND rl.review_time > fr.review_time
+         AND rl.review_time <= fr.review_time + 24 * 60 * 60 * 1000
+        GROUP BY fr.card_id
+      ),
+      next_day_outcome AS (
+        SELECT
+          fr.card_id,
+          (
+            SELECT CASE WHEN rl2.rating IN (2, 3, 4) THEN 1.0 ELSE 0.0 END
+            FROM review_logs rl2
+            WHERE rl2.user_id = $1
+              AND rl2.card_id = fr.card_id
+              AND rl2.review_time > fr.review_time + 24 * 60 * 60 * 1000
+              AND rl2.review_time <= fr.review_time + 48 * 60 * 60 * 1000
+            ORDER BY rl2.review_time ASC
+            LIMIT 1
+          ) AS next_day_success
+        FROM first_review_rows fr
+      )
+      SELECT
+        (SELECT COUNT(*)::int FROM first_review_rows) AS first_review_cards,
+        COALESCE((SELECT SUM(rereview_count)::int FROM day1_repeats), 0) AS first_day_rereviews,
+        AVG(next_day_success) AS next_day_recall_rate,
+        AVG(CASE WHEN next_day_success = 0 THEN 1.0 WHEN next_day_success = 1 THEN 0.0 ELSE NULL END) AS lapse_48h_rate
+      FROM next_day_outcome
+      `,
+      [userId, normalizedDays]
+    );
+
+    const decisions = decisionsResult.rows[0] ?? {};
+    const day1 = day1Result.rows[0] ?? {};
+    return {
+      days: normalizedDays,
+      reinsertDecisionCount: toInt(decisions.reinsert_count),
+      deferDecisionCount: toInt(decisions.defer_count),
+      graduateDecisionCount: toInt(decisions.graduate_count),
+      firstDayRereviews: toInt(day1.first_day_rereviews),
+      firstReviewCards: toInt(day1.first_review_cards),
+      nextDayRecallRate: toNumber(day1.next_day_recall_rate),
+      lapse48hRate: toNumber(day1.lapse_48h_rate),
     };
   }
 }
