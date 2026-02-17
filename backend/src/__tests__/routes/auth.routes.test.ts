@@ -268,6 +268,26 @@ describe('Auth routes', () => {
       expect(res.body.data.accessToken).toBeDefined();
       expect(typeof res.body.data.accessToken).toBe('string');
       expect(res.body.data.refreshToken).toBeUndefined();
+      expect(res.body).toMatchInlineSnapshot(
+        {
+          data: {
+            accessToken: expect.any(String),
+          },
+        },
+        `
+        {
+          "data": {
+            "accessToken": Any<String>,
+            "user": {
+              "email": "user@example.com",
+              "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              "name": "Test User",
+            },
+          },
+          "success": true,
+        }
+        `
+      );
       expect(refreshTokenService.rotateSession).toHaveBeenCalledTimes(1);
     });
 

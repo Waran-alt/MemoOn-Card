@@ -97,6 +97,30 @@ describe('Study routes', () => {
     const res = await request(app).get('/api/study/sessions?days=14&limit=25&offset=0');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(res.body).toMatchInlineSnapshot(`
+      {
+        "data": {
+          "days": 14,
+          "limit": 25,
+          "offset": 0,
+          "rows": [
+            {
+              "againCount": 1,
+              "distinctCardCount": 2,
+              "easyCount": 0,
+              "endedAt": 2,
+              "eventCount": 5,
+              "goodCount": 2,
+              "hardCount": 0,
+              "reviewCount": 3,
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "startedAt": 1,
+            },
+          ],
+        },
+        "success": true,
+      }
+    `);
     expect(getSessionHistoryMock).toHaveBeenCalledWith(mockUserId, { days: 14, limit: 25, offset: 0 });
   });
 
@@ -113,6 +137,24 @@ describe('Study routes', () => {
       .get('/api/study/sessions/22222222-2222-4222-8222-222222222222?eventLimit=100');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(res.body).toMatchInlineSnapshot(`
+      {
+        "data": {
+          "endedAt": 2,
+          "events": [],
+          "ratings": {
+            "againCount": 0,
+            "easyCount": 0,
+            "goodCount": 1,
+            "hardCount": 0,
+            "reviewCount": 1,
+          },
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "startedAt": 1,
+        },
+        "success": true,
+      }
+    `);
     expect(getSessionDetailMock).toHaveBeenCalledWith(
       mockUserId,
       '22222222-2222-4222-8222-222222222222',
@@ -132,6 +174,38 @@ describe('Study routes', () => {
     const res = await request(app).get('/api/study/journey-consistency?days=7&sampleLimit=5');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(res.body).toMatchInlineSnapshot(`
+      {
+        "data": {
+          "days": 30,
+          "health": {
+            "level": "healthy",
+            "mismatchRate": 0,
+            "thresholds": {
+              "major": 0.05,
+              "minor": 0.01,
+            },
+          },
+          "mismatches": {
+            "duplicateRatingJourneyEvents": 0,
+            "missingRatingJourneyEvents": 0,
+            "orderingIssues": 0,
+          },
+          "samples": {
+            "duplicateReviewLogIds": [],
+            "missingReviewLogIds": [],
+            "orderingIssueEventIds": [],
+          },
+          "totals": {
+            "duplicateRatingJourneyGroups": 0,
+            "orderingIssues": 0,
+            "ratingJourneyEvents": 0,
+            "reviewLogs": 0,
+          },
+        },
+        "success": true,
+      }
+    `);
     expect(res.body.data.health).toEqual({
       level: 'healthy',
       mismatchRate: 0,
