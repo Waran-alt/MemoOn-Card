@@ -1,5 +1,6 @@
 import { pool } from '@/config/database';
 import { CardJourneyService } from '@/services/card-journey.service';
+import { FsrsMetricsService } from '@/services/fsrs-metrics.service';
 
 function toInt(value: unknown): number {
   if (value == null) return 0;
@@ -51,6 +52,7 @@ export interface StudyAuthHealthDashboard {
 
 export class StudyHealthDashboardService {
   private readonly cardJourneyService = new CardJourneyService();
+  private readonly fsrsMetricsService = new FsrsMetricsService();
 
   async recordAuthRefreshMetric(input: {
     userId?: string | null;
@@ -89,7 +91,7 @@ export class StudyHealthDashboardService {
   async getDashboard(userId: string, days: number): Promise<StudyAuthHealthDashboard> {
     const normalizedDays = Math.max(1, Math.min(90, days));
 
-    const [authResult, latencyOverallResult, latencyByRouteResult, throughputResult, consistencyReport] =
+    const [authResult, latencyOverallResult, latencyByRouteResult, consistencyReport, dailyMetrics] =
       await Promise.all([
         pool.query(
           `
@@ -135,23 +137,11 @@ export class StudyHealthDashboardService {
           `,
           [userId, normalizedDays]
         ),
-        pool.query(
-          `
-          SELECT
-            TO_CHAR(review_date::date, 'YYYY-MM-DD') AS day,
-            COUNT(*)::int AS review_count
-          FROM review_logs
-          WHERE user_id = $1
-            AND review_date >= NOW() - ($2::int * INTERVAL '1 day')
-          GROUP BY review_date::date
-          ORDER BY review_date::date DESC
-          `,
-          [userId, normalizedDays]
-        ),
         this.cardJourneyService.getJourneyConsistencyReport(userId, {
           days: normalizedDays,
           sampleLimit: 10,
         }),
+        this.fsrsMetricsService.getDailyMetrics(userId, normalizedDays),
       ]);
 
     const authRow = authResult.rows[0] ?? {};
@@ -188,9 +178,9 @@ export class StudyHealthDashboardService {
           p99Ms: toNumber(row.p99_ms),
         })),
       },
-      reviewThroughputByDay: throughputResult.rows.map((row) => ({
-        day: String(row.day),
-        reviewCount: toInt(row.review_count),
+      reviewThroughputByDay: dailyMetrics.map((row) => ({
+        day: row.metricDate,
+        reviewCount: row.reviewCount,
       })),
     };
   }

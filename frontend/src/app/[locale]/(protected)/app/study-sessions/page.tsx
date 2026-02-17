@@ -62,6 +62,29 @@ interface JourneyConsistencyReport {
   };
 }
 
+interface StudyHealthDashboard {
+  days: number;
+  authRefresh: {
+    total: number;
+    failures: number;
+    failureRate: number;
+    reuseDetected: number;
+  };
+  journeyConsistency: {
+    level: 'healthy' | 'minor_issues' | 'needs_attention';
+    mismatchRate: number;
+  };
+  studyApiLatency: {
+    overall: {
+      sampleCount: number;
+      p50Ms: number | null;
+      p95Ms: number | null;
+      p99Ms: number | null;
+    };
+  };
+  reviewThroughputByDay: Array<{ day: string; reviewCount: number }>;
+}
+
 function formatDateTime(ts: number | null, locale: string): string {
   if (!ts) return '-';
   return new Date(ts).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
@@ -97,6 +120,10 @@ export default function StudySessionsPage() {
   const { data: consistency, loading: consistencyLoading } = useApiGet<JourneyConsistencyReport>(
     '/api/study/journey-consistency?days=30&sampleLimit=10',
     { errorFallback: ta('journeyConsistencyLoadError') }
+  );
+  const { data: healthDashboard, loading: healthDashboardLoading } = useApiGet<StudyHealthDashboard>(
+    '/api/study/health-dashboard?days=30',
+    { errorFallback: ta('studyHealthDashboardLoadError') }
   );
 
   const rows = sessionHistory?.rows ?? [];
@@ -160,6 +187,48 @@ export default function StudySessionsPage() {
           </div>
         ) : (
           <p className="mt-2 text-sm text-[var(--mc-accent-warning)]">{ta('journeyConsistencyUnavailable')}</p>
+        )}
+      </div>
+
+      <div className="mc-study-surface rounded-lg border p-4 shadow-sm">
+        <h3 className="text-sm font-medium text-[var(--mc-text-primary)]">{ta('studyHealthDashboardTitle')}</h3>
+        {healthDashboardLoading ? (
+          <p className="mt-2 text-sm text-[var(--mc-text-secondary)]">{tc('loading')}</p>
+        ) : healthDashboard ? (
+          <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <p>
+              {ta('studyHealthRefreshFailures', {
+                vars: {
+                  failures: String(healthDashboard.authRefresh.failures),
+                  total: String(healthDashboard.authRefresh.total),
+                },
+              })}
+            </p>
+            <p>
+              {ta('studyHealthReuseDetected', {
+                vars: { count: String(healthDashboard.authRefresh.reuseDetected) },
+              })}
+            </p>
+            <p>
+              {ta('studyHealthP95', {
+                vars: {
+                  ms:
+                    healthDashboard.studyApiLatency.overall.p95Ms == null
+                      ? '-'
+                      : String(Math.round(healthDashboard.studyApiLatency.overall.p95Ms)),
+                },
+              })}
+            </p>
+            <p>
+              {ta('studyHealthThroughputToday', {
+                vars: {
+                  count: String(healthDashboard.reviewThroughputByDay[0]?.reviewCount ?? 0),
+                },
+              })}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--mc-accent-warning)]">{ta('studyHealthDashboardUnavailable')}</p>
         )}
       </div>
 

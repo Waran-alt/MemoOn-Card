@@ -25,6 +25,13 @@ vi.mock('@/hooks/useTranslation', () => ({
         studySessionsTitle: 'Study sessions',
         studySessionsIntro: 'Review your recent session history and data consistency health.',
         journeyConsistencyTitle: 'Journey consistency',
+        studyHealthDashboardTitle: 'Study and auth health',
+        studyHealthDashboardLoadError: 'Failed to load health dashboard.',
+        studyHealthDashboardUnavailable: 'Health dashboard unavailable.',
+        studyHealthRefreshFailures: `${v.failures ?? '?'} refresh failures / ${v.total ?? '?'}`,
+        studyHealthReuseDetected: `Reuse detected: ${v.count ?? '?'}`,
+        studyHealthP95: `Study API p95: ${v.ms ?? '?'} ms`,
+        studyHealthThroughputToday: `Reviews today: ${v.count ?? '?'}`,
         journeyConsistencyHealthy: 'Healthy',
         journeyConsistencyMinorIssues: 'Minor issues',
         journeyConsistencyNeedsAttention: 'Needs attention',
@@ -90,6 +97,20 @@ describe('StudySessionsPage', () => {
           refetch: vi.fn(),
         };
       }
+      if (url.startsWith('/api/study/health-dashboard')) {
+        return {
+          data: {
+            days: 30,
+            authRefresh: { total: 10, failures: 2, failureRate: 0.2, reuseDetected: 1 },
+            journeyConsistency: { level: 'healthy', mismatchRate: 0 },
+            studyApiLatency: { overall: { sampleCount: 40, p50Ms: 120, p95Ms: 340, p99Ms: 650 } },
+            reviewThroughputByDay: [{ day: '2026-02-17', reviewCount: 14 }],
+          },
+          loading: false,
+          error: '',
+          refetch: vi.fn(),
+        };
+      }
       return {
         data: {
           days: 30,
@@ -119,6 +140,9 @@ describe('StudySessionsPage', () => {
     expect(screen.getByText('Healthy')).toBeInTheDocument();
     expect(screen.getByText('Recent sessions')).toBeInTheDocument();
     expect(screen.getByText('6 reviews · 4 cards · 12 events')).toBeInTheDocument();
+    expect(screen.getByText('Study and auth health')).toBeInTheDocument();
+    expect(screen.getByText('2 refresh failures / 10')).toBeInTheDocument();
+    expect(screen.getByText('Reuse detected: 1')).toBeInTheDocument();
   });
 
   it('loads and shows selected session details', async () => {
