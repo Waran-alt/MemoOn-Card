@@ -22,13 +22,15 @@ import {
 } from '../constants/fsrs.constants';
 import {
   DEFAULT_MANAGEMENT_CONFIG,
-  STABILITY_MULTIPLIERS,
-  RETRIEVABILITY_MULTIPLIERS,
-  TIME_MULTIPLIERS,
-  RISK_CALCULATION,
 } from '../constants/management.constants';
 import { INTERVAL_THRESHOLDS, TIME_CONSTANTS, API_LIMITS } from '../constants/app.constants';
 import { detectContentChange } from './fsrs-content.utils';
+import {
+  applyManagementPenaltyToState,
+  calculateDeckManagementRiskForCards,
+  calculateManagementRiskForState,
+  getPreStudyCardsByRisk,
+} from './fsrs-management.utils';
 
 // ============================================================================
 // Types
@@ -612,55 +614,12 @@ export class FSRS {
    * @returns Risk assessment
    */
   calculateManagementRisk(state: FSRSState): ManagementRisk {
-    const now = new Date();
-    const elapsedDays = this.getElapsedDays(
-      state.lastReview ?? state.nextReview,
-      now
-    );
-    const retrievability = this.calculateRetrievability(elapsedDays, state.stability);
-    const hoursUntilDue = this.getElapsedHours(now, state.nextReview);
-
-    // Risk factors
-    const rFactor = 1 - retrievability; // Lower R = higher risk
-    const timeFactor = Math.max(0, 1 - hoursUntilDue / RISK_CALCULATION.HOURS_PER_DAY); // Sooner = higher risk
-    const stabilityFactor = state.stability < RISK_CALCULATION.STABILITY_THRESHOLD_DAYS 
-      ? 1 
-      : Math.min(1, 1 / state.stability); // Lower S = higher risk
-
-    // Weighted risk calculation
-    const riskPercent = Math.min(RISK_CALCULATION.MAX_RISK_PERCENT, (
-      rFactor * RISK_CALCULATION.WEIGHTS.RETRIEVABILITY +
-      timeFactor * RISK_CALCULATION.WEIGHTS.TIME +
-      stabilityFactor * RISK_CALCULATION.WEIGHTS.STABILITY
-    ) * 100);
-
-    // Determine risk level
-    let riskLevel: 'low' | 'medium' | 'high' | 'critical';
-    let recommendedAction: 'safe' | 'pre-study' | 'avoid';
-    
-    if (riskPercent >= RISK_CALCULATION.THRESHOLDS.CRITICAL) {
-      riskLevel = 'critical';
-      recommendedAction = 'avoid';
-    } else if (riskPercent >= RISK_CALCULATION.THRESHOLDS.HIGH) {
-      riskLevel = 'high';
-      recommendedAction = 'pre-study';
-    } else if (riskPercent >= RISK_CALCULATION.THRESHOLDS.MEDIUM) {
-      riskLevel = 'medium';
-      recommendedAction = 'pre-study';
-    } else {
-      riskLevel = 'low';
-      recommendedAction = 'safe';
-    }
-
-    return {
-      cardId: '', // Will be set by caller
-      riskLevel,
-      riskPercent,
-      retrievability,
-      stability: state.stability,
-      hoursUntilDue,
-      recommendedAction,
-    };
+    return calculateManagementRiskForState(state, {
+      now: new Date(),
+      getElapsedDays: this.getElapsedDays.bind(this),
+      getElapsedHours: this.getElapsedHours.bind(this),
+      calculateRetrievability: this.calculateRetrievability.bind(this),
+    });
   }
 
   /**
@@ -672,33 +631,7 @@ export class FSRS {
   calculateDeckManagementRisk(
     cards: Array<{ id: string; state: FSRSState }>
   ): DeckManagementRisk {
-    const risks = cards.map(card => {
-      const risk = this.calculateManagementRisk(card.state);
-      return { ...risk, cardId: card.id };
-    });
-
-    const totalCards = cards.length;
-    const criticalCards = risks.filter(r => r.riskLevel === 'critical').length;
-    const highRiskCards = risks.filter(r => r.riskLevel === 'high').length;
-    const mediumRiskCards = risks.filter(r => r.riskLevel === 'medium').length;
-    const lowRiskCards = risks.filter(r => r.riskLevel === 'low').length;
-    const atRiskCards = criticalCards + highRiskCards + mediumRiskCards;
-
-    const avgRisk = risks.reduce((sum, r) => sum + r.riskPercent, 0) / totalCards;
-
-    // Recommend pre-study for high/critical risk cards
-    const recommendedPreStudyCount = criticalCards + highRiskCards;
-
-    return {
-      totalCards,
-      atRiskCards,
-      riskPercent: avgRisk,
-      criticalCards,
-      highRiskCards,
-      mediumRiskCards,
-      lowRiskCards,
-      recommendedPreStudyCount,
-    };
+    return calculateDeckManagementRiskForCards(cards, this.calculateManagementRisk.bind(this));
   }
 
   /**
@@ -718,72 +651,13 @@ export class FSRS {
     state: FSRSState,
     revealedForSeconds: number
   ): FSRSState {
-    // No penalty for quick glances
-    if (revealedForSeconds < this.managementConfig.minRevealSeconds) {
-      return state;
-    }
-
-    const now = new Date();
-    const hoursUntilDue = this.getElapsedHours(now, state.nextReview);
-    const elapsedDays = this.getElapsedDays(state.lastReview ?? state.nextReview, now);
-    const retrievability = this.calculateRetrievability(elapsedDays, state.stability);
-
-    // If card is not due soon, no penalty needed
-    if (hoursUntilDue > TIME_MULTIPLIERS.PENALTY_THRESHOLD_HOURS) {
-      return state;
-    }
-
-    // Calculate adaptive fuzzing based on card state
-    let fuzzingHours: number;
-    if (this.managementConfig.adaptiveFuzzing) {
-      // Base fuzzing
-      const baseFuzzing = this.managementConfig.fuzzingHoursMin;
-
-      // Adjust based on stability
-      // Low stability (< threshold): Proportional fuzzing (don't over-penalize)
-      // High stability (> threshold): Minimal fuzzing (card is strong)
-      let stabilityMultiplier = 1;
-      if (state.stability < STABILITY_MULTIPLIERS.LOW_THRESHOLD_DAYS) {
-        // For low stability, fuzzing should be proportional to stability
-        stabilityMultiplier = Math.max(STABILITY_MULTIPLIERS.LOW_STABILITY_MIN, state.stability);
-      } else if (state.stability > STABILITY_MULTIPLIERS.HIGH_THRESHOLD_DAYS) {
-        // High stability cards are strong, less fuzzing needed
-        stabilityMultiplier = STABILITY_MULTIPLIERS.HIGH_STABILITY;
-      }
-
-      // Adjust based on retrievability
-      // High R (>threshold): Less fuzzing (card is fresh)
-      // Low R (<threshold): More fuzzing (card is at risk)
-      let rMultiplier = 1;
-      if (retrievability > RETRIEVABILITY_MULTIPLIERS.HIGH_THRESHOLD) {
-        rMultiplier = RETRIEVABILITY_MULTIPLIERS.HIGH_R;
-      } else if (retrievability < RETRIEVABILITY_MULTIPLIERS.LOW_THRESHOLD) {
-        rMultiplier = RETRIEVABILITY_MULTIPLIERS.LOW_R;
-      }
-
-      // Adjust based on time until due
-      let timeMultiplier = 1;
-      if (hoursUntilDue < TIME_MULTIPLIERS.VERY_SOON_HOURS) {
-        timeMultiplier = TIME_MULTIPLIERS.VERY_SOON;
-      } else if (hoursUntilDue < TIME_MULTIPLIERS.SOON_HOURS) {
-        timeMultiplier = TIME_MULTIPLIERS.SOON;
-      }
-
-      // Calculate final fuzzing
-      fuzzingHours = baseFuzzing * stabilityMultiplier * rMultiplier * timeMultiplier;
-      fuzzingHours = Math.min(fuzzingHours, this.managementConfig.fuzzingHoursMax);
-      fuzzingHours = Math.max(fuzzingHours, DEFAULT_MANAGEMENT_CONFIG.FUZZING_HOURS_ABSOLUTE_MIN);
-    } else {
-      // Fixed fuzzing
-      const range = this.managementConfig.fuzzingHoursMax - this.managementConfig.fuzzingHoursMin;
-      fuzzingHours = this.managementConfig.fuzzingHoursMin + Math.random() * range;
-    }
-
-    // Push next_review forward (DO NOT touch stability/difficulty)
-    return {
-      ...state,
-      nextReview: this.addHours(state.nextReview, fuzzingHours),
-    };
+    return applyManagementPenaltyToState(state, revealedForSeconds, this.managementConfig, {
+      now: new Date(),
+      getElapsedDays: this.getElapsedDays.bind(this),
+      getElapsedHours: this.getElapsedHours.bind(this),
+      calculateRetrievability: this.calculateRetrievability.bind(this),
+      addHours: this.addHours.bind(this),
+    });
   }
 
   /**
@@ -802,35 +676,18 @@ export class FSRS {
     targetRetention: number = FSRS_CONSTANTS.PRE_STUDY_TARGET_RETENTION,
     limit: number = API_LIMITS.DEFAULT_PRE_STUDY_LIMIT
   ): Array<{ id: string; state: FSRSState; risk: ManagementRisk }> {
-    const risks = cards.map(card => {
-      const risk = this.calculateManagementRisk(card.state);
-      return {
-        id: card.id,
-        state: card.state,
-        risk: { ...risk, cardId: card.id },
-      };
-    });
-
-    // Filter cards that need pre-study (medium/high/critical risk)
-    // and are below target retention
-    const now = new Date();
-    return risks
-      .filter(item => {
-        const elapsedDays = this.getElapsedDays(
-          item.state.lastReview ?? item.state.nextReview,
-          now
-        );
-        const retrievability = this.calculateRetrievability(
-          elapsedDays,
-          item.state.stability
-        );
-        return (
-          item.risk.riskLevel !== 'low' &&
-          retrievability < targetRetention
-        );
-      })
-      .sort((a, b) => b.risk.riskPercent - a.risk.riskPercent)
-      .slice(0, limit);
+    return getPreStudyCardsByRisk(
+      cards,
+      targetRetention,
+      limit,
+      this.calculateManagementRisk.bind(this),
+      {
+        now: new Date(),
+        getElapsedDays: this.getElapsedDays.bind(this),
+        getElapsedHours: this.getElapsedHours.bind(this),
+        calculateRetrievability: this.calculateRetrievability.bind(this),
+      }
+    );
   }
 
   /**
