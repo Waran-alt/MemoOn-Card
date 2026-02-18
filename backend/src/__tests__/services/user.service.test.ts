@@ -31,6 +31,7 @@ describe('UserService', () => {
     id: mockUserId,
     email: 'test@example.com',
     name: 'Test User',
+    role: 'user',
     created_at: new Date(),
     updated_at: new Date(),
   };

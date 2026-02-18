@@ -15,6 +15,12 @@ vi.mock('@/config/env', () => ({
   JWT_REFRESH_EXPIRES_IN: '7d',
 }));
 
+vi.mock('@/config/database', () => ({
+  pool: {
+    query: vi.fn(),
+  },
+}));
+
 describe('authMiddleware', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;

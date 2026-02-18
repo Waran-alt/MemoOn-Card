@@ -17,7 +17,10 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - memoon-card-network
+      memoon-card-network: {}
+      db-admin-net:
+        aliases:
+          - postgres
 
   backend:
     build:
@@ -81,3 +84,5 @@ volumes:
 networks:
   memoon-card-network:
     driver: bridge
+  db-admin-net:
+    external: true

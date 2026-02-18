@@ -32,14 +32,15 @@ vi.mock('@/hooks/useTranslation', () => ({
           decks: 'Decks',
           optimizer: 'Optimizer',
           studySessions: 'Study sessions',
+          admin: 'Admin',
         } as Record<string, string>
       )[key] ?? key,
   }),
 }));
 
 vi.mock('@/store/auth.store', () => ({
-  useAuthStore: (selector: (state: { user: { email: string; name: string } | null }) => unknown) =>
-    selector({ user: { email: 'user@example.com', name: 'User Name' } }),
+  useAuthStore: (selector: (state: { user: { email: string; name: string; role: string } | null }) => unknown) =>
+    selector({ user: { email: 'user@example.com', name: 'User Name', role: 'admin' } }),
 }));
 
 vi.mock('../SignOutButton', () => ({

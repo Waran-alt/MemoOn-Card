@@ -7,8 +7,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } from '../config/env';
-import { AuthenticationError } from '../utils/errors';
+import { AuthenticationError, AuthorizationError } from '../utils/errors';
 import { HTTP_HEADERS } from '../constants/http.constants';
+import { pool } from '@/config/database';
 
 export interface JWTPayload {
   userId: string;
@@ -60,6 +61,27 @@ export function getUserId(req: Request): string {
     throw new AuthenticationError('User not authenticated');
   }
   return req.userId;
+}
+
+/**
+ * Admin-only middleware.
+ * Requires authMiddleware to run first and populate req.userId.
+ */
+export async function requireAdmin(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  const userId = getUserId(req);
+  const result = await pool.query<{ role: string }>(
+    'SELECT role FROM users WHERE id = $1',
+    [userId]
+  );
+  const role = result.rows[0]?.role;
+  if (role !== 'admin') {
+    return next(new AuthorizationError('Admin access required'));
+  }
+  return next();
 }
 
 /**

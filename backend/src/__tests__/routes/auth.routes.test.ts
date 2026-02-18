@@ -24,6 +24,12 @@ vi.mock('@/config/env', () => ({
   getAllowedOrigins: () => ['http://localhost:3002', 'https://memoon-card.localhost'],
 }));
 
+vi.mock('@/config/database', () => ({
+  pool: {
+    query: vi.fn(),
+  },
+}));
+
 vi.mock('@/services/user.service', () => ({
   userService: {
     createUser: vi.fn(),
@@ -55,6 +61,7 @@ const mockUser: User = {
   id: mockUserId,
   email: 'user@example.com',
   name: 'Test User',
+  role: 'user',
   created_at: new Date(),
   updated_at: new Date(),
 };
@@ -92,7 +99,7 @@ describe('Auth routes', () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data).toMatchObject({
-        user: { id: mockUserId, email: 'user@example.com', name: 'Test User' },
+        user: { id: mockUserId, email: 'user@example.com', name: 'Test User', role: 'user' },
       });
       expect(res.body.data.accessToken).toBeDefined();
       expect(typeof res.body.data.accessToken).toBe('string');
@@ -160,6 +167,7 @@ describe('Auth routes', () => {
         id: mockUserId,
         email: 'noname@example.com',
         name: null,
+        role: 'user',
       });
       expect(userService.createUser).toHaveBeenCalledWith(
         'noname@example.com',
@@ -189,6 +197,7 @@ describe('Auth routes', () => {
         id: mockUserId,
         email: 'user@example.com',
         name: 'Test User',
+        role: 'user',
       });
       expect(res.body.data.accessToken).toBeDefined();
       expect(res.body.data.refreshToken).toBeUndefined();
@@ -293,6 +302,7 @@ describe('Auth routes', () => {
               "email": "user@example.com",
               "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
               "name": "Test User",
+              "role": "user",
             },
           },
           "success": true,
@@ -411,6 +421,7 @@ describe('Auth routes', () => {
         id: mockUserId,
         email: 'user@example.com',
         name: 'Test User',
+        role: 'user',
       });
       expect(userService.getUserById).toHaveBeenCalledWith(mockUserId);
       expect(refreshTokenService.validateActiveToken).toHaveBeenCalledTimes(1);

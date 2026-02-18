@@ -29,9 +29,9 @@ export class UserService {
       await client.query('BEGIN');
 
       const userResult = await client.query<User>(
-        `INSERT INTO users (email, name, password_hash)
-         VALUES ($1, $2, $3)
-         RETURNING id, email, name, created_at, updated_at`,
+        `INSERT INTO users (email, name, password_hash, role)
+         VALUES ($1, $2, $3, 'user')
+         RETURNING id, email, name, role, created_at, updated_at`,
         [email.trim().toLowerCase(), name?.trim() || null, passwordHash]
       );
       const user = userResult.rows[0];
@@ -65,7 +65,7 @@ export class UserService {
    */
   async getUserById(userId: string): Promise<User | null> {
     const result = await pool.query<User>(
-      'SELECT id, email, name, created_at, updated_at FROM users WHERE id = $1',
+      'SELECT id, email, name, role, created_at, updated_at FROM users WHERE id = $1',
       [userId]
     );
     return result.rows[0] || null;
@@ -76,7 +76,7 @@ export class UserService {
    */
   async getUserByEmail(email: string): Promise<(User & { password_hash: string | null }) | null> {
     const result = await pool.query<User & { password_hash: string | null }>(
-      'SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = $1',
+      'SELECT id, email, name, role, password_hash, created_at, updated_at FROM users WHERE email = $1',
       [email.trim().toLowerCase()]
     );
     return result.rows[0] || null;

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="019-admin-role-and-audit" author="assistant">
+        <comment>
+            Add user role for admin authorization and admin action audit log.
+        </comment>
+
+        <addColumn tableName="users">
+            <column name="role" type="varchar(16)" defaultValue="user">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <sql>
+            ALTER TABLE users
+            ADD CONSTRAINT chk_users_role
+            CHECK (role IN ('user', 'admin'));
+        </sql>
+
+        <createIndex tableName="users" indexName="idx_users_role">
+            <column name="role"/>
+        </createIndex>
+
+        <createTable tableName="admin_action_audit">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="admin_user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_admin_action_audit_user" references="users(id)" deleteCascade="true"/>
+            </column>
+            <column name="action" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_type" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_id" type="varchar(128)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="payload_json" type="jsonb" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="admin_action_audit" indexName="idx_admin_action_audit_admin_created_at">
+            <column name="admin_user_id"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

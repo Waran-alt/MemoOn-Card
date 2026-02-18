@@ -13,6 +13,7 @@ const navItems = [
   { path: '/app', labelKey: 'decks' as const },
   { path: '/app/optimizer', labelKey: 'optimizer' as const },
   { path: '/app/study-sessions', labelKey: 'studySessions' as const },
+  { path: '/app/admin', labelKey: 'admin' as const },
 ] as const;
 
 export function AppLayoutShell({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,8 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
         ? tc('optimizer')
         : pathname === `/${locale}/app/study-sessions`
           ? tc('studySessions')
+        : pathname === `/${locale}/app/admin`
+          ? tc('admin')
         : pathname.startsWith(`/${locale}/app/decks/`)
           ? tc('decks')
           : tc('appName');

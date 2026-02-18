@@ -42,8 +42,8 @@ function authMeta(req: Request, email: string): Record<string, unknown> {
   };
 }
 
-function toUserResponse(user: { id: string; email: string; name: string | null }) {
-  return { id: user.id, email: user.email, name: user.name };
+function toUserResponse(user: { id: string; email: string; name: string | null; role: 'user' | 'admin' }) {
+  return { id: user.id, email: user.email, name: user.name, role: user.role };
 }
 
 function getSessionMeta(req: Request): { userAgent?: string; ipAddress?: string } {
