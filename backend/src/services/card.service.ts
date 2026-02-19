@@ -27,7 +27,7 @@ export class CardService {
    */
   async getCardById(cardId: string, userId: string): Promise<Card | null> {
     const result = await pool.query<Card>(
-      'SELECT * FROM cards WHERE id = $1 AND user_id = $2',
+      'SELECT * FROM cards WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [cardId, userId]
     );
     return result.rows[0] || null;
@@ -124,7 +124,7 @@ export class CardService {
     const result = await pool.query<Card>(
       `UPDATE cards
        SET ${updates.join(', ')}
-       WHERE id = $${paramCount++} AND user_id = $${paramCount++}
+       WHERE id = $${paramCount++} AND user_id = $${paramCount++} AND deleted_at IS NULL
        RETURNING *`,
       values
     );
@@ -134,9 +134,12 @@ export class CardService {
   /**
    * Delete a card
    */
+  /**
+   * Soft-delete a card. Row and FKs (review_logs, card_journey_events, etc.) are kept for study data.
+   */
   async deleteCard(cardId: string, userId: string): Promise<boolean> {
     const result = await pool.query(
-      'DELETE FROM cards WHERE id = $1 AND user_id = $2',
+      'UPDATE cards SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [cardId, userId]
     );
     return result.rowCount !== null && result.rowCount > 0;
@@ -157,7 +160,7 @@ export class CardService {
            last_review = $3,
            next_review = $4,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5 AND user_id = $6
+       WHERE id = $5 AND user_id = $6 AND deleted_at IS NULL
        RETURNING *`,
       [
         state.stability,
@@ -177,7 +180,7 @@ export class CardService {
   async getDueCards(deckId: string, userId: string): Promise<Card[]> {
     const result = await pool.query<Card>(
       `SELECT * FROM cards
-       WHERE deck_id = $1 AND user_id = $2
+       WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL
          AND next_review <= CURRENT_TIMESTAMP
        ORDER BY next_review ASC`,
       [deckId, userId]
@@ -195,7 +198,7 @@ export class CardService {
   ): Promise<Card[]> {
     const result = await pool.query<Card>(
       `SELECT * FROM cards
-       WHERE deck_id = $1 AND user_id = $2
+       WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL
          AND stability IS NULL
        ORDER BY created_at ASC
        LIMIT $3`,
@@ -215,7 +218,7 @@ export class CardService {
            last_review = NULL,
            next_review = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND user_id = $2
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
        RETURNING *`,
       [cardId, userId]
     );
@@ -235,7 +238,7 @@ export class CardService {
        SET is_important = $1,
            importance_updated_at = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2 AND user_id = $3
+       WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL
        RETURNING *`,
       [isImportant, cardId, userId]
     );

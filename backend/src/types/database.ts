@@ -20,6 +20,8 @@ export interface Deck {
   description: string | null;
   created_at: Date;
   updated_at: Date;
+  /** Set when deck is soft-deleted; cards and study data keep linking to the row */
+  deleted_at?: Date | null;
 }
 
 export interface Card {
@@ -42,6 +44,8 @@ export interface Card {
   next_review: Date;
   created_at: Date;
   updated_at: Date;
+  /** Set when card is soft-deleted; study data (review_logs, etc.) keeps linking to the row */
+  deleted_at?: Date | null;
 }
 
 /**

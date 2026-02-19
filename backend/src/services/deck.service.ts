@@ -8,7 +8,7 @@ export class DeckService {
    */
   async getDecksByUserId(userId: string): Promise<Deck[]> {
     const result = await pool.query<Deck>(
-      'SELECT * FROM decks WHERE user_id = $1 ORDER BY created_at DESC',
+      'SELECT * FROM decks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC',
       [userId]
     );
     return result.rows;
@@ -19,7 +19,7 @@ export class DeckService {
    */
   async getDeckById(deckId: string, userId: string): Promise<Deck | null> {
     const result = await pool.query<Deck>(
-      'SELECT * FROM decks WHERE id = $1 AND user_id = $2',
+      'SELECT * FROM decks WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [deckId, userId]
     );
     return result.rows[0] || null;
@@ -73,7 +73,7 @@ export class DeckService {
     const result = await pool.query<Deck>(
       `UPDATE decks
        SET ${updates.join(', ')}
-       WHERE id = $${paramCount++} AND user_id = $${paramCount++}
+       WHERE id = $${paramCount++} AND user_id = $${paramCount++} AND deleted_at IS NULL
        RETURNING *`,
       values
     );
@@ -81,11 +81,11 @@ export class DeckService {
   }
 
   /**
-   * Delete a deck
+   * Soft-delete a deck. Row and FKs (cards, study_events, etc.) are kept; cards and study data remain.
    */
   async deleteDeck(deckId: string, userId: string): Promise<boolean> {
     const result = await pool.query(
-      'DELETE FROM decks WHERE id = $1 AND user_id = $2',
+      'UPDATE decks SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [deckId, userId]
     );
     return result.rowCount !== null && result.rowCount > 0;
@@ -110,7 +110,7 @@ export class DeckService {
         COUNT(CASE WHEN stability IS NULL THEN 1 END) as new_cards,
         COUNT(CASE WHEN last_review >= $1 THEN 1 END) as reviewed_today
        FROM cards
-       WHERE deck_id = $2 AND user_id = $3`,
+       WHERE deck_id = $2 AND user_id = $3 AND deleted_at IS NULL`,
       [todayStart, deckId, userId]
     );
 

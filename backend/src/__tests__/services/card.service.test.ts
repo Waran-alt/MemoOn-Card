@@ -62,7 +62,7 @@ describe('CardService', () => {
 
       expect(result).toEqual(mockCards);
       expect(pool.query).toHaveBeenCalledWith(
-        'SELECT * FROM cards WHERE deck_id = $1 AND user_id = $2 ORDER BY created_at DESC',
+        'SELECT * FROM cards WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC',
         [mockDeckId, mockUserId]
       );
     });
@@ -182,13 +182,13 @@ describe('CardService', () => {
   });
 
   describe('deleteCard', () => {
-    it('should delete a card', async () => {
+    it('should soft-delete a card (set deleted_at)', async () => {
       (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([]));
 
       await cardService.deleteCard(mockCardId, mockUserId);
 
       expect(pool.query).toHaveBeenCalledWith(
-        'DELETE FROM cards WHERE id = $1 AND user_id = $2',
+        'UPDATE cards SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
         [mockCardId, mockUserId]
       );
     });
@@ -415,6 +415,10 @@ describe('CardService', () => {
 
       expect(result).toEqual(mockCards);
       expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('deleted_at IS NULL'),
+        [mockDeckId, mockUserId]
+      );
+      expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('next_review <= CURRENT_TIMESTAMP'),
         [mockDeckId, mockUserId]
       );
@@ -481,6 +485,10 @@ describe('CardService', () => {
       const result = await cardService.getNewCards(mockDeckId, mockUserId, 20);
 
       expect(result).toEqual(mockCards);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('deleted_at IS NULL'),
+        [mockDeckId, mockUserId, 20]
+      );
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('stability IS NULL'),
         [mockDeckId, mockUserId, 20]

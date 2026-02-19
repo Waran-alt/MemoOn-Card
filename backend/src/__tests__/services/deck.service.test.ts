@@ -49,7 +49,7 @@ describe('DeckService', () => {
 
       expect(result).toEqual(mockDecks);
       expect(pool.query).toHaveBeenCalledWith(
-        'SELECT * FROM decks WHERE user_id = $1 ORDER BY created_at DESC',
+        'SELECT * FROM decks WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC',
         [mockUserId]
       );
     });
@@ -80,7 +80,7 @@ describe('DeckService', () => {
 
       expect(result).toEqual(mockDeck);
       expect(pool.query).toHaveBeenCalledWith(
-        'SELECT * FROM decks WHERE id = $1 AND user_id = $2',
+        'SELECT * FROM decks WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
         [mockDeckId, mockUserId]
       );
     });
@@ -172,13 +172,13 @@ describe('DeckService', () => {
   });
 
   describe('deleteDeck', () => {
-    it('should delete a deck', async () => {
+    it('should soft-delete a deck (set deleted_at)', async () => {
       (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([]));
 
       await deckService.deleteDeck(mockDeckId, mockUserId);
 
       expect(pool.query).toHaveBeenCalledWith(
-        'DELETE FROM decks WHERE id = $1 AND user_id = $2',
+        'UPDATE decks SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
         [mockDeckId, mockUserId]
       );
     });

@@ -25,5 +25,7 @@
     <include file="changesets/018-feature-flag-framework.xml" relativeToChangelogFile="true"/>
     <include file="changesets/019-admin-role-and-audit.xml" relativeToChangelogFile="true"/>
     <include file="changesets/020-add-dev-role.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/021-cards-soft-delete.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/022-decks-soft-delete.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
