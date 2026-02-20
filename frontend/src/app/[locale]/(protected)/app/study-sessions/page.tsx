@@ -278,7 +278,7 @@ export default function StudySessionsPage() {
                   <button
                     type="button"
                     onClick={() => handleSelectSession(row.sessionId)}
-                    className={`w-full rounded border px-3 py-2 text-left text-sm transition-colors ${
+                    className={`w-full rounded border px-3 pt-1.5 pb-2 text-left text-sm transition-colors ${
                       selectedSessionId === row.sessionId
                         ? 'border-[var(--mc-accent-primary)] bg-[var(--mc-accent-primary)]/10'
                         : 'border-[var(--mc-border-subtle)] hover:bg-[var(--mc-bg-card-back)]'
@@ -341,7 +341,7 @@ export default function StudySessionsPage() {
               <button
                 type="button"
                 onClick={handleManageCardsFromSession}
-                className="mt-3 w-full rounded border border-[var(--mc-accent-primary)] bg-[var(--mc-accent-primary)]/10 px-3 py-2 text-sm font-medium text-[var(--mc-accent-primary)] hover:bg-[var(--mc-accent-primary)]/20"
+                className="mt-3 w-full rounded border border-[var(--mc-accent-primary)] bg-[var(--mc-accent-primary)]/10 px-3 pt-1.5 pb-2 text-sm font-medium text-[var(--mc-accent-primary)] hover:bg-[var(--mc-accent-primary)]/20"
               >
                 {ta('manageCardsFromSession')}
               </button>

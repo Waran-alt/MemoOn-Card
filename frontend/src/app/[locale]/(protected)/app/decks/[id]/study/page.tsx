@@ -310,18 +310,18 @@ export default function StudyPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-(--mc-text-secondary)">{tc('loading')}</p>;
+    return <p className="text-sm text-[var(--mc-text-secondary)]">{tc('loading')}</p>;
   }
 
   if (error || !deck) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-(--mc-accent-danger)" role="alert">
+        <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
           {error || ta('deckNotFound')}
         </p>
         <Link
           href={`/${locale}/app`}
-          className="text-sm font-medium text-(--mc-text-secondary) underline hover:no-underline"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] underline hover:no-underline"
         >
           {ta('backToDecks')}
         </Link>
@@ -339,19 +339,19 @@ export default function StudyPage() {
         <button
           type="button"
           onClick={goToDeck}
-          className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
         >
           ← {ta('backToDeck')}
         </button>
         <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
-          <p className="text-(--mc-text-primary)">{ta('noCardsToStudy')}</p>
-          <p className="mt-1 text-sm text-(--mc-text-secondary)">
+          <p className="text-[var(--mc-text-primary)]">{ta('noCardsToStudy')}</p>
+          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
             {ta('addCardsOrComeBack')}
           </p>
           <button
             type="button"
             onClick={goToDeck}
-            className="mt-4 inline-block rounded bg-(--mc-accent-success) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            className="mt-4 inline-block rounded bg-[var(--mc-accent-success)] px-4 pt-1.5 pb-2 text-sm font-medium text-white hover:opacity-90"
           >
             {ta('backToDeck')}
           </button>
@@ -370,63 +370,63 @@ export default function StudyPage() {
         <button
           type="button"
           onClick={goToDeck}
-          className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)"
+          className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
         >
           ← {ta('backToDeck')}
         </button>
         <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
-          <p className="font-medium text-(--mc-text-primary)">{ta('sessionComplete')}</p>
-          <p className="mt-1 text-sm text-(--mc-text-secondary)">
+          <p className="font-medium text-[var(--mc-text-primary)]">{ta('sessionComplete')}</p>
+          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
             {ta('reviewedCount', { count: reviewedCount })}
           </p>
-          <p className="mt-1 text-sm text-(--mc-text-secondary)">
+          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
             Session confidence: {confidencePercent}% ({ta('good')} + {ta('easy')})
           </p>
-          <p className="mt-1 text-sm text-(--mc-text-secondary)">Time spent: {formatDuration(elapsedSeconds)}</p>
+          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">Time spent: {formatDuration(elapsedSeconds)}</p>
           <div className="mt-4 grid grid-cols-2 gap-2 text-left text-sm sm:grid-cols-4">
-            <div className="rounded border border-(--mc-accent-danger)/40 bg-(--mc-accent-danger)/10 px-3 py-2">
-              <p className="text-(--mc-accent-danger)">{ta('again')}</p>
-              <p className="font-medium text-(--mc-text-primary)">{ratingStats[1]}</p>
+            <div className="rounded border border-[var(--mc-accent-danger)/40] bg-[var(--mc-accent-danger)/10] px-3 pt-1.5 pb-2">
+              <p className="text-[var(--mc-accent-danger)]">{ta('again')}</p>
+              <p className="font-medium text-[var(--mc-text-primary)]">{ratingStats[1]}</p>
             </div>
-            <div className="rounded border border-(--mc-accent-warning)/40 bg-(--mc-accent-warning)/10 px-3 py-2">
-              <p className="text-(--mc-accent-warning)">{ta('hard')}</p>
-              <p className="font-medium text-(--mc-text-primary)">{ratingStats[2]}</p>
+            <div className="rounded border border-[var(--mc-accent-warning)/40] bg-[var(--mc-accent-warning)/10] px-3 pt-1.5 pb-2">
+              <p className="text-[var(--mc-accent-warning)]">{ta('hard')}</p>
+              <p className="font-medium text-[var(--mc-text-primary)]">{ratingStats[2]}</p>
             </div>
-            <div className="rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-3 py-2">
-              <p className="text-(--mc-text-secondary)">{ta('good')}</p>
-              <p className="font-medium text-(--mc-text-primary)">{ratingStats[3]}</p>
+            <div className="rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 pt-1.5 pb-2">
+              <p className="text-[var(--mc-text-secondary)]">{ta('good')}</p>
+              <p className="font-medium text-[var(--mc-text-primary)]">{ratingStats[3]}</p>
             </div>
-            <div className="rounded border border-(--mc-accent-success)/40 bg-(--mc-accent-success)/10 px-3 py-2">
-              <p className="text-(--mc-accent-success)">{ta('easy')}</p>
-              <p className="font-medium text-(--mc-text-primary)">{ratingStats[4]}</p>
+            <div className="rounded border border-[var(--mc-accent-success)/40] bg-[var(--mc-accent-success)]/10 px-3 pt-1.5 pb-2">
+              <p className="text-[var(--mc-accent-success)]">{ta('easy')}</p>
+              <p className="font-medium text-[var(--mc-text-primary)]">{ratingStats[4]}</p>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
               onClick={goToDeck}
-              className="inline-block rounded bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              className="inline-block rounded bg-[var(--mc-accent-primary)] px-4 pt-1.5 pb-2 text-sm font-medium text-white hover:opacity-90"
             >
               {ta('manageReviewedCardsCount', { vars: { count: String(reviewedCount) } })}
             </button>
             <button
               type="button"
               onClick={goToDeck}
-              className="inline-block rounded border border-(--mc-border-subtle) px-4 py-2 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
+              className="inline-block rounded border border-[var(--mc-border-subtle)] px-4 pt-1.5 pb-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
             >
               {ta('backToDeck')}
             </button>
             <button
               type="button"
               onClick={goToStudySessions}
-              className="inline-block rounded border border-(--mc-border-subtle) px-4 py-2 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
+              className="inline-block rounded border border-[var(--mc-border-subtle)] px-4 pt-1.5 pb-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
             >
               {ta('viewStudySessions')}
             </button>
             <button
               type="button"
               onClick={goToStudyHealth}
-              className="inline-block rounded border border-(--mc-border-subtle) px-4 py-2 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
+              className="inline-block rounded border border-[var(--mc-border-subtle)] px-4 pt-1.5 pb-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
             >
               {ta('viewStudyHealthDashboard')}
             </button>
@@ -444,7 +444,7 @@ export default function StudyPage() {
           <button
             type="button"
             onClick={goToDeck}
-            className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)"
+            className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
           >
             ← {ta('exitStudy')}
           </button>
@@ -452,17 +452,17 @@ export default function StudyPage() {
             <button
               type="button"
               onClick={goToDeck}
-              className="text-sm text-(--mc-accent-primary) hover:underline"
+              className="text-sm text-[var(--mc-accent-primary)] hover:underline"
             >
               {ta('manageReviewedCards')} ({reviewedCount})
             </button>
           )}
         </div>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-sm text-(--mc-text-secondary)">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-sm text-[var(--mc-text-secondary)]">
           <select
             value={intensityMode}
             onChange={(e) => handleIntensityModeChange(e.target.value as StudyIntensityMode)}
-            className="rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-xs"
+            className="rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-2 py-1 text-xs"
             title={ta('studyIntensityDefault')}
           >
             <option value="light">{ta('studyIntensityLight')}</option>
@@ -494,29 +494,29 @@ export default function StudyPage() {
         }`}
       >
         <div className="flex justify-end">
-          <label className="flex items-center gap-2 text-sm text-(--mc-text-secondary)">
+          <label className="flex items-center gap-2 text-sm text-[var(--mc-text-secondary)]">
             <input
               type="checkbox"
               checked={needManagement}
               onChange={(e) => setNeedManagement(e.target.checked)}
-              className="rounded border-(--mc-border-subtle)"
+              className="rounded border-[var(--mc-border-subtle)]"
             />
             {ta('needManagement')}
           </label>
         </div>
         <div className="flex flex-1 flex-col justify-center">
-          <p className="whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
+          <p className="whitespace-pre-wrap text-lg leading-relaxed text-[var(--mc-text-primary)]">
             {showAnswer ? card.verso : card.recto}
           </p>
           {card.comment && showAnswer && (
-            <p className="mt-3 text-sm text-(--mc-text-secondary)">{card.comment}</p>
+            <p className="mt-3 text-sm text-[var(--mc-text-secondary)]">{card.comment}</p>
           )}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleToggleImportant}
-            className="rounded border border-(--mc-border-subtle) px-2 py-1 text-xs text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
+            className="rounded border border-[var(--mc-border-subtle)] px-2 py-1 text-xs text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
           >
             {card.is_important ? ta('importantCard') : ta('markAsImportant')}
           </button>
@@ -525,14 +525,14 @@ export default function StudyPage() {
               <button
                 type="button"
                 onClick={() => setShowFlagMenu(!showFlagMenu)}
-                className="rounded border border-(--mc-accent-warning)/50 px-2 py-1 text-xs text-(--mc-accent-warning) hover:bg-(--mc-accent-warning)/10"
+                className="rounded border border-[var(--mc-accent-warning)/50] px-2 py-1 text-xs text-[var(--mc-accent-warning)] hover:bg-[var(--mc-accent-warning)/10]"
               >
                 {ta('addNote')}
               </button>
               <button
                 type="button"
                 onClick={() => goToManageCard(card.id)}
-                className="rounded border border-(--mc-accent-primary) px-2 py-1 text-xs text-(--mc-accent-primary) hover:bg-(--mc-accent-primary)/10"
+                className="rounded border border-[var(--mc-accent-primary)] px-2 py-1 text-xs text-[var(--mc-accent-primary)] hover:bg-[var(--mc-accent-primary)/10]"
               >
                 {ta('immediateManagement')}
               </button>
@@ -540,8 +540,8 @@ export default function StudyPage() {
           )}
         </div>
         {showFlagMenu && needManagement && showAnswer && (
-          <div className="mt-3 rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-3">
-            <p className="mb-2 text-xs font-medium text-(--mc-text-secondary)">{ta('managementReason')}</p>
+          <div className="mt-3 rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-3">
+            <p className="mb-2 text-xs font-medium text-[var(--mc-text-secondary)]">{ta('managementReason')}</p>
             <div className="flex flex-wrap gap-2">
               {MANAGEMENT_REASONS.map(({ value, labelKey }) => (
                 <button
@@ -549,7 +549,7 @@ export default function StudyPage() {
                   type="button"
                   disabled={flagSubmitting}
                   onClick={() => handleSubmitFlag(value)}
-                  className="rounded border border-(--mc-border-subtle) px-2 py-1 text-xs hover:bg-(--mc-bg-card-back) disabled:opacity-50"
+                  className="rounded border border-[var(--mc-border-subtle)] px-2 py-1 text-xs hover:bg-[var(--mc-bg-card-back)] disabled:opacity-50"
                 >
                   {ta(labelKey)}
                 </button>
@@ -560,14 +560,14 @@ export default function StudyPage() {
               value={flagCustomReason}
               onChange={(e) => setFlagCustomReason(e.target.value)}
               placeholder={ta('managementReasonCustomPlaceholder')}
-              className="mt-2 w-full rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-sm text-(--mc-text-primary)"
+              className="mt-2 w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-2 py-1 text-sm text-[var(--mc-text-primary)]"
             />
           </div>
         )}
       </div>
 
       {reviewError && (
-        <p className="text-sm text-(--mc-accent-danger)" role="alert">
+        <p className="text-sm text-[var(--mc-accent-danger)]" role="alert">
           {reviewError}
         </p>
       )}
@@ -580,7 +580,7 @@ export default function StudyPage() {
               setShowAnswer(true);
               emitStudyEvent('answer_revealed', { elapsedMs: Date.now() - cardStartedAt }, card.id);
             }}
-            className="w-full rounded-lg border-2 border-(--mc-border-subtle) py-3 text-sm font-medium text-(--mc-text-primary) hover:bg-(--mc-bg-card-back) transition-colors duration-200"
+            className="w-full rounded-lg border-2 border-[var(--mc-border-subtle)] py-3 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)] transition-colors duration-200"
           >
             {ta('showAnswer')}
           </button>
@@ -594,12 +594,12 @@ export default function StudyPage() {
                 onClick={() => handleRate(value as Rating)}
                 className={`rounded-lg border py-3 text-sm font-medium transition-colors duration-200 ${
                   value === 1
-                    ? 'border-(--mc-accent-danger)/50 bg-(--mc-accent-danger)/10 text-(--mc-accent-danger) hover:bg-(--mc-accent-danger)/20'
+                    ? 'border-[var(--mc-accent-danger)/50] bg-[var(--mc-accent-danger)/10] text-[var(--mc-accent-danger)] hover:bg-[var(--mc-accent-danger)/20]'
                     : value === 2
-                      ? 'border-(--mc-accent-warning)/50 bg-(--mc-accent-warning)/10 text-(--mc-accent-warning) hover:bg-(--mc-accent-warning)/20'
+                      ? 'border-[var(--mc-accent-warning)/50] bg-[var(--mc-accent-warning)/10] text-[var(--mc-accent-warning)] hover:bg-[var(--mc-accent-warning)/20]'
                       : value === 4
-                        ? 'border-(--mc-accent-success)/50 bg-(--mc-accent-success)/10 text-(--mc-accent-success) hover:bg-(--mc-accent-success)/20'
-                        : 'border-(--mc-border-subtle) bg-(--mc-bg-surface) text-(--mc-text-primary) hover:bg-(--mc-bg-card-back)'
+                        ? 'border-[var(--mc-accent-success)/50] bg-[var(--mc-accent-success)/10] text-[var(--mc-accent-success)] hover:bg-[var(--mc-accent-success)/20]'
+                        : 'border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)]'
                 } disabled:opacity-50`}
               >
                 {value === 1

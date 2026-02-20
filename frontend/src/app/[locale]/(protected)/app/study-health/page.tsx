@@ -158,7 +158,7 @@ export default function StudyHealthPage() {
         </div>
         <Link
           href={`/${locale}/app/study-sessions`}
-          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+          className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
         >
           {ta('viewStudySessions')}
         </Link>

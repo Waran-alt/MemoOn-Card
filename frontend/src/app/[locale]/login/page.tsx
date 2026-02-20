@@ -65,7 +65,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
+              className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 pt-1.5 pb-2 text-sm text-[var(--mc-text-primary)]"
             />
           </div>
           <div>
@@ -80,7 +80,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
+              className="w-full rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 pt-1.5 pb-2 text-sm text-[var(--mc-text-primary)]"
             />
           </div>
           {error && (
@@ -91,7 +91,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded bg-[var(--mc-accent-success)] py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
+            className="w-full rounded bg-[var(--mc-accent-success)] pt-1.5 pb-2 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
           >
             {loading ? ta('signingIn') : tc('signIn')}
           </button>

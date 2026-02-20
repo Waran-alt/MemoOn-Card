@@ -84,7 +84,7 @@ export default function FlaggedCardsPage() {
                 <div className="flex shrink-0 gap-2">
                   <Link
                     href={`/${locale}/app/decks/${flag.deck_id}?manageCard=${flag.card_id}`}
-                    className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--mc-bg-card-back)]"
+                    className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium hover:bg-[var(--mc-bg-card-back)]"
                   >
                     {ta('editCard')}
                   </Link>
@@ -92,7 +92,7 @@ export default function FlaggedCardsPage() {
                     type="button"
                     disabled={resolvingId === flag.id}
                     onClick={() => handleResolve(flag.id)}
-                    className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                    className="rounded bg-[var(--mc-accent-success)] px-3 pt-1 pb-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
                   >
                     {resolvingId === flag.id ? tc('loading') : ta('flaggedCardsResolve')}
                   </button>

@@ -11,6 +11,10 @@ import { CardFormFields } from './CardFormFields';
 
 const LAST_STUDIED_KEY = (deckId: string) => `memoon_last_studied_${deckId}`;
 
+function formatCardDate(isoDate: string, locale: string): string {
+  return new Date(isoDate).toLocaleDateString(locale, { dateStyle: 'short' });
+}
+
 function cardMatchesSearch(card: Card, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -48,7 +52,6 @@ export default function DeckDetailPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
-  const [showRevealAllDialog, setShowRevealAllDialog] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [editRecto, setEditRecto] = useState('');
   const [editVerso, setEditVerso] = useState('');
@@ -138,11 +141,6 @@ export default function DeckDetailPage() {
     setRevealedCardIds((prev) => new Set(prev).add(cardId));
   }, []);
 
-  const revealAll = useCallback(() => {
-    setRevealedCardIds(new Set(cards.map((c) => c.id)));
-    setShowRevealAllDialog(false);
-  }, [cards]);
-
   const displayCards = useMemo(() => {
     const q = appliedSearchQuery.trim();
     if (q) {
@@ -198,6 +196,18 @@ export default function DeckDetailPage() {
 
   const manageCardId = searchParams.get('manageCard');
   const hasOpenedManageCardRef = useRef(false);
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+
+  const allDisplayedSelected =
+    displayCards.length > 0 && displayCards.every((c) => selectedCardIds.has(c.id));
+  const someDisplayedSelected =
+    displayCards.length > 0 && displayCards.some((c) => selectedCardIds.has(c.id));
+  const selectAllIndeterminate = someDisplayedSelected && !allDisplayedSelected;
+
+  useEffect(() => {
+    const el = selectAllCheckboxRef.current;
+    if (el) el.indeterminate = selectAllIndeterminate;
+  }, [selectAllIndeterminate]);
   useEffect(() => {
     if (!manageCardId || !cards.length || hasOpenedManageCardRef.current) return;
     const card = cards.find((c) => c.id === manageCardId);
@@ -440,29 +450,25 @@ export default function DeckDetailPage() {
 
   return (
     <div className="mc-study-page space-y-6">
-      <div>
-        <Link
-          href={`/${locale}/app`}
-          className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
-        >
-          ← {ta('backToDecks')}
-        </Link>
-        <h2 className="mt-2 text-xl font-semibold text-[var(--mc-text-primary)]">
+      <section
+        className="rounded-xl border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-5 shadow-sm"
+        aria-labelledby="deck-summary-title"
+      >
+        <h2 id="deck-summary-title" className="text-xl font-semibold tracking-tight text-[var(--mc-text-primary)]">
           {deck.title}
         </h2>
         {deck.description && (
-          <p className="mt-1 text-sm text-[var(--mc-text-secondary)]">
+          <p className="mt-1.5 text-sm text-[var(--mc-text-secondary)] leading-relaxed">
             {deck.description}
           </p>
         )}
-      </div>
-
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-medium text-[var(--mc-text-primary)]">{ta('cards')}</h3>
-        <div className="flex shrink-0 gap-2">
+        <p className="mt-3 text-sm text-[var(--mc-text-secondary)]">
+          {cardsLoading ? tc('loading') : ta('deckSummaryCardCount', { vars: { count: String(cards.length) } })}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
           <Link
             href={`/${locale}/app/decks/${id}/study`}
-            className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)] transition-colors duration-200"
+            className="rounded-lg bg-[var(--mc-accent-primary)] px-4 pt-1.5 pb-2 text-sm font-medium text-white shadow-sm transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mc-accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--mc-bg-base)]"
           >
             {ta('study')}
           </Link>
@@ -472,11 +478,15 @@ export default function DeckDetailPage() {
               setShowCreateCard(true);
               setCreateError('');
             }}
-            className="rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+            className="rounded-lg bg-[var(--mc-accent-success)] px-4 pt-1.5 pb-2 text-sm font-medium text-white shadow-sm transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mc-accent-success)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--mc-bg-base)]"
           >
             {ta('newCard')}
           </button>
         </div>
+      </section>
+
+      <div className="flex items-baseline justify-between gap-4 border-b border-[var(--mc-border-subtle)] pb-2">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-[var(--mc-text-secondary)]">{ta('cards')}</h3>
       </div>
 
       {cardsError && (
@@ -488,14 +498,14 @@ export default function DeckDetailPage() {
       {showCreateCard && (
         <div
           data-testid="create-modal-overlay"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--mc-overlay)]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="create-card-title"
           onClick={closeCreateModal}
         >
           <div
-            className="mx-4 max-w-lg rounded-lg border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-4 shadow-lg"
+            className="mx-4 max-w-lg rounded-xl border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 id="create-card-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
@@ -522,14 +532,14 @@ export default function DeckDetailPage() {
                 <button
                   type="submit"
                   disabled={creating || !createRecto.trim() || !createVerso.trim()}
-                  className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
+                  className="rounded bg-[var(--mc-accent-success)] px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                 >
                   {creating ? tc('creating') : tc('create')}
                 </button>
                 <button
                   type="button"
                   onClick={closeCreateModal}
-                  className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                  className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
                 >
                   {tc('cancel')}
                 </button>
@@ -593,12 +603,12 @@ export default function DeckDetailPage() {
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplySearch(); } }}
               placeholder={ta('searchCardsPlaceholder')}
               aria-label={ta('searchCardsPlaceholder')}
-              className="min-w-[200px] max-w-full flex-1 rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 py-2 text-sm text-[var(--mc-text-primary)]"
+              className="min-w-[200px] max-w-full flex-1 rounded border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] px-3 pt-1.5 pb-2 text-sm text-[var(--mc-text-primary)]"
             />
             <button
               type="button"
               onClick={handleApplySearch}
-              className="rounded border border-[var(--mc-border-subtle)] px-3 py-2 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)]"
+              className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1.5 pb-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)]"
             >
               {ta('applySearch')}
             </button>
@@ -606,67 +616,63 @@ export default function DeckDetailPage() {
               <button
                 type="button"
                 onClick={handleClearSearch}
-                className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
+                className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1.5 pb-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)]"
               >
                 {ta('clearSearch')}
               </button>
             )}
-            {!appliedSearchQuery.trim() && (
-              <>
-                <p className="text-xs text-[var(--mc-text-secondary)]">
-                  {ta('cardsContentHidden')}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowRevealAllDialog(true)}
-                  className="text-xs font-medium text-[var(--mc-accent-primary)] underline hover:no-underline"
-                >
-                  {ta('revealAll')}
-                </button>
-              </>
-            )}
           </div>
-          {displayCards.length > 0 && (
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <button type="button" onClick={selectAllDisplayed} className="text-xs font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)] underline hover:no-underline">
-                {ta('selectAll')}
-              </button>
-              <button type="button" onClick={deselectAllDisplayed} className="text-xs font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)] underline hover:no-underline">
-                {ta('deselectAll')}
-              </button>
+          {displayCards.length > 0 && (() => {
+            const selectedDisplayedCount = displayCards.filter((c) => selectedCardIds.has(c.id)).length;
+            const cardsSelectedLabel = ta('cardsSelectedCount', { vars: { selected: String(selectedDisplayedCount), total: String(displayCards.length) } });
+            return (
+            <div className="mb-2 flex min-h-8 flex-wrap items-center gap-2 pl-4">
+              <div className="flex items-center gap-2">
+                <label className="cursor-pointer">
+                  <input
+                    ref={selectAllCheckboxRef}
+                    type="checkbox"
+                    checked={allDisplayedSelected}
+                    onChange={() => (allDisplayedSelected ? deselectAllDisplayed() : selectAllDisplayed())}
+                    aria-label={cardsSelectedLabel}
+                    className="h-5 w-5 rounded border-[var(--mc-border-subtle)]"
+                  />
+                </label>
+                <span className="cursor-default text-sm text-[var(--mc-text-secondary)]" aria-hidden="true">{cardsSelectedLabel}</span>
+              </div>
               {selectedCardIds.size > 0 && (
-                <>
-                  <span className="text-xs text-[var(--mc-text-secondary)]">({selectedCardIds.size})</span>
-                  <button type="button" onClick={runBulkReveal} disabled={actionLoading} className="rounded border border-[var(--mc-border-subtle)] px-2 py-1 text-xs font-medium hover:bg-[var(--mc-bg-card-back)] disabled:opacity-50">
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={runBulkReveal} disabled={actionLoading} className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)] disabled:opacity-50">
                     {ta('revealSelected')}
                   </button>
-                  <button type="button" onClick={runBulkTreatAsNew} disabled={actionLoading} className="rounded border border-[var(--mc-border-subtle)] px-2 py-1 text-xs font-medium hover:bg-[var(--mc-bg-card-back)] disabled:opacity-50">
+                  <button type="button" onClick={runBulkTreatAsNew} disabled={actionLoading} className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)] disabled:opacity-50">
                     {ta('treatAsNewSelected')}
                   </button>
-                  <button type="button" onClick={() => setConfirmDialog({ type: 'bulkDelete', cardIds: Array.from(selectedCardIds) })} disabled={actionLoading} className="rounded border border-[var(--mc-accent-danger)] px-2 py-1 text-xs font-medium text-[var(--mc-accent-danger)] hover:bg-[var(--mc-accent-danger)]/10 disabled:opacity-50">
+                  <button type="button" onClick={() => setConfirmDialog({ type: 'bulkDelete', cardIds: Array.from(selectedCardIds) })} disabled={actionLoading} className="rounded border border-[var(--mc-accent-danger)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-accent-danger)] hover:bg-[var(--mc-accent-danger)]/10 disabled:opacity-50">
                     {ta('deleteSelected')}
                   </button>
-                </>
+                </div>
               )}
             </div>
-          )}
+            );
+          })()}
           <ul className="space-y-3">
             {displayCards.length === 0 ? (
-              <li className="rounded-lg border border-dashed border-[var(--mc-border-subtle)] p-4 text-center text-sm text-[var(--mc-text-secondary)]">
+              <li className="rounded-xl border border-dashed border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)]/50 p-6 text-center text-sm text-[var(--mc-text-secondary)]">
                 <p>{appliedSearchQuery.trim() ? ta('searchNoMatch') : showOnlyReviewed ? ta('noReviewedCards') : ta('noCardsYet')}</p>
                 {appliedSearchQuery.trim() ? (
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                     <button
                       type="button"
                       onClick={handleClearSearch}
-                      className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)]"
+                      className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)]"
                     >
                       {ta('clearSearch')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowCreateCard(true)}
-                      className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                      className="rounded bg-[var(--mc-accent-success)] px-3 pt-1 pb-1.5 text-sm font-medium text-white hover:opacity-90"
                     >
                       {ta('newCard')}
                     </button>
@@ -680,17 +686,27 @@ export default function DeckDetailPage() {
                 return (
                   <li
                     key={card.id}
-                    className="mc-study-surface rounded-lg border p-4 shadow-sm"
+                    className="mc-study-surface rounded-xl border border-[var(--mc-border-subtle)] p-4 shadow-sm transition-colors duration-150 hover:bg-[var(--mc-bg-card-back)]/40"
                   >
                     {!revealed ? (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-[var(--mc-text-primary)]">
+                      <div className="flex items-center gap-3">
+                        <label className="flex shrink-0 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCardIds.has(card.id)}
+                            onChange={() => toggleCardSelection(card.id)}
+                            aria-label={ta('cardLabel', { vars: { n: String(globalIndex) } })}
+                            className="h-5 w-5 rounded border-[var(--mc-border-subtle)]"
+                          />
+                          <span className="sr-only">{ta('cards')}</span>
+                        </label>
+                        <span className="min-w-0 flex-1 font-medium text-[var(--mc-text-primary)]">
                           {ta('cardLabel', { vars: { n: String(globalIndex) } })}
                         </span>
                         <button
                           type="button"
                           onClick={() => revealOne(card.id)}
-                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                          className="shrink-0 rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)]"
                         >
                           {ta('revealCard')}
                         </button>
@@ -698,13 +714,13 @@ export default function DeckDetailPage() {
                     ) : (
                     <>
                       <div className="flex items-start gap-3">
-                        <label className="flex shrink-0 items-center gap-2 text-sm text-[var(--mc-text-secondary)]">
+                        <label className="flex shrink-0 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={selectedCardIds.has(card.id)}
                             onChange={() => toggleCardSelection(card.id)}
                             aria-label={ta('cards')}
-                            className="rounded border-[var(--mc-border-subtle)]"
+                            className="h-5 w-5 rounded border-[var(--mc-border-subtle)]"
                           />
                           <span className="sr-only">{ta('cards')}</span>
                         </label>
@@ -722,11 +738,19 @@ export default function DeckDetailPage() {
                         )}
                         </div>
                       </div>
+                      <p className="mt-2 text-xs text-[var(--mc-text-secondary)]">
+                        {!card.last_review
+                          ? ta('cardStatusNew')
+                          : [
+                              ta('cardNextReview', { vars: { date: formatCardDate(card.next_review, locale) } }),
+                              ta('cardLastReview', { vars: { date: formatCardDate(card.last_review, locale) } }),
+                            ].join(' · ')}
+                      </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => openEditModal(card)}
-                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                          className="rounded-lg border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] transition-colors hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)]"
                         >
                           {ta('editCard')}
                         </button>
@@ -735,7 +759,7 @@ export default function DeckDetailPage() {
                           onClick={() =>
                             setConfirmDialog({ type: 'delete', cardId: card.id })
                           }
-                          className="rounded border border-[var(--mc-accent-danger)] px-3 py-1.5 text-sm font-medium text-[var(--mc-accent-danger)] hover:bg-[var(--mc-accent-danger)]/10"
+                          className="rounded-lg border border-[var(--mc-accent-danger)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-accent-danger)] transition-colors hover:bg-[var(--mc-accent-danger)]/10"
                         >
                           {ta('deleteCard')}
                         </button>
@@ -747,7 +771,9 @@ export default function DeckDetailPage() {
                               cardId: card.id,
                             })
                           }
-                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                          disabled={!card.last_review}
+                          title={!card.last_review ? ta('cardStatusNew') : undefined}
+                          className="rounded-lg border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] transition-colors hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {ta('treatAsNew')}
                         </button>
@@ -759,7 +785,9 @@ export default function DeckDetailPage() {
                               cardId: card.id,
                             })
                           }
-                          className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                          disabled={!card.last_review}
+                          title={!card.last_review ? ta('cardStatusNew') : undefined}
+                          className="rounded-lg border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] transition-colors hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {ta('expandDelay')}
                         </button>
@@ -774,61 +802,17 @@ export default function DeckDetailPage() {
         </>
       )}
 
-      {showRevealAllDialog && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reveal-all-title"
-          onClick={() => setShowRevealAllDialog(false)}
-        >
-          <div
-            className="mx-4 max-w-md rounded-lg border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-4 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="reveal-all-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
-              {ta('revealAllDialogTitle')}
-            </h3>
-            <p className="mt-2 text-sm text-[var(--mc-text-secondary)]">
-              {ta('revealAllDialogMessage')}
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link
-                href={`/${locale}/app/decks/${id}/study`}
-                className="rounded bg-[var(--mc-accent-primary)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-              >
-                {ta('revealAllStudyFirst')}
-              </Link>
-              <button
-                type="button"
-                onClick={revealAll}
-                className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-primary)] hover:bg-[var(--mc-bg-card-back)]"
-              >
-                {ta('revealAllConfirm')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowRevealAllDialog(false)}
-                className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
-              >
-                {tc('cancel')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {editingCard && (
         <div
           data-testid="edit-modal-overlay"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--mc-overlay)]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-card-title"
           onClick={closeEditModal}
         >
           <div
-            className="mx-4 max-w-lg rounded-lg border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-4 shadow-lg"
+            className="mx-4 max-w-lg rounded-xl border border-[var(--mc-border-subtle)] bg-[var(--mc-bg-surface)] p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 id="edit-card-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
@@ -854,14 +838,14 @@ export default function DeckDetailPage() {
                 <button
                   type="submit"
                   disabled={editSaving || !editRecto.trim() || !editVerso.trim()}
-                  className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
+                  className="rounded bg-[var(--mc-accent-success)] px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                 >
                   {editSaving ? tc('saving') : tc('save')}
                 </button>
                 <button
                   type="button"
                   onClick={closeEditModal}
-                  className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                  className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
                 >
                   {tc('cancel')}
                 </button>
@@ -873,7 +857,7 @@ export default function DeckDetailPage() {
 
       {confirmDialog && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--mc-overlay)]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-dialog-title"
@@ -902,7 +886,7 @@ export default function DeckDetailPage() {
                 type="button"
                 onClick={() => setConfirmDialog(null)}
                 disabled={actionLoading}
-                className="rounded border border-[var(--mc-border-subtle)] px-4 py-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] disabled:opacity-50"
+                className="rounded border border-[var(--mc-border-subtle)] px-4 pt-1.5 pb-2 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] disabled:opacity-50"
               >
                 {tc('cancel')}
               </button>
@@ -910,7 +894,7 @@ export default function DeckDetailPage() {
                 type="button"
                 onClick={runConfirmAction}
                 disabled={actionLoading}
-                className="rounded px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded px-4 pt-1.5 pb-2 text-sm font-medium text-white disabled:opacity-50"
                 style={
                   confirmDialog.type === 'delete' || (confirmDialog.type === 'bulkDelete' && 'cardIds' in confirmDialog)
                     ? { backgroundColor: 'var(--mc-accent-danger)' }

@@ -65,7 +65,7 @@ export default function AppPage() {
             setShowCreate(true);
             setCreateError('');
           }}
-          className="shrink-0 self-start rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:self-auto"
+          className="shrink-0 self-start rounded bg-[var(--mc-accent-success)] px-4 pt-1.5 pb-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:self-auto"
         >
           {tc('newDeck')}
         </button>
@@ -133,7 +133,7 @@ export default function AppPage() {
               <button
                 type="submit"
                 disabled={creating || !createTitle.trim()}
-                className="rounded bg-[var(--mc-accent-success)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
+                className="rounded bg-[var(--mc-accent-success)] px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
               >
                 {creating ? tc('creating') : tc('create')}
               </button>
@@ -145,7 +145,7 @@ export default function AppPage() {
                   setCreateDescription('');
                   setCreateError('');
                 }}
-                className="rounded border border-[var(--mc-border-subtle)] px-3 py-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
+                className="rounded border border-[var(--mc-border-subtle)] px-3 pt-1 pb-1.5 text-sm font-medium text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)]"
               >
                 {tc('cancel')}
               </button>

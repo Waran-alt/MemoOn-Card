@@ -19,7 +19,7 @@ export default function AdminPage() {
           <p className="mt-2 text-sm text-[var(--mc-text-secondary)]">{ta('adminAccessDeniedMessage')}</p>
           <Link
             href={`/${locale}/app`}
-            className="mt-4 inline-block rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            className="mt-4 inline-block rounded bg-[var(--mc-accent-success)] px-4 pt-1.5 pb-2 text-sm font-medium text-white hover:opacity-90"
           >
             {ta('adminBackToApp')}
           </Link>

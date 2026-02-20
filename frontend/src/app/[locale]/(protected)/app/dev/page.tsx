@@ -115,7 +115,7 @@ export default function DevPage() {
           <p className="mt-2 text-sm text-[var(--mc-text-secondary)]">{ta('devAccessDeniedMessage')}</p>
           <Link
             href={`/${locale}/app`}
-            className="mt-4 inline-block rounded bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            className="mt-4 inline-block rounded bg-[var(--mc-accent-success)] px-4 pt-1.5 pb-2 text-sm font-medium text-white hover:opacity-90"
           >
             {ta('devBackToApp')}
           </Link>
@@ -240,7 +240,7 @@ export default function DevPage() {
             <button
               type="button"
               onClick={() => void upsertOverride()}
-              className="rounded bg-[var(--mc-accent-success)] px-3 py-1 text-sm text-white"
+              className="rounded bg-[var(--mc-accent-success)] px-3 pt-0.5 pb-1 text-sm text-white"
             >
               {ta('adminSaveOverride')}
             </button>

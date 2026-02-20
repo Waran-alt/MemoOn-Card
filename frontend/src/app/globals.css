@@ -1,8 +1,6 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
   --font-sans: Inter, Geist, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
   /* MemoOn Card - Citadel tokens */
@@ -12,33 +10,40 @@
   --mc-bg-card-back: #eef2f7;
   --mc-text-primary: #0f172a;
   --mc-text-secondary: #475569;
+  --mc-text-muted: #64748b;
   --mc-border-subtle: #cbd5e1;
+  --mc-accent-primary: #6366f1;
   --mc-accent-success: #10b981;
   --mc-accent-warning: #f59e0b;
   --mc-accent-danger: #dc2626;
+  --mc-overlay: rgb(0 0 0 / 0.5);
+  --mc-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --mc-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #1a1f2b;
-    --foreground: #e2e8f0;
-
     --mc-bg-base: #1a1f2b;
     --mc-bg-surface: #232a3a;
     --mc-bg-card-front: #232a3a;
     --mc-bg-card-back: #2a3346;
     --mc-text-primary: #e2e8f0;
     --mc-text-secondary: #a8b3c7;
+    --mc-text-muted: #94a3b8;
     --mc-border-subtle: #334155;
+    --mc-accent-primary: #818cf8;
     --mc-accent-success: #34d399;
     --mc-accent-warning: #fbbf24;
     --mc-accent-danger: #f87171;
+    --mc-overlay: rgb(0 0 0 / 0.6);
+    --mc-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+    --mc-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.2), 0 2px 4px -2px rgb(0 0 0 / 0.15);
   }
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--mc-text-primary);
+  background: var(--mc-bg-base);
   font-family: var(--font-sans);
 }
 
@@ -59,4 +64,10 @@ body {
 .mc-study-card-back {
   background: var(--mc-bg-card-back);
   border-color: var(--mc-border-subtle);
+}
+
+/* Subtle focus ring for keyboard users */
+.mc-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--mc-bg-base), 0 0 0 4px var(--mc-accent-primary);
 }

@@ -28,8 +28,10 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { locale } = useLocale();
   const { t: tc } = useTranslation('common', locale);
+  const { t: ta } = useTranslation('app', locale);
   const user = useAuthStore((s) => s.user);
   const appBase = `/${locale}/app`;
+  const isDeckDetail = pathname.startsWith(`/${locale}/app/decks/`);
   const pageTitle =
     pathname === appBase
       ? tc('myDecks')
@@ -117,7 +119,7 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 onClick={() => setMenuOpen(false)}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                className={`rounded-md px-3 pt-1.5 pb-2 text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-[var(--mc-bg-card-back)] text-[var(--mc-text-primary)]'
                     : 'text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)]'
@@ -130,7 +132,7 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="border-t border-[var(--mc-border-subtle)] p-3">
           <SignOutButton
-            className={`w-full rounded-md px-3 py-2 text-center text-sm text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)] ${focusRingClass}`}
+            className={`w-full rounded-md px-3 pt-1.5 pb-2 text-center text-sm text-[var(--mc-text-secondary)] hover:bg-[var(--mc-bg-card-back)] hover:text-[var(--mc-text-primary)] ${focusRingClass}`}
           />
         </div>
       </aside>
@@ -165,7 +167,38 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main className="flex-1 overflow-auto p-6">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+          {(() => {
+            const deckStudyMatch = pathname.match(new RegExp(`^/${locale}/app/decks/([^/]+)/study$`));
+            const deckOnlyMatch = pathname.match(new RegExp(`^/${locale}/app/decks/([^/]+)$`));
+            const flaggedMatch = pathname === `/${locale}/app/flagged-cards`;
+            let backHref: string | null = null;
+            let backLabel: string | null = null;
+            if (deckStudyMatch) {
+              backHref = `/${locale}/app/decks/${deckStudyMatch[1]}`;
+              backLabel = ta('backToDeck');
+            } else if (deckOnlyMatch) {
+              backHref = `/${locale}/app`;
+              backLabel = ta('backToDecks');
+            } else if (flaggedMatch) {
+              backHref = `/${locale}/app`;
+              backLabel = ta('backToDecks');
+            }
+            return (
+              <>
+                {backHref && backLabel && (
+                  <div className="mb-4">
+                    <Link
+                      href={backHref}
+                      className="text-sm font-medium text-[var(--mc-text-secondary)] hover:text-[var(--mc-text-primary)]"
+                    >
+                      ← {backLabel}
+                    </Link>
+                  </div>
+                )}
+                <div className="mx-auto w-full max-w-6xl">{children}</div>
+              </>
+            );
+          })()}
         </main>
       </div>
     </div>

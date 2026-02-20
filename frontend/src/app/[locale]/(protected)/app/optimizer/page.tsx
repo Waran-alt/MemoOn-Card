@@ -190,7 +190,7 @@ export default function OptimizerPage() {
         type="button"
         onClick={handleRun}
         disabled={!status.canOptimize || running}
-        className="rounded-lg bg-[var(--mc-accent-success)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        className="rounded-lg bg-[var(--mc-accent-success)] px-4 pt-1.5 pb-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {running ? ta('runningOptimizer') : ta('runOptimizer')}
       </button>
