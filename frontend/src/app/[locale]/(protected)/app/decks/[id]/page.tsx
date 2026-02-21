@@ -66,6 +66,8 @@ export default function DeckDetailPage() {
   const [lastStudiedIds, setLastStudiedIds] = useState<Set<string>>(new Set());
   const [showOnlyReviewed, setShowOnlyReviewed] = useState(false);
   const [reviewedBannerDismissed, setReviewedBannerDismissed] = useState(false);
+  type StudyStats = { dueCount: number; newCount: number; flaggedCount: number };
+  const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -88,6 +90,19 @@ export default function DeckDetailPage() {
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !deck) return;
+    const ac = new AbortController();
+    setStudyStats(null);
+    apiClient
+      .get<{ success: boolean; data?: StudyStats }>(`/api/decks/${id}/study-stats`, { signal: ac.signal })
+      .then((res) => {
+        if (res.data?.success && res.data.data) setStudyStats(res.data.data);
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [id, deck]);
 
   useEffect(() => {
     if (!id || !deck) return;
@@ -465,6 +480,26 @@ export default function DeckDetailPage() {
         <p className="mt-3 text-sm text-[var(--mc-text-secondary)]">
           {cardsLoading ? tc('loading') : ta('deckSummaryCardCount', { vars: { count: String(cards.length) } })}
         </p>
+        {studyStats !== null && (
+          <p className="mt-1.5 text-sm text-[var(--mc-text-secondary)]">
+            {(ta('deckStudyDueCount', { vars: { due: String(studyStats.dueCount) } }))}
+            {' · '}
+            {(ta('deckStudyNewCount', { vars: { newCount: String(studyStats.newCount) } }))}
+            {studyStats.flaggedCount > 0 && (
+              <>
+                {' · '}
+                {(ta('deckStudyFlaggedCount', { vars: { count: String(studyStats.flaggedCount) } }))}
+                {' — '}
+                <Link
+                  href={`/${locale}/app/flagged-cards${id ? `?deckId=${encodeURIComponent(id)}` : ''}`}
+                  className="font-medium text-[var(--mc-accent-primary)] underline hover:no-underline"
+                >
+                  {ta('deckStudyManageFlagged')}
+                </Link>
+              </>
+            )}
+          </p>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
             href={`/${locale}/app/decks/${id}/study`}

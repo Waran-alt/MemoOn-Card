@@ -113,4 +113,58 @@ describe('CardFlagService', () => {
       );
     });
   });
+
+  describe('getFlagCount', () => {
+    it('returns count with no filters', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '5' }])
+      );
+
+      const result = await service.getFlagCount(mockUserId, {});
+
+      expect(result).toBe(5);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('COUNT(*)'),
+        [mockUserId]
+      );
+    });
+
+    it('filters by deckId when provided', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '2' }])
+      );
+
+      const result = await service.getFlagCount(mockUserId, { deckId: 'deck-abc' });
+
+      expect(result).toBe(2);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('c.deck_id = $2'),
+        [mockUserId, 'deck-abc']
+      );
+    });
+
+    it('filters by resolved when provided', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '1' }])
+      );
+
+      const result = await service.getFlagCount(mockUserId, { resolved: false });
+
+      expect(result).toBe(1);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('f.resolved = $2'),
+        [mockUserId, false]
+      );
+    });
+
+    it('returns 0 when no rows', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '0' }])
+      );
+
+      const result = await service.getFlagCount(mockUserId, {});
+
+      expect(result).toBe(0);
+    });
+  });
 });

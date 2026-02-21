@@ -33,6 +33,8 @@ const {
     createCard: vi.fn(),
     updateCard: vi.fn(),
     deleteCard: vi.fn(),
+    getDueCount: vi.fn(),
+    getNewCount: vi.fn(),
     getDueCards: vi.fn(),
     getNewCards: vi.fn(),
     resetCardStability: vi.fn(),
@@ -51,6 +53,7 @@ const {
   },
   cardFlagServiceMock: {
     createFlag: vi.fn(),
+    getFlagCount: vi.fn(),
   },
 }));
 
@@ -408,6 +411,24 @@ describe('Deck/Card/Review routes', () => {
       expect(res.body.data[0].id).toBe(mockCardId);
       expect(res.body.data[0].next_review).toBe(dueDate.toISOString());
       expect(cardServiceMock.getDueCards).toHaveBeenCalledWith(mockDeckId, mockUserId);
+    });
+
+    it('returns study-stats for a deck (due, new, flagged counts)', async () => {
+      cardServiceMock.getDueCount.mockResolvedValueOnce(5);
+      cardServiceMock.getNewCount.mockResolvedValueOnce(2);
+      cardFlagServiceMock.getFlagCount.mockResolvedValueOnce(1);
+
+      const res = await request(app).get(`/api/decks/${mockDeckId}/study-stats`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual({ dueCount: 5, newCount: 2, flaggedCount: 1 });
+      expect(cardServiceMock.getDueCount).toHaveBeenCalledWith(mockDeckId, mockUserId);
+      expect(cardServiceMock.getNewCount).toHaveBeenCalledWith(mockDeckId, mockUserId);
+      expect(cardFlagServiceMock.getFlagCount).toHaveBeenCalledWith(mockUserId, {
+        deckId: mockDeckId,
+        resolved: false,
+      });
     });
 
     it('gets new cards for a deck with default limit', async () => {

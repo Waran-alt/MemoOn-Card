@@ -16,7 +16,7 @@ export class CardService {
     userId: string
   ): Promise<Card[]> {
     const result = await pool.query<Card>(
-      'SELECT * FROM cards WHERE deck_id = $1 AND user_id = $2 ORDER BY created_at DESC',
+      'SELECT * FROM cards WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC',
       [deckId, userId]
     );
     return result.rows;
@@ -172,6 +172,32 @@ export class CardService {
       ]
     );
     return result.rows[0] || null;
+  }
+
+  /**
+   * Get due card count for a deck (for study-stats)
+   */
+  async getDueCount(deckId: string, userId: string): Promise<number> {
+    const result = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM cards
+       WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL
+         AND next_review <= CURRENT_TIMESTAMP`,
+      [deckId, userId]
+    );
+    return parseInt(result.rows[0]?.count ?? '0', 10);
+  }
+
+  /**
+   * Get new card count for a deck (for study-stats)
+   */
+  async getNewCount(deckId: string, userId: string): Promise<number> {
+    const result = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM cards
+       WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL
+         AND stability IS NULL`,
+      [deckId, userId]
+    );
+    return parseInt(result.rows[0]?.count ?? '0', 10);
   }
 
   /**

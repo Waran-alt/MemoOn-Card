@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
+import { useSearchParams } from 'next/navigation';
 import { useApiGet } from '@/hooks/useApiGet';
 import apiClient, { getApiErrorMessage } from '@/lib/api';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -21,13 +22,19 @@ interface FlagWithCard {
 
 export default function FlaggedCardsPage() {
   const { locale } = useLocale();
+  const searchParams = useSearchParams();
+  const deckId = searchParams.get('deckId') ?? '';
   const { t: tc } = useTranslation('common', locale);
   const { t: ta } = useTranslation('app', locale);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState('');
 
+  const flagsUrl = useMemo(
+    () => `/api/cards/flags?resolved=false${deckId ? `&deckId=${encodeURIComponent(deckId)}` : ''}`,
+    [deckId]
+  );
   const { data: flags, loading, error, refetch } = useApiGet<FlagWithCard[]>(
-    '/api/cards/flags?resolved=false',
+    flagsUrl,
     { errorFallback: ta('flaggedCardsLoadError') }
   );
 

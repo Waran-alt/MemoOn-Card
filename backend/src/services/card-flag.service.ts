@@ -46,6 +46,33 @@ export class CardFlagService {
     return result.rows[0] || null;
   }
 
+  /**
+   * Get count of flags (for study-stats), optionally filtered by deck and resolved.
+   */
+  async getFlagCount(userId: string, options: ListFlagsOptions = {}): Promise<number> {
+    const { deckId, resolved } = options;
+    const conditions: string[] = ['f.user_id = $1'];
+    const params: (string | number | boolean)[] = [userId];
+    let paramIndex = 2;
+    if (deckId !== undefined) {
+      conditions.push(`c.deck_id = $${paramIndex++}`);
+      params.push(deckId);
+    }
+    if (resolved !== undefined) {
+      conditions.push(`f.resolved = $${paramIndex++}`);
+      params.push(resolved);
+    }
+    const result = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count
+       FROM card_flags f
+       JOIN cards c ON c.id = f.card_id AND c.deleted_at IS NULL
+       JOIN decks d ON d.id = c.deck_id AND d.deleted_at IS NULL
+       WHERE ${conditions.join(' AND ')}`,
+      params
+    );
+    return parseInt(result.rows[0]?.count ?? '0', 10);
+  }
+
   async listFlags(userId: string, options: ListFlagsOptions = {}): Promise<FlagWithCard[]> {
     const { deckId, resolved, limit = 100 } = options;
     const conditions: string[] = ['f.user_id = $1'];

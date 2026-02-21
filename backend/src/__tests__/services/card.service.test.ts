@@ -365,6 +365,66 @@ describe('CardService', () => {
     });
   });
 
+  describe('getDueCount', () => {
+    it('should return count of due cards', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '7' }])
+      );
+
+      const result = await cardService.getDueCount(mockDeckId, mockUserId);
+
+      expect(result).toBe(7);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('COUNT(*)'),
+        [mockDeckId, mockUserId]
+      );
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('next_review <= CURRENT_TIMESTAMP'),
+        [mockDeckId, mockUserId]
+      );
+    });
+
+    it('should return 0 when no rows', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '0' }])
+      );
+
+      const result = await cardService.getDueCount(mockDeckId, mockUserId);
+
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('getNewCount', () => {
+    it('should return count of new cards', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '3' }])
+      );
+
+      const result = await cardService.getNewCount(mockDeckId, mockUserId);
+
+      expect(result).toBe(3);
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('COUNT(*)'),
+        [mockDeckId, mockUserId]
+      );
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('stability IS NULL'),
+        [mockDeckId, mockUserId]
+      );
+    });
+
+    it('should return 0 when no rows', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        createMockQueryResult([{ count: '0' }])
+      );
+
+      const result = await cardService.getNewCount(mockDeckId, mockUserId);
+
+      expect(result).toBe(0);
+    });
+  });
+
   describe('getDueCards', () => {
     it('should return cards that are due for review', async () => {
       const dueDate = new Date(Date.now() - 1000); // Past date

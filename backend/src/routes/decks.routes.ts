@@ -9,11 +9,13 @@ import { CreateCardSchema, GetCardsQuerySchema } from '@/schemas/card.schemas';
 import { NotFoundError } from '@/utils/errors';
 import { API_LIMITS } from '@/constants/app.constants';
 import { CardJourneyService } from '@/services/card-journey.service';
+import { CardFlagService } from '@/services/card-flag.service';
 
 const router = Router();
 const deckService = new DeckService();
 const cardService = new CardService();
 const cardJourneyService = new CardJourneyService();
+const cardFlagService = new CardFlagService();
 
 /**
  * GET /api/decks
@@ -92,6 +94,24 @@ router.get('/:id/stats', validateParams(DeckIdSchema), asyncHandler(async (req, 
   const deckId = String(req.params.id);
   const stats = await deckService.getDeckStats(deckId, userId);
   return res.json({ success: true, data: stats });
+}));
+
+/**
+ * GET /api/decks/:id/study-stats
+ * Counts for pre-study overview: due, new, flagged (unresolved) in this deck
+ */
+router.get('/:id/study-stats', validateParams(DeckIdSchema), asyncHandler(async (req, res) => {
+  const userId = getUserId(req);
+  const deckId = String(req.params.id);
+  const [dueCount, newCount, flaggedCount] = await Promise.all([
+    cardService.getDueCount(deckId, userId),
+    cardService.getNewCount(deckId, userId),
+    cardFlagService.getFlagCount(userId, { deckId, resolved: false }),
+  ]);
+  return res.json({
+    success: true,
+    data: { dueCount, newCount, flaggedCount },
+  });
 }));
 
 /**
