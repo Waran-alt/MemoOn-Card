@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
 import { useAuthStore } from '@/store/auth.store';
@@ -10,7 +9,6 @@ import type { AuthApiResponse } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
 
 export default function LoginPage() {
-  const router = useRouter();
   const { locale } = useLocale();
   const { t: tc } = useTranslation('common', locale);
   const { t: ta } = useTranslation('app', locale);
@@ -36,7 +34,8 @@ export default function LoginPage() {
 
       if (data?.success && 'data' in data && data.data?.accessToken && data.data?.user) {
         setAuthSuccess({ accessToken: data.data.accessToken, user: data.data.user });
-        router.push(`/${locale}/app`);
+        // Full navigation so the browser commits the refresh_token cookie before the next request (avoids redirect back to login).
+        window.location.href = `/${locale}/app`;
         return;
       }
       setError('error' in data && typeof data.error === 'string' ? data.error : tc('loginFailed'));

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
 import { useAuthStore } from '@/store/auth.store';
@@ -13,7 +12,6 @@ import { VALIDATION_LIMITS } from '@memoon-card/shared';
 const { PASSWORD_MIN_LENGTH } = VALIDATION_LIMITS;
 
 export default function RegisterPage() {
-  const router = useRouter();
   const { locale } = useLocale();
   const { t: tc } = useTranslation('common', locale);
   const setAuthSuccess = useAuthStore((s) => s.setAuthSuccess);
@@ -44,7 +42,7 @@ export default function RegisterPage() {
 
       if (data?.success && 'data' in data && data.data?.accessToken && data.data?.user) {
         setAuthSuccess({ accessToken: data.data.accessToken, user: data.data.user });
-        router.push(`/${locale}/app`);
+        window.location.href = `/${locale}/app`;
         return;
       }
       setError('error' in data && typeof data.error === 'string' ? data.error : tc('invalidResponse'));
