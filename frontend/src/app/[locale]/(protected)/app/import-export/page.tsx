@@ -75,13 +75,17 @@ function getPreviewItems(cards: ExportCardItem[], maxCards: number): PreviewItem
   let pairNum = 0;
   for (let i = 0; i < cards.length && used.size < maxCards; i++) {
     if (used.has(i)) continue;
-    const key = (cards[i].pairId && cards[i].pairId.trim()) ? cards[i].pairId : `__single_${i}`;
+    const card = cards[i];
+    if (!card) continue;
+    const key = (card.pairId && card.pairId.trim()) ? card.pairId : `__single_${i}`;
     const isPair = key.startsWith('__single_') === false;
     let pairPartner: number | null = null;
     if (isPair) {
       for (let j = i + 1; j < cards.length; j++) {
         if (used.has(j)) continue;
-        const k = (cards[j].pairId && cards[j].pairId.trim()) ? cards[j].pairId : `__single_${j}`;
+        const c = cards[j];
+        if (!c) continue;
+        const k = (c.pairId && c.pairId.trim()) ? c.pairId : `__single_${j}`;
         if (k === key) {
           pairPartner = j;
           break;
@@ -89,12 +93,18 @@ function getPreviewItems(cards: ExportCardItem[], maxCards: number): PreviewItem
       }
     }
     if (pairPartner !== null) {
-      pairNum += 1;
-      items.push({ type: 'pair', pairNum, cards: [cards[i], cards[pairPartner]] });
-      used.add(i);
-      used.add(pairPartner);
+      const partner = cards[pairPartner];
+      if (partner) {
+        pairNum += 1;
+        items.push({ type: 'pair', pairNum, cards: [card, partner] });
+        used.add(i);
+        used.add(pairPartner);
+      } else {
+        items.push({ type: 'single', card, index: i });
+        used.add(i);
+      }
     } else {
-      items.push({ type: 'single', card: cards[i], index: i });
+      items.push({ type: 'single', card, index: i });
       used.add(i);
     }
   }
