@@ -100,23 +100,25 @@ Pour un dépôt privé, configurer une [clé de déploiement SSH Hostinger](http
 
 ### Si le déploiement n’applique pas les changements
 
-L’action GitHub envoie à Hostinger l’URL du `docker-compose` au commit déclencheur ; le VPS peut toutefois conserver un ancien clone ou réutiliser des images Docker en cache. Si après un push réussi le site ne reflète pas les modifications :
+Même lorsque Hostinger affiche « redéploiement en cours » après un push, le site peut continuer à tourner avec l’ancien code (cache du build côté Hostinger). Par ailleurs, **sur beaucoup d’installations Hostinger, le dossier du projet sur le VPS (ex. `/docker/memoon-card`) n’est pas un dépôt git** : il contient `docker-compose.yml`, `backend/`, `frontend/`, etc., déposés par le Docker Manager, sans `.git`. On ne peut donc pas faire de `git pull` sur le VPS dans ce cas.
 
-1. **Connectez-vous au VPS en SSH** (terminal Hostinger ou `ssh`).
-2. **Repérez le dossier du projet** (souvent `/docker/memoon-card`) :
-   ```bash
-   find / -type d -name "*memoon*" 2>/dev/null
-   ```
-3. **Récupérez le code et reconstruisez sans cache** (remplacez `main` par `master` si besoin) :
-   ```bash
-   cd /docker/memoon-card
-   git fetch origin main
-   git reset --hard origin/main
-   docker compose -f docker-compose.prod.yml build --no-cache
-   docker compose -f docker-compose.prod.yml up -d
-   ```
-   Ne pas utiliser `down -v` ici pour ne pas supprimer le volume Postgres (données conservées).
-4. Si le projet n’est pas dans un dépôt git sur le VPS (déploiement uniquement via l’API Hostinger), le recours est de relancer un déploiement depuis l’interface Hostinger (bouton « Redeploy » ou équivalent) ou de contacter le support pour vérifier que le bon commit est bien déployé.
+**Si le dossier projet n’est pas un repo git** (vérifier avec `ls -la /docker/memoon-card` : pas de dossier `.git`) :
+
+- Le build est fait par Hostinger à partir de GitHub. Pour forcer une mise à jour :
+  1. Dans le **panel Hostinger** (hPanel → VPS → Docker ou projet memoon-card), chercher une option **« Redeploy »**, **« Rebuild »** ou **« Clear cache »** et relancer un déploiement.
+  2. Si rien ne change, **contacter le support Hostinger** en précisant que les nouveaux commits GitHub ne sont pas reflétés après « redéploiement en cours », et demander comment forcer un build depuis le dernier commit (sans cache).
+- **Vérification rapide (SSH)** : `docker exec memoon-card-frontend-prod env | grep -E 'NEXT_PUBLIC_APP_VERSION|GIT_SHA'` — la version affichée en bas à gauche de l’app est lue au **runtime** via `/api/version` (variables `NEXT_PUBLIC_APP_VERSION` ou `GIT_SHA`). Si rien n’apparaît alors que la variable est dans le panel, c’est qu’elle n’est peut‑être passée qu’au **build** et pas au conteneur en cours d’exécution ; demander à Hostinger que les variables du panel soient bien injectées dans le conteneur au runtime.
+
+**Si au contraire le projet sur le VPS est un clone git** (présence de `.git`) :
+
+- Vous pouvez mettre à jour le code puis reconstruire à la main :
+  ```bash
+  cd /docker/memoon-card
+  git fetch origin main && git reset --hard origin/main
+  docker compose -f docker-compose.prod.yml build --no-cache
+  docker compose -f docker-compose.prod.yml up -d
+  ```
+  (Adapter le nom du fichier compose si besoin, ex. `docker-compose.yml`.) Ne pas utiliser `down -v` pour conserver les données Postgres.
 
 ## Réinitialiser la base Postgres et libérer l’espace disque (SSH)
 
@@ -130,19 +132,19 @@ Sous Hostinger, le dépôt est en général dans **`/docker/memoon-card`**. Pour
 find / -type d -name "*memoon*" 2>/dev/null
 ```
 
-Le répertoire du projet est celui qui contient (ou devrait contenir) `docker-compose.prod.yml` ; sur beaucoup d’installations c’est `/docker/memoon-card`. Attention : après un déploiement, ce dossier peut ne pas contenir `docker-compose.prod.yml` (le workflow peut déployer depuis un autre contexte). Dans ce cas, on supprime uniquement le volume (méthode 2 ci-dessous).
+Le répertoire du projet est en général `/docker/memoon-card`. Hostinger peut y déposer `docker-compose.yml` (et non `docker-compose.prod.yml`) ; le dossier n’est souvent pas un clone git (pas de `.git`). Si le compose attendu n’est pas présent, on supprime uniquement le volume (méthode 2 ci-dessous).
 
-### Méthode 1 : Avec le compose (si docker-compose.prod.yml est présent)
+### Méthode 1 : Avec le compose (réinitialiser la base)
 
-Si dans le dossier du projet vous avez bien `docker-compose.prod.yml` (après un `git pull` si besoin) :
+Si dans le dossier du projet vous avez le fichier compose (souvent `docker-compose.yml` ou `docker-compose.prod.yml`) :
 
 ```bash
 cd /docker/memoon-card
-git pull origin main   # ou master, selon votre branche
-docker compose -f docker-compose.prod.yml down -v
+docker compose -f docker-compose.yml down -v
+# ou : docker compose -f docker-compose.prod.yml down -v
 ```
 
-Cela arrête les conteneurs du stack et supprime les volumes définis dans ce compose (dont le volume Postgres). Ensuite, redéployez depuis GitHub.
+Cela arrête les conteneurs du stack et supprime les volumes (dont Postgres). Ensuite, redéployez depuis le panel Hostinger ou GitHub.
 
 ### Méthode 2 : Supprimer uniquement le volume Postgres (recommandé si pas de compose sur le VPS)
 

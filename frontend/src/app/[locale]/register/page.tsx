@@ -42,8 +42,7 @@ export default function RegisterPage() {
 
       if (data?.success && 'data' in data && data.data?.accessToken && data.data?.user) {
         setAuthSuccess({ accessToken: data.data.accessToken, user: data.data.user });
-        const target = `${window.location.origin}/${locale}/app`;
-        setTimeout(() => { window.location.href = target; }, 150);
+        window.location.href = `/${locale}/app`;
         return;
       }
       setError('error' in data && typeof data.error === 'string' ? data.error : tc('invalidResponse'));

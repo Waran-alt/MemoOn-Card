@@ -34,9 +34,7 @@ export default function LoginPage() {
 
       if (data?.success && 'data' in data && data.data?.accessToken && data.data?.user) {
         setAuthSuccess({ accessToken: data.data.accessToken, user: data.data.user });
-        // Brief delay so the browser commits the refresh_token cookie before the next request.
-        const target = `${window.location.origin}/${locale}/app`;
-        setTimeout(() => { window.location.href = target; }, 150);
+        window.location.href = `/${locale}/app`;
         return;
       }
       setError('error' in data && typeof data.error === 'string' ? data.error : tc('loginFailed'));

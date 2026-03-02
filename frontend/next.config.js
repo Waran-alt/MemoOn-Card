@@ -23,7 +23,11 @@ const nextConfig = {
       // If no valid backend URL, skip rewrites (client will use NEXT_PUBLIC_API_URL)
       return [];
     }
-    return [{ source: '/api/:path*', destination: `${backend}/api/:path*` }];
+    // /api/version is handled by Next.js (runtime env for version display); rest goes to backend
+    return [
+      { source: '/api/version', destination: '/api/version' },
+      { source: '/api/:path*', destination: `${backend}/api/:path*` },
+    ];
   },
   // Shared is pre-built to dist/ (see build:shared); no transpilePackages needed
   // Prevent infinite reload in Docker (--webpack forces webpack so this applies)
