@@ -33,6 +33,17 @@ const REVERSE_PAIR_MIN_TIME_MS = STUDY_INTERVAL.MIN_INTERVAL_MINUTES * 60 * 1000
 const STUDY_SESSION_STORAGE_KEY_PREFIX = 'memoon_study_session_';
 const STUDY_SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
+/** Format ms as m:ss or h:mm:ss for study timers. */
+function formatStudyDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 interface SavedStudySession {
   deckId: string;
   sessionId: string;
@@ -160,6 +171,7 @@ export default function StudyPage() {
   const [queue, setQueue] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showQuestion, setShowQuestion] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
   const [needManage, setNeedManage] = useState(false);
   const [flagSubmitting, setFlagSubmitting] = useState(false);
@@ -177,11 +189,8 @@ export default function StudyPage() {
   const sessionIdRef = useRef(crypto.randomUUID());
   const sequenceRef = useRef(0);
   const reviewedCardIdsRef = useRef<string[]>([]);
-  /** When each card was last shown (for reverse-pair 1‑min gap). */
+  /** When each card was last shown (for reverse-pair 1‑min gap and review payload). */
   const lastShownAtRef = useRef<Record<string, number>>({});
-  /** Delay (ms) before considering a card "actually shown" for events and replay. */
-  const CARD_SHOWN_CONFIRM_MS = 200;
-  const cardShownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueRef = useRef<Card[]>([]);
   queueRef.current = queue;
 
@@ -200,9 +209,15 @@ export default function StudyPage() {
 
   const [isPaused, setIsPaused] = useState(false);
   const [sessionEndedByAway, setSessionEndedByAway] = useState(false);
+  const [sessionElapsedMs, setSessionElapsedMs] = useState(0);
+  const [cardElapsedMs, setCardElapsedMs] = useState(0);
   const hiddenAtRef = useRef<number | null>(null);
   const totalPausedMsRef = useRef(0);
   const sessionStartRef = useRef<number | null>(null);
+  /** Timestamp when user clicked "Show answer" for the current card; avoids rating_submitted before answer_revealed when click is fast. */
+  const answerRevealedAtRef = useRef<number | null>(null);
+  /** When the current card became active (effect run); fallback for shownAt if user rates before card_shown timeout. */
+  const cardBecameCurrentAtRef = useRef<number | null>(null);
 
   const sessionSize = parseSessionSize(searchParams.get('sessionSize'));
   const sessionLimit = getSessionLimit(sessionSize);
@@ -261,6 +276,11 @@ export default function StudyPage() {
     setNeedManage(false);
     setShowOtherNoteInput(false);
     setOtherNote('');
+    setShowQuestion(false);
+    setShowAnswer(false);
+    setCardElapsedMs(0);
+    answerRevealedAtRef.current = null;
+    cardBecameCurrentAtRef.current = null;
   }, [currentCard?.id]);
 
   const reversePairMinGapMs = Math.max(
@@ -275,28 +295,11 @@ export default function StudyPage() {
     }
   }, [queue.length, emitStudyEvent]);
 
-  // Emit card_shown and record lastShownAt only after the card has been on screen for CARD_SHOWN_CONFIRM_MS (e.g. 200ms).
-  // If the queue is reordered before that (e.g. blocked card swapped), we never emit — the user never saw it.
+  // Card became current: record time for fallbacks. card_shown is emitted when user clicks "Afficher la question".
   useEffect(() => {
-    if (cardShownTimeoutRef.current != null) {
-      clearTimeout(cardShownTimeoutRef.current);
-      cardShownTimeoutRef.current = null;
-    }
     if (!currentCard?.id) return;
-    const cardId = currentCard.id;
-    cardShownTimeoutRef.current = setTimeout(() => {
-      cardShownTimeoutRef.current = null;
-      if (queueRef.current[0]?.id !== cardId) return;
-      emitStudyEvent('card_shown', { queueSize: queueRef.current.length }, cardId);
-      lastShownAtRef.current[cardId] = Date.now();
-    }, CARD_SHOWN_CONFIRM_MS);
-    return () => {
-      if (cardShownTimeoutRef.current != null) {
-        clearTimeout(cardShownTimeoutRef.current);
-        cardShownTimeoutRef.current = null;
-      }
-    };
-  }, [currentCard?.id, emitStudyEvent]);
+    cardBecameCurrentAtRef.current = Date.now();
+  }, [currentCard?.id]);
 
   // Enforce min time gap between the two cards of a reverse pair (≥ 1 min, or user's Short-FSRS min interval); if no card can be shown, end session
   useEffect(() => {
@@ -325,6 +328,30 @@ export default function StudyPage() {
       sessionStartRef.current = Date.now();
     }
   }, [queue.length]);
+
+  // Timers: session and per-card elapsed (pause excluded when tab hidden)
+  useEffect(() => {
+    const tick = () => {
+      const now = Date.now();
+      const currentPauseMs =
+        typeof document !== 'undefined' && document.hidden && hiddenAtRef.current != null
+          ? now - hiddenAtRef.current
+          : 0;
+      if (sessionStartRef.current != null) {
+        const sessionMs = Math.max(0, now - sessionStartRef.current - totalPausedMsRef.current - currentPauseMs);
+        setSessionElapsedMs(sessionMs);
+      }
+      if (cardBecameCurrentAtRef.current != null) {
+        const cardMs = Math.max(0, now - cardBecameCurrentAtRef.current - currentPauseMs);
+        setCardElapsedMs(cardMs);
+      } else {
+        setCardElapsedMs(0);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [currentCard?.id, queue.length]);
 
   // Pause/resume/auto-end: < 5s nothing; 5s–threshold pause and offer resume; > threshold end session.
   useEffect(() => {
@@ -561,8 +588,10 @@ export default function StudyPage() {
     if (!card || submitting) return;
     setSubmitting(true);
     setReviewError('');
-    const shownAt = Date.now() - 60 * 1000;
-    const revealedAt = showAnswer ? Date.now() : undefined;
+    const now = Date.now();
+    // Use refs set at event time so payload timestamps match actual UI moments (no fake "60s ago" — that could put rating_submitted before answer_revealed).
+    const shownAt = lastShownAtRef.current[card.id] ?? cardBecameCurrentAtRef.current ?? now;
+    const revealedAt = answerRevealedAtRef.current ?? (showAnswer ? now : undefined);
     const payload = {
       rating,
       shownAt,
@@ -832,52 +861,96 @@ export default function StudyPage() {
           )}
         </div>
       )}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <button type="button" onClick={goToDeck} className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)">
           ← {ta('exitStudy')}
         </button>
-        <span className="text-sm text-(--mc-text-secondary)">
-          {queue.length} left · {reviewedCount} reviewed
-        </span>
+        <div className="flex items-center gap-4 text-sm text-(--mc-text-secondary)">
+          <span title={ta('studyTimerSession')}>
+            {ta('studyTimerSession')}: <span className="font-mono tabular-nums">{formatStudyDuration(sessionElapsedMs)}</span>
+          </span>
+          {currentCard && (
+            <span title={ta('studyTimerCard')}>
+              {ta('studyTimerCard')}: <span className="font-mono tabular-nums">{formatStudyDuration(cardElapsedMs)}</span>
+            </span>
+          )}
+          <span>
+            {queue.length} left · {reviewedCount} reviewed
+          </span>
+        </div>
       </div>
 
       <div className="min-h-[280px] rounded-xl border p-8 shadow-sm">
-        <p className="whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
-          {card.recto}
-        </p>
-        {showAnswer && (
+        {!showQuestion ? (
           <>
+            <p className="text-sm text-(--mc-text-secondary)">
+              {ta('studyShowQuestionHint')}
+            </p>
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!card?.id) return;
+                  const at = Date.now();
+                  lastShownAtRef.current[card.id] = at;
+                  emitStudyEvent('card_shown', { queueSize: queueRef.current.length }, card.id);
+                  setShowQuestion(true);
+                }}
+                className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100"
+              >
+                {ta('showQuestion')}
+              </button>
+            </div>
+          </>
+        ) : !showAnswer ? (
+          <>
+            <p className="text-xs font-medium uppercase tracking-wide text-(--mc-text-muted)">
+              {ta('studyStepQuestion')}
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
+              {card.recto}
+            </p>
+            <div className="mt-6 space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const at = Date.now();
+                  answerRevealedAtRef.current = at;
+                  emitStudyEvent('answer_revealed', undefined, card?.id);
+                  setShowAnswer(true);
+                }}
+                className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100"
+              >
+                {ta('showAnswer')}
+              </button>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-(--mc-text-secondary)">
+                <input
+                  type="checkbox"
+                  checked={needManage}
+                  onChange={(e) => setNeedManage(e.target.checked)}
+                  className="rounded border-(--mc-border-subtle)"
+                  aria-label={ta('needManagement')}
+                />
+                {ta('needManagement')}
+              </label>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-xs font-medium uppercase tracking-wide text-(--mc-text-muted)">
+              {ta('studyStepQuestion')}
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
+              {card.recto}
+            </p>
             <hr className="my-4 border-(--mc-border-subtle)" aria-hidden />
-            <p className="whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
+            <p className="text-xs font-medium uppercase tracking-wide text-(--mc-text-muted)">
+              {ta('studyStepAnswer')}
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
               {card.verso}
             </p>
-          </>
-        )}
-        {!showAnswer ? (
-          <div className="mt-6 space-y-3">
-            <button
-              type="button"
-              onClick={() => {
-                emitStudyEvent('answer_revealed', undefined, card?.id);
-                setShowAnswer(true);
-              }}
-              className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100"
-            >
-              {ta('showAnswer')}
-            </button>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-(--mc-text-secondary)">
-              <input
-                type="checkbox"
-                checked={needManage}
-                onChange={(e) => setNeedManage(e.target.checked)}
-                className="rounded border-(--mc-border-subtle)"
-                aria-label={ta('needManagement')}
-              />
-              {ta('needManagement')}
-            </label>
-          </div>
-        ) : (
-          <div className="mt-6 space-y-4">
+            <div className="mt-6 space-y-4">
             <div className="flex flex-wrap gap-2">
               {([1, 2, 3, 4] as Rating[]).map((r) => (
                 <button
@@ -901,60 +974,60 @@ export default function StudyPage() {
               />
               {ta('needManagement')}
             </label>
-            {needManage && (
-              <div className="space-y-2 rounded border border-(--mc-border-subtle) bg-(--mc-bg-card)/50 p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-(--mc-text-secondary)">{ta('addNote')}:</span>
-                  {FLAG_REASONS.map(({ code, labelKey }) => (
-                    code === 'other' ? (
-                      <button
-                        key={code}
-                        type="button"
-                        disabled={flagSubmitting}
-                        onClick={() => setShowOtherNoteInput(true)}
-                        className="rounded border border-(--mc-border-subtle) px-2 py-1 text-xs font-medium hover:bg-(--mc-bg-card) disabled:opacity-50"
-                      >
-                        {ta(labelKey)}
-                      </button>
-                    ) : (
-                      <button
-                        key={code}
-                        type="button"
-                        disabled={flagSubmitting}
-                        onClick={() => handleFlagCard(code)}
-                        className="rounded border border-(--mc-border-subtle) px-2 py-1 text-xs font-medium hover:bg-(--mc-bg-card) disabled:opacity-50"
-                      >
-                        {ta(labelKey)}
-                      </button>
-                    )
-                  ))}
-                </div>
-                {showOtherNoteInput && (
-                  <div className="flex flex-col gap-2 border-t border-(--mc-border-subtle) pt-2">
-                    <label className="text-xs font-medium text-(--mc-text-secondary)">
-                      {ta('managementReasonCustomPlaceholder')}
-                    </label>
-                    <textarea
-                      value={otherNote}
-                      onChange={(e) => setOtherNote(e.target.value)}
-                      placeholder={ta('managementReasonCustomPlaceholder')}
-                      rows={2}
-                      className="w-full rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1.5 text-sm text-(--mc-text-primary) resize-y"
-                      maxLength={500}
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={flagSubmitting}
-                        onClick={async () => {
-                          await handleFlagCard('other', otherNote);
-                          setShowOtherNoteInput(false);
-                          setOtherNote('');
-                        }}
-                        className="rounded bg-(--mc-accent-primary) px-3 py-1.5 text-sm font-medium text-white opacity-90 hover:opacity-100 disabled:opacity-50"
-                      >
-                        {tc('save')}
-                      </button>
+              {needManage && (
+                <div className="space-y-2 rounded border border-(--mc-border-subtle) bg-(--mc-bg-card)/50 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-(--mc-text-secondary)">{ta('addNote')}:</span>
+                    {FLAG_REASONS.map(({ code, labelKey }) => (
+                      code === 'other' ? (
+                        <button
+                          key={code}
+                          type="button"
+                          disabled={flagSubmitting}
+                          onClick={() => setShowOtherNoteInput(true)}
+                          className="rounded border border-(--mc-border-subtle) px-2 py-1 text-xs font-medium hover:bg-(--mc-bg-card) disabled:opacity-50"
+                        >
+                          {ta(labelKey)}
+                        </button>
+                      ) : (
+                        <button
+                          key={code}
+                          type="button"
+                          disabled={flagSubmitting}
+                          onClick={() => handleFlagCard(code)}
+                          className="rounded border border-(--mc-border-subtle) px-2 py-1 text-xs font-medium hover:bg-(--mc-bg-card) disabled:opacity-50"
+                        >
+                          {ta(labelKey)}
+                        </button>
+                      )
+                    ))}
+                  </div>
+                  {showOtherNoteInput && (
+                    <div className="flex flex-col gap-2 border-t border-(--mc-border-subtle) pt-2">
+                      <label className="text-xs font-medium text-(--mc-text-secondary)">
+                        {ta('managementReasonCustomPlaceholder')}
+                      </label>
+                      <textarea
+                        value={otherNote}
+                        onChange={(e) => setOtherNote(e.target.value)}
+                        placeholder={ta('managementReasonCustomPlaceholder')}
+                        rows={2}
+                        className="w-full rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1.5 text-sm text-(--mc-text-primary) resize-y"
+                        maxLength={500}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={flagSubmitting}
+                          onClick={async () => {
+                            await handleFlagCard('other', otherNote);
+                            setShowOtherNoteInput(false);
+                            setOtherNote('');
+                          }}
+                          className="rounded bg-(--mc-accent-primary) px-3 py-1.5 text-sm font-medium text-white opacity-90 hover:opacity-100 disabled:opacity-50"
+                        >
+                          {tc('save')}
+                        </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -991,7 +1064,8 @@ export default function StudyPage() {
                 <li><strong className="text-(--mc-text-secondary)">{ta('easy')}:</strong> {ta('studyRatingEasyDesc')}</li>
               </ul>
             </details>
-          </div>
+            </div>
+          </>
         )}
       </div>
 
