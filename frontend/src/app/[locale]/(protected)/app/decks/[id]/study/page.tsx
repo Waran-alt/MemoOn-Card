@@ -338,7 +338,10 @@ export default function StudyPage() {
         setSessionElapsedMs(sessionMs);
       }
       if (cardBecameCurrentAtRef.current != null) {
-        const cardMs = Math.max(0, now - cardBecameCurrentAtRef.current - currentPauseMs);
+        const endMs = answerRevealedAtRef.current ?? now;
+        const cardMs = answerRevealedAtRef.current != null
+          ? Math.max(0, endMs - cardBecameCurrentAtRef.current)
+          : Math.max(0, now - cardBecameCurrentAtRef.current - currentPauseMs);
         setCardElapsedMs(cardMs);
       } else {
         setCardElapsedMs(0);
@@ -907,7 +910,7 @@ export default function StudyPage() {
             <p className="mt-2 whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
               {card.recto}
             </p>
-            <div className="mt-6 space-y-3">
+            <div className="mt-6">
               <button
                 type="button"
                 onClick={() => {
@@ -920,16 +923,6 @@ export default function StudyPage() {
               >
                 {ta('showAnswer')}
               </button>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-(--mc-text-secondary)">
-                <input
-                  type="checkbox"
-                  checked={needManage}
-                  onChange={(e) => setNeedManage(e.target.checked)}
-                  className="rounded border-(--mc-border-subtle)"
-                  aria-label={ta('needManagement')}
-                />
-                {ta('needManagement')}
-              </label>
             </div>
           </>
         ) : (
