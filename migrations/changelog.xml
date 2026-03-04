@@ -44,6 +44,7 @@
     <include file="changesets/037-user-settings-backfill-all-users.xml" relativeToChangelogFile="true"/>
     <include file="changesets/038-review-logs-scheduled-days-precision.xml" relativeToChangelogFile="true"/>
     <include file="changesets/039-drop-learning-deprecated-columns.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/040-backfill-rating-journey-events.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
 

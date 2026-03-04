@@ -452,7 +452,7 @@ export class ReviewService {
           learningState,
         };
 
-      await this.logReview(
+      const reviewLogId = await this.logReview(
         client,
         cardId,
         userId,
@@ -462,6 +462,47 @@ export class ReviewService {
         undefined,
         reviewState,
         timing
+      );
+
+      await this.studyEventsService.logEvents(userId, [
+        {
+          eventType: 'rating_submitted',
+          clientEventId: timing?.clientEventId,
+          sessionId: timing?.sessionId,
+          cardId,
+          deckId: card.deck_id,
+          occurredAtClient: timing?.revealedAt ?? timing?.shownAt,
+          sequenceInSession: timing?.sequenceInSession,
+          payload: {
+            rating,
+            reviewIntervalDays: intervalDays,
+          },
+        },
+      ], client);
+
+      const idBase =
+        timing?.clientEventId ??
+        `${cardId}:${rating}:${timing?.sessionId ?? 'none'}:${timing?.sequenceInSession ?? 0}:${Date.now()}`;
+      await this.journeyService.appendEvents(
+        userId,
+        [
+          {
+            cardId,
+            deckId: card.deck_id,
+            sessionId: timing?.sessionId,
+            eventType: 'rating_submitted',
+            eventTime: timing?.revealedAt ?? timing?.shownAt ?? Date.now(),
+            actor: 'user',
+            source: 'review_service',
+            idempotencyKey: `review:${idBase}`,
+            reviewLogId,
+            payload: {
+              rating,
+              reviewIntervalDays: intervalDays,
+            },
+          },
+        ],
+        client
       );
 
       await client.query('COMMIT');

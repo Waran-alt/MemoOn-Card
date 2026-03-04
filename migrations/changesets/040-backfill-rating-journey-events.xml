@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="040-backfill-rating-journey-events" author="memo">
+        <comment>Backfill card_journey_events.rating_submitted for review_logs that lack a link (Short-FSRS path bug fix). Idempotent: ON CONFLICT DO NOTHING.</comment>
+        <sql>
+            INSERT INTO card_journey_events (
+                user_id,
+                card_id,
+                deck_id,
+                session_id,
+                event_type,
+                event_time,
+                actor,
+                source,
+                idempotency_key,
+                review_log_id,
+                causation_id,
+                policy_version,
+                payload_json
+            )
+            SELECT
+                rl.user_id,
+                rl.card_id,
+                c.deck_id,
+                rl.session_id,
+                'rating_submitted',
+                COALESCE(rl.revealed_at, rl.shown_at, rl.review_time)::bigint,
+                'user',
+                'review_service',
+                'backfill:review_log:' || rl.id::text,
+                rl.id,
+                NULL,
+                'legacy',
+                jsonb_build_object(
+                    'rating', rl.rating,
+                    'reviewIntervalDays', COALESCE(rl.scheduled_days::double precision, 0),
+                    'policyVersion', 'legacy'
+                )
+            FROM review_logs rl
+            JOIN cards c ON c.id = rl.card_id AND c.user_id = rl.user_id
+            LEFT JOIN card_journey_events cje
+                ON cje.user_id = rl.user_id
+                AND cje.review_log_id = rl.id
+                AND cje.event_type = 'rating_submitted'
+            WHERE cje.id IS NULL
+            ON CONFLICT (user_id, idempotency_key) DO NOTHING;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
