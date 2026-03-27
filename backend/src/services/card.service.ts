@@ -9,8 +9,7 @@ import {
 import { FSRSState } from '../services/fsrs.service';
 import { sanitizeHtml } from '../utils/sanitize';
 import { elapsedDaysAtRetrievability } from './fsrs-core.utils';
-import { elapsedMinutesAtRetrievability } from './short-fsrs.service';
-import { addDays, addMinutes } from './fsrs-time.utils';
+import { addDays } from './fsrs-time.utils';
 
 export class CardService {
   /**
@@ -529,19 +528,6 @@ export class CardService {
   }
 
   /**
-   * Count cards in Short-FSRS learning phase (short_stability_minutes IS NOT NULL) for study-stats.
-   */
-  async getLearningCount(deckId: string, userId: string): Promise<number> {
-    const result = await pool.query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM cards
-       WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL
-         AND short_stability_minutes IS NOT NULL`,
-      [deckId, userId]
-    );
-    return parseInt(result.rows[0]?.count ?? '0', 10);
-  }
-
-  /**
    * Get due cards for a deck
    */
   async getDueCards(deckId: string, userId: string): Promise<Card[]> {
@@ -573,18 +559,14 @@ export class CardService {
   /**
    * Recompute critical_before and high_risk_before for all of a user's cards.
    * Call after user's fsrs_weights change (optimizer run or snapshot activation).
-   * - Graduated cards: use FSRS formula (weights, stability in days).
-   * - Learning cards: use Short-FSRS formula (short_stability_minutes).
-   * - New cards: both NULL.
    */
   async recomputeRiskTimestampsForUser(userId: string, weights: number[]): Promise<number> {
     const result = await pool.query<{
       id: string;
       stability: number | null;
       last_review: Date | null;
-      short_stability_minutes: number | null;
     }>(
-      `SELECT id, stability, last_review, short_stability_minutes FROM cards
+      `SELECT id, stability, last_review FROM cards
        WHERE user_id = $1 AND deleted_at IS NULL`,
       [userId]
     );
@@ -597,11 +579,7 @@ export class CardService {
 
     for (const row of rows) {
       ids.push(row.id);
-      if (row.short_stability_minutes != null && row.last_review != null) {
-        const lastReview = new Date(row.last_review);
-        criticalBefores.push(addMinutes(lastReview, elapsedMinutesAtRetrievability(row.short_stability_minutes, 0.1)));
-        highRiskBefores.push(addMinutes(lastReview, elapsedMinutesAtRetrievability(row.short_stability_minutes, 0.5)));
-      } else if (row.stability != null && row.stability > 0 && row.last_review != null) {
+      if (row.stability != null && row.stability > 0 && row.last_review != null) {
         criticalBefores.push(
           addDays(row.last_review, elapsedDaysAtRetrievability(weights, row.stability, 0.1))
         );

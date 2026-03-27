@@ -132,22 +132,21 @@ async function getDueCardsSortedByRetrievability(dueCards: Card[], userId: strin
 
 /**
  * GET /api/decks/:id/study-stats
- * Counts for pre-study overview: due, new, flagged, critical (critical_before), highRisk (high_risk_before), learningCount
+ * Counts for pre-study overview: due, new, flagged, critical (critical_before), highRisk (high_risk_before)
  */
 router.get('/:id/study-stats', validateParams(DeckIdSchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);
   const deckId = String(req.params.id);
-  const [dueCount, newCount, flaggedCount, criticalCount, highRiskCount, learningCount] = await Promise.all([
+  const [dueCount, newCount, flaggedCount, criticalCount, highRiskCount] = await Promise.all([
     cardService.getDueCount(deckId, userId),
     cardService.getNewCount(deckId, userId),
     cardFlagService.getFlagCount(userId, { deckId, resolved: false }),
     cardService.getCriticalCount(deckId, userId),
     cardService.getHighRiskCount(deckId, userId),
-    cardService.getLearningCount(deckId, userId),
   ]);
   return res.json({
     success: true,
-    data: { dueCount, newCount, flaggedCount, criticalCount, highRiskCount, learningCount },
+    data: { dueCount, newCount, flaggedCount, criticalCount, highRiskCount },
   });
 }));
 

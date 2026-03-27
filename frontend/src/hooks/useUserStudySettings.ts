@@ -14,7 +14,7 @@ const DEFAULT_LEARNING_MIN_INTERVAL_MINUTES = STUDY_INTERVAL.MIN_INTERVAL_MINUTE
 const SETTINGS_URL = '/api/user/settings';
 
 /**
- * Fetches user study settings (e.g. session_auto_end_away_minutes, learning_min_interval_minutes).
+ * Fetches user study settings (session away limit, learning_min_interval_minutes for reverse-pair spacing).
  * Falls back to default if API is missing or fails.
  */
 export function useUserStudySettings(): {

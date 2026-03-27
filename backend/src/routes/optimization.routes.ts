@@ -8,7 +8,6 @@ import { Router } from 'express';
 import { OptimizationService } from '@/services/optimization.service';
 import { AdaptiveRetentionService } from '@/services/adaptive-retention.service';
 import { CardService } from '@/services/card.service';
-import * as shortTermOptimization from '@/services/short-term-optimization.service';
 import { getUserId } from '@/middleware/auth';
 import { asyncHandler } from '@/middleware/errorHandler';
 import { validateParams, validateQuery, validateRequest } from '@/middleware/validation';
@@ -204,55 +203,6 @@ router.get('/adaptive-target', asyncHandler(async (req, res) => {
   const userId = getUserId(req);
   const recommendation = await adaptiveRetentionService.computeRecommendedTarget(userId);
   return res.json({ success: true, data: recommendation });
-}));
-
-/**
- * GET /api/optimization/short-term/status
- * Short-term (learning) optimizer status. Learning params are not user-editable; a button runs this optimizer.
- */
-router.get('/short-term/status', asyncHandler(async (req, res) => {
-  const userId = getUserId(req);
-  const eligibility = await shortTermOptimization.getShortTermEligibility(userId);
-  const canOptimize = eligibility.status === 'READY_TO_UPGRADE';
-  const minRequired =
-    eligibility.status === 'NOT_READY'
-      ? eligibility.minRequiredFirst
-      : eligibility.minRequiredSubsequent;
-  return res.json({
-    success: true,
-    data: {
-      shortTermOptimizerAvailable: true,
-      canOptimize,
-      learningReviewCount: eligibility.learningReviewCount,
-      minRequired,
-      status: eligibility.status,
-      newLearningReviewsSinceLast: eligibility.newLearningReviewsSinceLast,
-      daysSinceLast: eligibility.daysSinceLast,
-      minRequiredFirst: eligibility.minRequiredFirst,
-      minRequiredSubsequent: eligibility.minRequiredSubsequent,
-      minDaysSinceLast: eligibility.minDaysSinceLast,
-      lastOptimizedAt: eligibility.lastOptimizedAt,
-    },
-  });
-}));
-
-/**
- * POST /api/optimization/short-term/optimize
- * Run short-term (learning) optimization: sets learning_last_optimized_at; full param fitting can be added later.
- */
-router.post('/short-term/optimize', asyncHandler(async (req, res) => {
-  const userId = getUserId(req);
-  const result = await shortTermOptimization.optimizeShortTerm(userId);
-  if (!result.success) {
-    return res.status(400).json({
-      success: false,
-      error: result.message,
-    });
-  }
-  return res.json({
-    success: true,
-    data: { message: result.message },
-  });
 }));
 
 /**

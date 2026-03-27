@@ -50,11 +50,32 @@ const mockCard: Card = {
   updated_at: '2025-01-01T00:00:00Z',
 };
 
+const mockStudyStats = {
+  dueCount: 0,
+  newCount: 0,
+  flaggedCount: 0,
+  criticalCount: 0,
+  highRiskCount: 0,
+};
+
+/** Handlers for requests the deck page always makes (study stats, user settings). */
+function wrapDeckPageMockGet(handler: (url: string) => Promise<{ data: unknown }>): void {
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/study-stats')) {
+      return Promise.resolve({ data: { success: true, data: mockStudyStats } });
+    }
+    if (url.includes('/user/settings')) {
+      return Promise.resolve({ data: { success: true, data: { knowledge_enabled: false } } });
+    }
+    return handler(url);
+  });
+}
+
 describe('DeckDetailPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearchParamsGet.mockReturnValue(null);
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) {
         return Promise.resolve({ data: { success: true, data: [] } });
       }
@@ -119,10 +140,12 @@ describe('DeckDetailPage', () => {
       });
     });
     await waitFor(() => {
-      expect(screen.getByText('Card 1')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Create card' })).not.toBeInTheDocument();
+      const row = screen.getByRole('button', { name: 'View details' }).closest('li');
+      expect(row).toBeTruthy();
+      expect(row).toHaveTextContent('Front text');
+      expect(row).toHaveTextContent('Back text');
     });
-    expect(screen.queryByText('Front text')).not.toBeInTheDocument();
-    expect(screen.queryByText('Back text')).not.toBeInTheDocument();
   });
 
   it('disables Create button when front or back is empty', async () => {
@@ -180,7 +203,7 @@ describe('DeckDetailPage', () => {
       { ...mockCard, id: 'c1', recto: 'One', verso: '1' },
       { ...mockCard, id: 'c2', recto: 'Two', verso: '2' },
     ];
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -196,7 +219,7 @@ describe('DeckDetailPage', () => {
   });
 
   it('shows cards load error when GET cards fails', async () => {
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.reject(new Error('Network error'));
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -220,7 +243,7 @@ describe('DeckDetailPage', () => {
   });
 
   it('shows error when GET deck fails', async () => {
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url === '/api/decks/deck-123') return Promise.reject(new Error('Network error'));
       return Promise.resolve({ data: { success: true, data: [] } });
     });
@@ -235,7 +258,7 @@ describe('DeckDetailPage', () => {
       { ...mockCard, id: 'c1', recto: 'Apple', verso: 'Fruit', comment: null },
       { ...mockCard, id: 'c2', recto: 'Banana', verso: 'Yellow', comment: null },
     ];
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -261,7 +284,7 @@ describe('DeckDetailPage', () => {
     const cards: Card[] = [
       { ...mockCard, id: 'c1', recto: 'Alpha', verso: 'First', comment: null },
     ];
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -283,7 +306,7 @@ describe('DeckDetailPage', () => {
       { ...mockCard, id: 'c1', recto: 'Reviewed', verso: 'Back', comment: null },
       { ...mockCard, id: 'c2', recto: 'Other', verso: 'Card', comment: null },
     ];
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -317,7 +340,7 @@ describe('DeckDetailPage', () => {
   });
 
   it('closes create modal when clicking outside the modal box', async () => {
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: [] } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -338,7 +361,7 @@ describe('DeckDetailPage', () => {
   });
 
   it('keeps create modal open when clicking inside the modal box', async () => {
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: [] } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -359,7 +382,7 @@ describe('DeckDetailPage', () => {
     const cards: Card[] = [
       { ...mockCard, id: 'c1', recto: 'Q', verso: 'A', comment: null },
     ];
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -386,7 +409,7 @@ describe('DeckDetailPage', () => {
       { ...mockCard, id: 'card-1', recto: 'Question', verso: 'Answer', comment: null },
     ];
     mockSearchParamsGet.mockImplementation((key: string) => (key === 'manageCard' ? 'card-1' : null));
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -403,7 +426,7 @@ describe('DeckDetailPage', () => {
     const cards: Card[] = [
       { ...mockCard, id: 'c1', recto: 'R', verso: 'B', comment: null },
     ];
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -431,7 +454,7 @@ describe('DeckDetailPage', () => {
     const cards: Card[] = [
       { ...mockCard, id: 'c1', recto: 'Recent', verso: 'Back', comment: null },
     ];
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: cards } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
@@ -456,7 +479,7 @@ describe('DeckDetailPage', () => {
     if (typeof window !== 'undefined' && window.sessionStorage) {
       window.sessionStorage.setItem('memoon_last_studied_deck-123', JSON.stringify(['c1']));
     }
-    mockGet.mockImplementation((url: string) => {
+    wrapDeckPageMockGet((url: string) => {
       if (url === '/api/decks/deck-123/cards' || url.startsWith('/api/decks/') && url.endsWith('/cards'))
         return Promise.resolve({ data: { success: true, data: cards } });
       if (url.includes('/cards/') && url.includes('/history/summary'))
@@ -483,7 +506,7 @@ describe('DeckDetailPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'View details' }));
     const detailsDialog = await screen.findByRole('dialog', { name: 'Card data & prediction' });
     await waitFor(() => {
-      expect(detailsDialog).toHaveTextContent(/Short-FSRS \(learning\)|FSRS \(graduated\)/);
+      expect(detailsDialog).toHaveTextContent(/FSRS/);
     });
     await userEvent.click(within(detailsDialog).getByRole('button', { name: /close/i }));
     await waitFor(() => {

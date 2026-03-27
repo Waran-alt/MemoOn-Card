@@ -68,22 +68,22 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.e2eShellReady = '0';
+    root.setAttribute('data-e2e-shell-ready', '0');
     root.dataset.e2eRoute = pathname;
     root.dataset.e2eLocale = locale;
     let raf2 = 0;
 
-    // Mark ready after paint so E2E captures post-hydration layout.
+    // Mark ready after paint so E2E / audits see post-hydration layout.
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
-        root.dataset.e2eShellReady = '1';
+        root.setAttribute('data-e2e-shell-ready', '1');
       });
     });
 
     return () => {
       cancelAnimationFrame(raf1);
       if (raf2) cancelAnimationFrame(raf2);
-      delete root.dataset.e2eShellReady;
+      root.removeAttribute('data-e2e-shell-ready');
       delete root.dataset.e2eRoute;
       delete root.dataset.e2eLocale;
     };

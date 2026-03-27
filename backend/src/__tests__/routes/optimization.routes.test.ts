@@ -25,14 +25,6 @@ const cardServiceMock = vi.hoisted(() => ({
   recomputeRiskTimestampsForUser: vi.fn().mockResolvedValue(10),
 }));
 
-const getShortTermEligibilityMock = vi.hoisted(() => vi.fn());
-const optimizeShortTermMock = vi.hoisted(() => vi.fn());
-
-vi.mock('@/services/short-term-optimization.service', () => ({
-  getShortTermEligibility: (...args: unknown[]) => getShortTermEligibilityMock(...args),
-  optimizeShortTerm: (...args: unknown[]) => optimizeShortTermMock(...args),
-}));
-
 vi.mock('@/middleware/auth', () => ({
   getUserId: () => mockUserId,
 }));
@@ -415,58 +407,4 @@ describe('Optimization routes', () => {
     });
   });
 
-  describe('Short-term (learning) optimizer', () => {
-    it('GET /api/optimization/short-term/status returns eligibility', async () => {
-      getShortTermEligibilityMock.mockResolvedValue({
-        status: 'READY_TO_UPGRADE',
-        learningReviewCount: 60,
-        newLearningReviewsSinceLast: 60,
-        daysSinceLast: 0,
-        minRequiredFirst: 50,
-        minRequiredSubsequent: 20,
-        minDaysSinceLast: 7,
-        lastOptimizedAt: null,
-      });
-
-      const res = await request(app).get('/api/optimization/short-term/status');
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data).toMatchObject({
-        shortTermOptimizerAvailable: true,
-        canOptimize: true,
-        learningReviewCount: 60,
-        minRequired: 20,
-        status: 'READY_TO_UPGRADE',
-      });
-      expect(getShortTermEligibilityMock).toHaveBeenCalledWith(mockUserId);
-    });
-
-    it('POST /api/optimization/short-term/optimize returns success when eligible', async () => {
-      optimizeShortTermMock.mockResolvedValue({
-        success: true,
-        message: 'Short-term (learning) parameters fitted and saved.',
-      });
-
-      const res = await request(app).post('/api/optimization/short-term/optimize');
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.data.message).toContain('fitted and saved');
-      expect(optimizeShortTermMock).toHaveBeenCalledWith(mockUserId);
-    });
-
-    it('POST /api/optimization/short-term/optimize returns 400 when not eligible', async () => {
-      optimizeShortTermMock.mockResolvedValue({
-        success: false,
-        message: 'Not enough learning-phase reviews. Need 50, have 10.',
-      });
-
-      const res = await request(app).post('/api/optimization/short-term/optimize');
-
-      expect(res.status).toBe(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.error).toContain('Not enough');
-    });
-  });
 });

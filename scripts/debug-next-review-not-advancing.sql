@@ -32,8 +32,6 @@ SELECT
   c.next_review AS card_next_review,
   c.stability AS card_stability,
   c.difficulty AS card_difficulty,
-  c.short_stability_minutes AS card_short_stability_min,
-  c.learning_review_count AS card_learning_count,
   -- Prochaine révision attendue (approx) : last_review_time + scheduled_days
   (to_timestamp(lr.review_time / 1000.0) AT TIME ZONE 'UTC' + (lr.scheduled_days || ' days')::interval) AS expected_next_review_approx,
   -- Incohérences

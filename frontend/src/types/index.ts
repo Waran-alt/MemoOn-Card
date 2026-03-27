@@ -52,11 +52,7 @@ export interface Card {
   next_review: string;
   created_at: string;
   updated_at: string;
-  /** Short-FSRS: stability in minutes while in learning; null when graduated. */
-  short_stability_minutes?: number | null;
-  /** Short-FSRS: number of learning reviews in current run; null when not in learning. */
-  learning_review_count?: number | null;
-  /** When card graduated from short-term learning (ISO date string). */
+  /** Historical graduation from old learning-phase scheduling (ISO). */
   graduated_from_learning_at?: string | null;
   /** When API includes categories */
   category_ids?: string[];
@@ -88,14 +84,6 @@ export interface ReviewResult {
   retrievability: number;
   interval: number;
   message: string;
-  /** Set when short-FSRS path was used; show in study review only, not during card display */
-  learningState?: {
-    phase: 'learning' | 'graduated';
-    nextReviewInMinutes?: number;
-    nextReviewInDays?: number;
-    learningReviewCount?: number;
-    nextReviewTomorrow?: boolean;
-  };
 }
 
 export type Rating = 1 | 2 | 3 | 4; // Again, Hard, Good, Easy

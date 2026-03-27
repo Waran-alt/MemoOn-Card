@@ -66,6 +66,13 @@ function defaultGetImpl(url: string) {
   return Promise.resolve({ data: { success: true, data: mockDeck } });
 }
 
+async function clickShowQuestion() {
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: /Show question/i })).toBeInTheDocument();
+  });
+  await userEvent.click(screen.getByRole('button', { name: /Show question/i }));
+}
+
 describe('StudyPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -133,15 +140,16 @@ describe('StudyPage', () => {
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
     render(<StudyPage />);
+    await clickShowQuestion();
     await waitFor(() => {
-      expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
+      expect(screen.getByText(/What is 2\+2\?/)).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /Show answer/ })).toBeInTheDocument();
-    expect(screen.queryByText('4')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^4$/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Show answer/ }));
     await waitFor(() => {
-      expect(screen.getByText('4')).toBeInTheDocument();
+      expect(screen.getByText(/^4$/)).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: 'Not satisfied' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hard but I remembered' })).toBeInTheDocument();
@@ -157,8 +165,9 @@ describe('StudyPage', () => {
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
     render(<StudyPage />);
+    await clickShowQuestion();
     await waitFor(() => {
-      expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
+      expect(screen.getByText(/What is 2\+2\?/)).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('button', { name: /Show answer/ }));
     await waitFor(() => {
@@ -190,15 +199,16 @@ describe('StudyPage', () => {
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
     render(<StudyPage />);
+    await clickShowQuestion();
     await waitFor(() => {
-      expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
+      expect(screen.getByText(/What is 2\+2\?/)).toBeInTheDocument();
     });
-    expect(screen.getByRole('checkbox', { name: /Need management/i })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /Need management/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Wrong content' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Show answer/ }));
     await waitFor(() => {
-      expect(screen.getByText('4')).toBeInTheDocument();
+      expect(screen.getByText(/^4$/)).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('checkbox', { name: /Need management/i }));
 
@@ -216,8 +226,9 @@ describe('StudyPage', () => {
       return Promise.resolve({ data: { success: true, data: mockDeck } });
     });
     render(<StudyPage />);
+    await clickShowQuestion();
     await waitFor(() => {
-      expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
+      expect(screen.getByText(/What is 2\+2\?/)).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('button', { name: /Show answer/ }));
     await waitFor(() => {
@@ -245,12 +256,13 @@ describe('StudyPage', () => {
     });
     mockPost.mockResolvedValue({ data: { success: true, data: {} } });
     render(<StudyPage />);
+    await clickShowQuestion();
     await waitFor(() => {
-      expect(screen.getByText('What is 2+2?')).toBeInTheDocument();
+      expect(screen.getByText(/What is 2\+2\?/)).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('button', { name: /Show answer/ }));
     await waitFor(() => {
-      expect(screen.getByText('4')).toBeInTheDocument();
+      expect(screen.getByText(/^4$/)).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('checkbox', { name: /Need management/i }));
     await waitFor(() => {

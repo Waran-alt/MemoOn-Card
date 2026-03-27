@@ -88,21 +88,15 @@ This document maps user-facing UX flows to backend API calls.
 ### UX interaction
 
 1. User manages cards after seeing answers outside recall mode.
-2. User chooses one of:
-   - postpone next review (expand delay)
-   - reset stability (treat as new)
+2. User may reset stability (treat as new) if they want the card scheduled like a new item.
 
 ### API calls
 
-- Postpone/penalty:
-  - `POST /api/cards/:id/postpone`
-  - body supports `revealedForSeconds` (defaults to 30 if omitted)
 - Reset:
   - `POST /api/cards/:id/reset-stability`
 
 ### UX/FSRS notes
 
-- Postpone applies management penalty (pushes `next_review` forward).
 - Reset clears stability/difficulty and makes card due immediately.
 
 ## Scenario 5: Optimize FSRS weights (Implemented)

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="041-clear-short-fsrs-on-cards" author="memoon">
+        <comment>Remove Short-FSRS learning state; FSRS v6 only. Cards that were pure short-learning (S/D both ~0) become new cards; lapse re-entries keep FSRS stability.</comment>
+        <sql>
+            UPDATE cards
+            SET short_stability_minutes = NULL,
+                learning_review_count = NULL,
+                critical_before = NULL,
+                high_risk_before = NULL,
+                stability = CASE
+                    WHEN COALESCE(stability, 0) = 0 AND COALESCE(difficulty, 0) = 0 THEN NULL
+                    ELSE stability
+                END,
+                difficulty = CASE
+                    WHEN COALESCE(stability, 0) = 0 AND COALESCE(difficulty, 0) = 0 THEN NULL
+                    ELSE difficulty
+                END,
+                last_review = CASE
+                    WHEN COALESCE(stability, 0) = 0 AND COALESCE(difficulty, 0) = 0 THEN NULL
+                    ELSE last_review
+                END,
+                next_review = CASE
+                    WHEN COALESCE(stability, 0) = 0 AND COALESCE(difficulty, 0) = 0 THEN CURRENT_TIMESTAMP
+                    ELSE next_review
+                END
+            WHERE short_stability_minutes IS NOT NULL
+               OR learning_review_count IS NOT NULL;
+        </sql>
+    </changeSet>
+</databaseChangeLog>

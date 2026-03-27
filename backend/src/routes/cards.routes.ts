@@ -13,7 +13,6 @@ import {
   ListFlagsQuerySchema,
   FlagIdParamSchema,
   ResolveFlagSchema,
-  PostponeCardSchema,
   UpdateCardImportanceSchema,
   UpdateStudyIntensitySchema,
   CardHistoryQuerySchema,
@@ -315,25 +314,6 @@ router.post('/:id/reset-stability', validateParams(CardIdSchema), asyncHandler(a
   const userId = getUserId(req);
   const cardId = String(req.params.id);
   const card = await cardService.resetCardStability(cardId, userId);
-  
-  if (!card) {
-    throw new NotFoundError('Card');
-  }
-  
-  return res.json({ success: true, data: card });
-}));
-
-/**
- * POST /api/cards/:id/postpone
- * Apply management penalty: push next review forward (user saw content outside study)
- */
-router.post('/:id/postpone', validateParams(CardIdSchema), validateRequest(PostponeCardSchema), asyncHandler(async (req, res) => {
-  const userId = getUserId(req);
-  const cardId = String(req.params.id);
-  const revealedForSeconds = typeof req.body?.revealedForSeconds === 'number'
-    ? req.body.revealedForSeconds
-    : 30;
-  const card = await reviewService.applyManagementPenaltyToCard(cardId, userId, revealedForSeconds);
   
   if (!card) {
     throw new NotFoundError('Card');

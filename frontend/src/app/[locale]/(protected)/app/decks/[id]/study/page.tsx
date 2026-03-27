@@ -8,7 +8,6 @@ import apiClient, { getApiErrorMessage, isRequestCancelled } from '@/lib/api';
 import type { Deck, Card, ReviewResult } from '@/types';
 import type { Rating } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useStudyReinsertion } from '@/hooks/useStudyReinsertion';
 import { useConnectionState } from '@/hooks/useConnectionState';
 import {
   retryWithBackoff,
@@ -23,7 +22,6 @@ import { useUserStudySettings } from '@/hooks/useUserStudySettings';
 import { STUDY_INTERVAL } from '@memoon-card/shared';
 import { CardFormFields } from '../CardFormFields';
 
-const REINSERT_CHECK_MS = 15_000;
 const STUDY_EVENTS_URL = '/api/study/events';
 /** Below this (ms), tab hidden is ignored. Above: session pauses; above user threshold: session ends. */
 const PAUSE_GRACE_MS = 5000;
@@ -100,17 +98,6 @@ function clearStudySession(deckId: string): void {
   } catch {
     // ignore
   }
-}
-
-/** Normalize review response: support both camelCase and snake_case learning state for API compatibility. */
-function getLearningNextReviewMinutes(result: unknown): number | null {
-  if (result == null || typeof result !== 'object') return null;
-  const r = result as Record<string, unknown>;
-  const learning = (r.learningState ?? r.learning_state) as Record<string, unknown> | undefined;
-  if (!learning || typeof learning !== 'object') return null;
-  if (learning.phase !== 'learning') return null;
-  const min = learning.nextReviewInMinutes ?? learning.next_review_in_minutes;
-  return typeof min === 'number' && min >= 0 ? min : null;
 }
 
 /** Fisher–Yates shuffle so card order varies each session (avoids position bias). */
@@ -193,8 +180,6 @@ export default function StudyPage() {
   const lastShownAtRef = useRef<Record<string, number>>({});
   const queueRef = useRef<Card[]>([]);
   queueRef.current = queue;
-
-  const reinsertion = useStudyReinsertion<Card>(() => Date.now(), REINSERT_CHECK_MS);
 
   const { isOnline, hadFailure, setHadFailure } = useConnectionState();
   const [pendingCount, setPendingCount] = useState(0);
@@ -295,7 +280,7 @@ export default function StudyPage() {
 
   // cardBecameCurrentAtRef is set when user clicks "Show question" so the card timer starts on reveal only.
 
-  // Enforce min time gap between the two cards of a reverse pair (≥ 1 min, or user's Short-FSRS min interval); if no card can be shown, end session
+  // Enforce min time gap between reverse-pair cards (≥ 1 min or user's learning_min_interval_minutes); if none can be shown, end session
   useEffect(() => {
     if (queue.length === 0) return;
     const now = Date.now();
@@ -593,20 +578,18 @@ export default function StudyPage() {
     };
     /* rating_submitted is created by the backend when the review is saved; no client emit to avoid duplicate in session replay */
     try {
-      let result: ReviewResult | undefined;
       try {
-        result = await retryWithBackoff(() =>
-          apiClient.post<{ success: boolean; data?: ReviewResult }>(`/api/cards/${card.id}/review`, payload).then((r) => r.data?.data)
+        await retryWithBackoff(() =>
+          apiClient.post<{ success: boolean; data?: ReviewResult }>(`/api/cards/${card.id}/review`, payload)
         );
       } catch {
         try {
-          const batchRes = await retryWithBackoff(() =>
+          await retryWithBackoff(() =>
             apiClient.post<{ success: boolean; data?: ReviewResult[] }>('/api/reviews/batch', {
               reviews: [{ cardId: card.id, rating }],
               sessionId: sessionIdRef.current ?? undefined,
             })
           );
-          result = Array.isArray(batchRes.data?.data) ? batchRes.data.data[0] : undefined;
         } catch {
           setHadFailure(true);
           addToPendingQueue({ type: 'review', url: `/api/cards/${card.id}/review`, payload });
@@ -617,13 +600,8 @@ export default function StudyPage() {
         }
       }
       reviewedCardIdsRef.current = [...reviewedCardIdsRef.current, card.id];
-      const nextMin = getLearningNextReviewMinutes(result);
-      if (nextMin != null) reinsertion.add(card, nextMin);
       setReviewedCount((n) => n + 1);
-      setQueue((prev) => {
-        const rest = prev.slice(1);
-        return reinsertion.injectReadyIntoQueue(rest);
-      });
+      setQueue((prev) => separateReversedPairs(prev.slice(1)));
       setShowAnswer(false);
       setHadFailure(false);
     } catch {

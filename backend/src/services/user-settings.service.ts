@@ -18,7 +18,7 @@ const MAX_LEARNING_INTERVAL = STUDY_INTERVAL.MAX_LEARNING_INTERVAL_MINUTES;
 export interface StudySessionSettings {
   session_auto_end_away_minutes: number;
   knowledge_enabled: boolean;
-  /** Short-FSRS minimum interval (minutes); used e.g. for reverse-pair time gap. */
+  /** Minimum interval (minutes) for reverse-pair spacing in study UI. */
   learning_min_interval_minutes: number;
   /** FSRS v6 weights (21 values); used for long-term scheduling. */
   fsrs_weights?: number[];
@@ -30,8 +30,6 @@ export interface StudySessionSettings {
   target_retention?: number;
   /** Default target retention. */
   target_retention_default: number;
-  /** Short-FSRS fitted params from optimizer, or null if using defaults. */
-  learning_short_fsrs_params?: Record<string, unknown> | null;
 }
 
 export async function getStudySessionSettings(userId: string): Promise<StudySessionSettings> {
@@ -41,10 +39,9 @@ export async function getStudySessionSettings(userId: string): Promise<StudySess
     learning_min_interval_minutes: number | null;
     fsrs_weights: number[] | null;
     target_retention: number | null;
-    learning_short_fsrs_params: Record<string, unknown> | null;
   }>(
     `SELECT session_auto_end_away_minutes, knowledge_enabled, learning_min_interval_minutes,
-            fsrs_weights, target_retention, learning_short_fsrs_params
+            fsrs_weights, target_retention
      FROM user_settings WHERE user_id = $1`,
     [userId]
   );
@@ -75,13 +72,6 @@ export async function getStudySessionSettings(userId: string): Promise<StudySess
     row?.target_retention != null && Number.isFinite(Number(row.target_retention))
       ? Number(row.target_retention)
       : undefined;
-  const shortFsrsParams =
-    row?.learning_short_fsrs_params != null &&
-    typeof row.learning_short_fsrs_params === 'object' &&
-    !Array.isArray(row.learning_short_fsrs_params)
-      ? (row.learning_short_fsrs_params as Record<string, unknown>)
-      : undefined;
-
   const defaultWeights = [...FSRS_V6_DEFAULT_WEIGHTS];
   const fsrsWeightsDelta =
     fsrsWeights &&
@@ -100,7 +90,6 @@ export async function getStudySessionSettings(userId: string): Promise<StudySess
     ...(fsrsWeightsDelta ? { fsrs_weights_delta: fsrsWeightsDelta } : {}),
     ...(targetRetention != null ? { target_retention: targetRetention } : {}),
     target_retention_default: targetRetentionDefault,
-    ...(shortFsrsParams !== undefined ? { learning_short_fsrs_params: shortFsrsParams } : {}),
   };
 }
 
@@ -113,9 +102,9 @@ async function ensureUserSettingsRow(userId: string): Promise<void> {
     `INSERT INTO user_settings (
       user_id, fsrs_weights, fsrs_version, target_retention,
       review_count_since_optimization, study_intensity_mode, session_auto_end_away_minutes, knowledge_enabled,
-      learning_graduation_cap_days, learning_target_retention_short, learning_min_interval_minutes
+      learning_min_interval_minutes
     )
-    VALUES ($1, $2::jsonb, 'v6', 0.9, 0, 'default', $3, false, 1, 0.85, $4)
+    VALUES ($1, $2::jsonb, 'v6', 0.9, 0, 'default', $3, false, $4)
     ON CONFLICT (user_id) DO NOTHING`,
     [userId, JSON.stringify([...FSRS_V6_DEFAULT_WEIGHTS]), DEFAULT_AWAY_MINUTES, DEFAULT_LEARNING_MIN_INTERVAL_MINUTES]
   );

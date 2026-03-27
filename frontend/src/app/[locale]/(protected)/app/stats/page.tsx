@@ -77,7 +77,6 @@ export default function StatsPage() {
     fsrs_weights_delta?: number[];
     target_retention?: number;
     target_retention_default?: number;
-    learning_short_fsrs_params?: Record<string, unknown> | null;
   }>('/api/user/settings', { errorFallback: '' });
 
   const { data: decksData } = useApiGet<Deck[]>('/api/decks', { errorFallback: '' });
@@ -243,16 +242,6 @@ export default function StatsPage() {
               </dd>
             </div>
           ) : null}
-          <div title={ta('statsShortFsrsParamsTooltip')}>
-            <dt className="text-(--mc-text-muted)">{ta('statsShortFsrsParams')}</dt>
-            <dd className="font-medium text-(--mc-text-primary)">
-              {userSettings?.learning_short_fsrs_params != null &&
-              typeof userSettings.learning_short_fsrs_params === 'object' &&
-              Object.keys(userSettings.learning_short_fsrs_params).length > 0
-                ? ta('statsFsrsCustom')
-                : ta('statsFsrsDefault')}
-            </dd>
-          </div>
         </dl>
       </div>
 

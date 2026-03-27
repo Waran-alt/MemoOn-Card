@@ -79,7 +79,7 @@ function cardMatchesSearch(card: Card, query: string): boolean {
   );
 }
 
-type ConfirmType = 'delete' | 'treatAsNew' | 'expandDelay';
+type ConfirmType = 'delete' | 'treatAsNew';
 type ConfirmDialogState =
   | { type: ConfirmType; cardId: string }
   | { type: 'bulkDelete'; cardIds: string[] }
@@ -133,7 +133,7 @@ export default function DeckDetailPage() {
   const [lastStudiedIds, setLastStudiedIds] = useState<Set<string>>(new Set());
   const [showOnlyReviewed, setShowOnlyReviewed] = useState(false);
   const [reviewedBannerDismissed, setReviewedBannerDismissed] = useState(false);
-  type StudyStats = { dueCount: number; newCount: number; flaggedCount: number; criticalCount: number; highRiskCount: number; learningCount: number };
+  type StudyStats = { dueCount: number; newCount: number; flaggedCount: number; criticalCount: number; highRiskCount: number };
   const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
   const [cardCategoriesModalCard, setCardCategoriesModalCard] = useState<Card | null>(null);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
@@ -596,21 +596,6 @@ export default function DeckDetailPage() {
         .catch(() => {})
         .finally(done);
       return;
-    }
-    if (confirmDialog.type === 'expandDelay') {
-      apiClient
-        .post<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/postpone`, {
-          revealedForSeconds: 30,
-        })
-        .then((res) => {
-          if (res.data?.success && res.data.data) {
-            setCards((prev) =>
-              prev.map((c) => (c.id === cardId ? res.data!.data! : c))
-            );
-          }
-        })
-        .catch(() => {})
-        .finally(done);
     }
   }
 
@@ -1083,9 +1068,6 @@ export default function DeckDetailPage() {
             {(ta('deckStudyDueCount', { vars: { due: String(studyStats.dueCount) } }))}
             {' · '}
             {(ta('deckStudyNewCount', { vars: { newCount: String(studyStats.newCount) } }))}
-            {(studyStats.learningCount ?? 0) > 0 && (
-              <> · <span title={ta('deckStudyLearningTooltip')}>{(ta('deckStudyLearningCount', { vars: { count: String(studyStats.learningCount ?? 0) } }))}</span></>
-            )}
             {studyStats.criticalCount > 0 && (
               <> · {(ta('deckStudyCriticalCount', { vars: { count: String(studyStats.criticalCount) } }))}</>
             )}
@@ -1655,20 +1637,6 @@ export default function DeckDetailPage() {
                         >
                           {ta('treatAsNew')}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setConfirmDialog({
-                              type: 'expandDelay',
-                              cardId: card.id,
-                            })
-                          }
-                          disabled={!card.last_review}
-                          title={!card.last_review ? ta('cardStatusNew') : undefined}
-                          className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary) disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {ta('expandDelay')}
-                        </button>
                       </div>
                     </>
                   )}
@@ -2047,52 +2015,33 @@ export default function DeckDetailPage() {
               ) : (
                 <>
                   <section className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3">
-                    {cardDetailsCard.short_stability_minutes != null ? (
-                      <>
-                        <h4 className="text-sm font-medium text-(--mc-text-primary) mb-1">{ta('cardDetailsShortFsrs')}</h4>
-                        <p className="text-xs text-(--mc-text-secondary) mb-2">{ta('cardDetailsShortFsrsHint')}</p>
-                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsStabilityMinutes')}</dt>
-                          <dd className="text-(--mc-text-primary)">{formatCardNumber(cardDetailsCard.short_stability_minutes) === '—' ? '—' : `${Math.round(Number(cardDetailsCard.short_stability_minutes))} min`}</dd>
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsLearningReviewCount')}</dt>
-                          <dd className="text-(--mc-text-primary)">{cardDetailsCard.learning_review_count ?? '—'}</dd>
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsLastReview')}</dt>
-                          <dd className="text-(--mc-text-primary)">{cardDetailsCard.last_review ? formatCardDateOrTime(cardDetailsCard.last_review, locale) : '—'}</dd>
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsNextReview')}</dt>
-                          <dd className="text-(--mc-text-primary)">{formatCardDateOrTime(cardDetailsCard.next_review, locale)}</dd>
-                        </dl>
-                      </>
-                    ) : (
-                      <>
-                        <h4 className="text-sm font-medium text-(--mc-text-primary) mb-1">{ta('cardDetailsLongFsrs')}</h4>
-                        <p className="text-xs text-(--mc-text-secondary) mb-2">{ta('cardDetailsLongFsrsHint')}</p>
-                        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsStability')}</dt>
-                          <dd className="text-(--mc-text-primary)">{formatCardNumber(cardDetailsCard.stability) === '—' ? '—' : `${formatCardNumber(cardDetailsCard.stability)} days`}</dd>
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsDifficulty')}</dt>
-                          <dd className="text-(--mc-text-primary)">{formatCardNumber(cardDetailsCard.difficulty)}</dd>
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsLastReview')}</dt>
-                          <dd className="text-(--mc-text-primary)">{cardDetailsCard.last_review ? formatCardDateOrTime(cardDetailsCard.last_review, locale) : '—'}</dd>
-                          <dt className="text-(--mc-text-secondary)">{ta('cardDetailsNextReview')}</dt>
-                          <dd className="text-(--mc-text-primary)">{formatCardDateOrTime(cardDetailsCard.next_review, locale)}</dd>
-                        </dl>
-                        {cardDetailsCard.stability != null && Number.isFinite(Number(cardDetailsCard.stability)) && Number(cardDetailsCard.stability) > 0 && cardDetailsCard.last_review && (() => {
-                          const lastMs = new Date(cardDetailsCard.last_review).getTime();
-                          const elapsedDays = (Date.now() - lastMs) / (24 * 60 * 60 * 1000);
-                          const s = Number(cardDetailsCard.stability);
-                          const r = 1 / Math.pow(1 + (0.4 * elapsedDays) / s, 1);
-                          return (
-                            <p className="mt-2 text-xs text-(--mc-text-secondary)">
-                              {ta('cardDetailsRetrievability')}: {(r * 100).toFixed(1)}%
-                            </p>
-                          );
-                        })()}
-                        {cardDetailsCard.graduated_from_learning_at && (
-                          <p className="mt-2 text-xs text-(--mc-text-secondary)">
-                            {ta('cardDetailsShortFsrsGraduated')}: {formatCardDateOrTime(cardDetailsCard.graduated_from_learning_at, locale)}
-                          </p>
-                        )}
-                      </>
+                    <h4 className="text-sm font-medium text-(--mc-text-primary) mb-1">{ta('cardDetailsLongFsrs')}</h4>
+                    <p className="text-xs text-(--mc-text-secondary) mb-2">{ta('cardDetailsLongFsrsHint')}</p>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <dt className="text-(--mc-text-secondary)">{ta('cardDetailsStability')}</dt>
+                      <dd className="text-(--mc-text-primary)">{formatCardNumber(cardDetailsCard.stability) === '—' ? '—' : `${formatCardNumber(cardDetailsCard.stability)} days`}</dd>
+                      <dt className="text-(--mc-text-secondary)">{ta('cardDetailsDifficulty')}</dt>
+                      <dd className="text-(--mc-text-primary)">{formatCardNumber(cardDetailsCard.difficulty)}</dd>
+                      <dt className="text-(--mc-text-secondary)">{ta('cardDetailsLastReview')}</dt>
+                      <dd className="text-(--mc-text-primary)">{cardDetailsCard.last_review ? formatCardDateOrTime(cardDetailsCard.last_review, locale) : '—'}</dd>
+                      <dt className="text-(--mc-text-secondary)">{ta('cardDetailsNextReview')}</dt>
+                      <dd className="text-(--mc-text-primary)">{formatCardDateOrTime(cardDetailsCard.next_review, locale)}</dd>
+                    </dl>
+                    {cardDetailsCard.stability != null && Number.isFinite(Number(cardDetailsCard.stability)) && Number(cardDetailsCard.stability) > 0 && cardDetailsCard.last_review && (() => {
+                      const lastMs = new Date(cardDetailsCard.last_review).getTime();
+                      const elapsedDays = (Date.now() - lastMs) / (24 * 60 * 60 * 1000);
+                      const s = Number(cardDetailsCard.stability);
+                      const r = 1 / Math.pow(1 + (0.4 * elapsedDays) / s, 1);
+                      return (
+                        <p className="mt-2 text-xs text-(--mc-text-secondary)">
+                          {ta('cardDetailsRetrievability')}: {(r * 100).toFixed(1)}%
+                        </p>
+                      );
+                    })()}
+                    {cardDetailsCard.graduated_from_learning_at && (
+                      <p className="mt-2 text-xs text-(--mc-text-secondary)">
+                        {ta('cardDetailsLegacyLearningGraduated')}: {formatCardDateOrTime(cardDetailsCard.graduated_from_learning_at, locale)}
+                      </p>
                     )}
                   </section>
                   <section className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3">
@@ -2361,7 +2310,6 @@ export default function DeckDetailPage() {
                 : confirmDialog.type === 'delete' && ta('deleteCardConfirmTitle')}
               {confirmDialog.type === 'deleteDeck' && ta('deleteDeckConfirmTitle')}
               {confirmDialog.type === 'treatAsNew' && ta('treatAsNewConfirmTitle')}
-              {confirmDialog.type === 'expandDelay' && ta('expandDelayConfirmTitle')}
             </h3>
             <p className="mt-2 text-sm text-(--mc-text-secondary)">
               {confirmDialog.type === 'bulkDelete' && 'cardIds' in confirmDialog
@@ -2369,7 +2317,6 @@ export default function DeckDetailPage() {
                 : confirmDialog.type === 'delete' && ta('deleteCardConfirmMessage')}
               {confirmDialog.type === 'deleteDeck' && ta('deleteDeckConfirmMessage')}
               {confirmDialog.type === 'treatAsNew' && ta('treatAsNewConfirmMessage')}
-              {confirmDialog.type === 'expandDelay' && ta('expandDelayConfirmMessage')}
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -2403,7 +2350,7 @@ export default function DeckDetailPage() {
                         ? ta('deleteDeckConfirm')
                         : confirmDialog.type === 'treatAsNew'
                           ? ta('treatAsNewConfirm')
-                          : ta('expandDelayConfirm')}
+                          : tc('confirm')}
               </button>
             </div>
           </div>

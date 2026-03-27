@@ -232,10 +232,6 @@ export const ResolveFlagSchema = z.object({
   resolved: z.boolean(),
 });
 
-export const PostponeCardSchema = z.object({
-  revealedForSeconds: z.number().int().min(1).max(3600).optional(),
-});
-
 export const DeckIdParamSchema = z.object({
   deckId: z.string().uuid('Invalid deck ID format'),
 });

@@ -39,9 +39,8 @@ Use this file as the operator playbook for:
 Seeded flags:
 
 - `adaptive_retention_policy`
-- `short_term_learning`
 
-Both are intentionally seeded at `enabled=false`, `rollout_percentage=0` for safe startup.
+Flags are seeded at `enabled=false`, `rollout_percentage=0` for safe startup.
 
 ## Evaluation Order
 
@@ -93,5 +92,5 @@ UPDATE feature_flags
 SET enabled = false,
     rollout_percentage = 0,
     updated_at = NOW()
-WHERE flag_key IN ('adaptive_retention_policy', 'short_term_learning');
+WHERE flag_key = 'adaptive_retention_policy';
 ```

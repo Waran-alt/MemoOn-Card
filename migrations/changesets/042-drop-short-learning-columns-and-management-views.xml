@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="042-drop-short-learning-columns-and-management-views" author="memo">
+        <comment>
+            Remove unused short-learning columns (keep learning_min_interval_minutes).
+            Drop card_management_views (never populated by the app).
+            Remove obsolete short_term_learning feature flag and overrides.
+        </comment>
+
+        <sql>DELETE FROM feature_flag_user_overrides WHERE flag_key = 'short_term_learning';</sql>
+        <sql>DELETE FROM feature_flags WHERE flag_key = 'short_term_learning';</sql>
+
+        <dropTable tableName="card_management_views"/>
+
+        <dropColumn tableName="cards" columnName="short_stability_minutes"/>
+        <dropColumn tableName="cards" columnName="learning_review_count"/>
+
+        <dropColumn tableName="user_settings" columnName="learning_graduation_cap_days"/>
+        <dropColumn tableName="user_settings" columnName="learning_target_retention_short"/>
+        <dropColumn tableName="user_settings" columnName="learning_last_optimized_at"/>
+        <dropColumn tableName="user_settings" columnName="learning_short_fsrs_params"/>
+    </changeSet>
+
+</databaseChangeLog>

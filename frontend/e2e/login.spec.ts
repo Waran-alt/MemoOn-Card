@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { uniqueTestEmail, testPassword } from './config';
+import { c, E2E_LOCALE_PREFIX } from './i18n';
+import { expectMyDecksHeading } from './helpers';
 
 function createCredentials() {
   return {
@@ -11,15 +13,14 @@ function createCredentials() {
 test('register, sign out, then sign in', async ({ page }) => {
   const { email, password } = createCredentials();
 
-  // Register
-  await page.goto('/register');
+  await page.goto(`${E2E_LOCALE_PREFIX}/register`);
   await page.getByLabel(/^Email/).fill(email);
   await page.getByLabel(/Password/).fill(password);
   await page.getByLabel(/Username/).fill('E2E Login User');
-  await page.getByRole('button', { name: 'Create account' }).click();
-  const myDecks = page.getByRole('heading', { name: 'My decks' });
-  const regFailed = page.getByText('Registration failed');
-  const signInHeading = page.getByRole('heading', { name: 'Sign in' });
+  await page.getByRole('button', { name: c('createAccount') }).click();
+  const myDecks = page.getByRole('heading', { name: c('myDecks') });
+  const regFailed = page.getByText(c('registrationFailed'));
+  const signInHeading = page.getByRole('heading', { name: c('signIn') });
   await expect(myDecks.or(regFailed).or(signInHeading)).toBeVisible({ timeout: 10_000 });
   if (await regFailed.isVisible()) {
     const msg = await regFailed.textContent();
@@ -32,15 +33,13 @@ test('register, sign out, then sign in', async ({ page }) => {
       'After register we landed on Sign in. The refresh cookie is likely set for a different origin. When using E2E_BASE_URL=https://memoon-card.localhost, run the frontend with NEXT_PUBLIC_API_URL="" (empty) so API calls are same-origin and the cookie is set for that host; then restart the dev server and re-run the test.'
     );
   }
-  await expect(myDecks).toBeVisible();
+  await expectMyDecksHeading(page);
 
-  // Sign out (in app shell)
-  await page.getByRole('button', { name: /sign out/i }).click();
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await page.getByRole('button', { name: c('signOut') }).click();
+  await expect(page.getByRole('heading', { name: c('signIn') })).toBeVisible();
 
-  // Sign in with same credentials
   await page.getByLabel(/^Email/).fill(email);
   await page.getByLabel(/Password/).fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'My decks' })).toBeVisible();
+  await page.getByRole('button', { name: c('signIn') }).click();
+  await expectMyDecksHeading(page);
 });

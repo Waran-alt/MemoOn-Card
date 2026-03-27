@@ -33,9 +33,7 @@ SELECT
   c.stability,
   c.difficulty,
   c.last_review,
-  c.next_review,
-  c.short_stability_minutes,
-  c.learning_review_count
+  c.next_review
 FROM cards c
 WHERE c.user_id = '54429f95-75d9-42c5-9e7e-b335331425ae'
   AND c.deleted_at IS NULL

@@ -6,7 +6,6 @@
 
 export * from './app.constants';
 export * from './fsrs.constants';
-export * from './management.constants';
 export * from './database.constants';
 export * from './optimization.constants';
 export * from './validation.constants';

@@ -45,6 +45,8 @@
     <include file="changesets/038-review-logs-scheduled-days-precision.xml" relativeToChangelogFile="true"/>
     <include file="changesets/039-drop-learning-deprecated-columns.xml" relativeToChangelogFile="true"/>
     <include file="changesets/040-backfill-rating-journey-events.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/041-clear-short-fsrs-on-cards.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/042-drop-short-learning-columns-and-management-views.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
 

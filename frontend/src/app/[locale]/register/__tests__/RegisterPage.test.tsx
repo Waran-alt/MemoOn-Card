@@ -1,11 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import RegisterPage from '../page';
 
 const mockPost = vi.hoisted(() => vi.fn());
 const mockSetAuthSuccess = vi.hoisted(() => vi.fn());
-const mockPush = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   default: { post: mockPost },
@@ -25,7 +24,7 @@ vi.mock('next/navigation', async () => {
   return {
     ...actual,
     useRouter: () => ({
-      push: mockPush,
+      push: vi.fn(),
       replace: vi.fn(),
       refresh: vi.fn(),
       back: vi.fn(),
@@ -35,9 +34,30 @@ vi.mock('next/navigation', async () => {
   };
 });
 
+const originalWindowLocation = window.location;
+
 describe('RegisterPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const mockLocation = {
+      href: '',
+      assign: vi.fn(),
+      replace: vi.fn(),
+      reload: vi.fn(),
+    };
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: mockLocation,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalWindowLocation,
+    });
   });
 
   it('blocks submit when password is too short', async () => {
@@ -76,6 +96,6 @@ describe('RegisterPage', () => {
       });
     });
     expect(mockSetAuthSuccess).toHaveBeenCalled();
-    expect(mockPush).toHaveBeenCalledWith('/en/app');
+    expect(window.location.href).toBe('/en/app');
   });
 });

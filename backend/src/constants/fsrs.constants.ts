@@ -60,9 +60,6 @@ export const FSRS_CONSTANTS = {
   /** Default target retention rate (90%) */
   DEFAULT_TARGET_RETENTION: 0.9,
   
-  /** Pre-study target retention rate (95%) - for strengthening cards before management */
-  PRE_STUDY_TARGET_RETENTION: 0.95,
-  
   /** Natural logarithm of 0.9 (used in interval calculation) */
   LN_09: Math.log(0.9),
   

@@ -54,22 +54,6 @@ describe('FSRS service', () => {
     expect(due[0].retrievability).toBeLessThanOrEqual(0.9);
   });
 
-  it('does not apply management penalty for short reveal or far due cards', () => {
-    const fsrs = createFSRS();
-    const base: FSRSState = {
-      stability: 5,
-      difficulty: 4,
-      lastReview: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      nextReview: new Date(Date.now() + 72 * 60 * 60 * 1000),
-    };
-
-    const shortReveal = fsrs.applyManagementPenalty(base, 1);
-    expect(shortReveal.nextReview.getTime()).toBe(base.nextReview.getTime());
-
-    const longRevealButFarDue = fsrs.applyManagementPenalty(base, 30);
-    expect(longRevealButFarDue.nextReview.getTime()).toBe(base.nextReview.getTime());
-  });
-
   it('detects significant and reset-worthy content changes', () => {
     const fsrs = createFSRS();
     const unchanged = fsrs.detectContentChange('same content', 'same content');
@@ -266,36 +250,6 @@ describe('FSRS service', () => {
       if (due.length >= 2) {
         expect(due[0].retrievability).toBeLessThanOrEqual(due[1].retrievability);
       }
-    });
-  });
-
-  describe('applyManagementPenalty', () => {
-    it('applies penalty when card is due soon and reveal time is long', () => {
-      const fsrs = createFSRS();
-      const now = Date.now();
-      const base: FSRSState = {
-        stability: 5,
-        difficulty: 4,
-        lastReview: new Date(now - 24 * 60 * 60 * 1000),
-        nextReview: new Date(now + 2 * 60 * 60 * 1000), // Due in 2 hours
-      };
-
-      const penalized = fsrs.applyManagementPenalty(base, 10); // 10 seconds reveal
-      expect(penalized.nextReview.getTime()).toBeGreaterThan(base.nextReview.getTime());
-    });
-
-    it('does not apply penalty when card is far from due', () => {
-      const fsrs = createFSRS();
-      const now = Date.now();
-      const base: FSRSState = {
-        stability: 5,
-        difficulty: 4,
-        lastReview: new Date(now - 24 * 60 * 60 * 1000),
-        nextReview: new Date(now + 10 * 24 * 60 * 60 * 1000), // Due in 10 days
-      };
-
-      const penalized = fsrs.applyManagementPenalty(base, 30);
-      expect(penalized.nextReview.getTime()).toBe(base.nextReview.getTime());
     });
   });
 

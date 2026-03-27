@@ -20,9 +20,6 @@ import {
   FSRS_CONSTANTS,
   RETRIEVABILITY_THRESHOLDS,
 } from '../constants/fsrs.constants';
-import {
-  DEFAULT_MANAGEMENT_CONFIG,
-} from '../constants/management.constants';
 import { API_LIMITS } from '../constants/app.constants';
 import { detectContentChange } from './fsrs-content.utils';
 import {
@@ -37,18 +34,11 @@ import {
 } from './fsrs-core.utils';
 import {
   addDays,
-  addHours,
   formatIntervalMessage,
   getElapsedDays,
   getElapsedHours,
   isSameDay,
 } from './fsrs-time.utils';
-import {
-  applyManagementPenaltyToState,
-  calculateDeckManagementRiskForCards,
-  calculateManagementRiskForState,
-  getPreStudyCardsByRisk,
-} from './fsrs-management.utils';
 
 // ============================================================================
 // Types
@@ -68,59 +58,11 @@ export interface ReviewResult {
   retrievability: number; // 0.0 to 1.0
   interval: number;       // Days until next review
   message: string;        // Human-readable message
-  learningState?: { phase: 'learning' | 'graduated'; nextReviewInMinutes?: number; nextReviewInDays?: number; learningReviewCount?: number; nextReviewTomorrow?: boolean };
 }
 
 export interface FSRSConfig {
   weights: number[];           // 21 weights for FSRS v6
   targetRetention: number;     // Default: 0.9 (90%)
-}
-
-/**
- * Management view tracking for cards
- * 
- * When users manage cards (edit, filter, handle duplicates), they may
- * passively see card content. This can weaken active recall.
- * 
- * Management views do NOT affect FSRS stability/difficulty, but may
- * apply "fuzzing" to push next_review forward if answer was revealed.
- */
-export interface ManagementView {
-  cardId: string;
-  action: 'edit' | 'duplicate_check' | 'filter' | 'tag' | 'other';
-  revealedAt: Date;
-  revealedForSeconds: number;
-  contentChanged: boolean;
-  changePercent?: number; // 0-100, if content changed
-}
-
-export interface ManagementPenaltyConfig {
-  minRevealSeconds: number;    // Minimum seconds to trigger penalty (default: 5)
-  fuzzingHoursMin: number;      // Minimum fuzzing hours (default: 4)
-  fuzzingHoursMax: number;       // Maximum fuzzing hours (default: 8)
-  adaptiveFuzzing: boolean;      // Adjust based on card state (default: true)
-  warnBeforeManaging: boolean;   // Show risk warning before managing (default: true)
-}
-
-export interface ManagementRisk {
-  cardId: string;
-  riskLevel: 'low' | 'medium' | 'high' | 'critical';
-  riskPercent: number;          // 0-100
-  retrievability: number;        // Current R
-  stability: number;
-  hoursUntilDue: number;
-  recommendedAction: 'safe' | 'pre-study' | 'avoid';
-}
-
-export interface DeckManagementRisk {
-  totalCards: number;
-  atRiskCards: number;
-  riskPercent: number;           // Average risk
-  criticalCards: number;          // Risk > 70%
-  highRiskCards: number;          // Risk 50-70%
-  mediumRiskCards: number;        // Risk 30-50%
-  lowRiskCards: number;           // Risk < 30%
-  recommendedPreStudyCount: number; // Cards to review before managing
 }
 
 // ============================================================================
@@ -129,23 +71,11 @@ export interface DeckManagementRisk {
 
 export class FSRS {
   private config: FSRSConfig;
-  private managementConfig: ManagementPenaltyConfig;
 
-  constructor(
-    config?: Partial<FSRSConfig>,
-    managementConfig?: Partial<ManagementPenaltyConfig>
-  ) {
+  constructor(config?: Partial<FSRSConfig>) {
     this.config = {
       weights: config?.weights ?? [...FSRS_V6_DEFAULT_WEIGHTS],
       targetRetention: config?.targetRetention ?? FSRS_CONSTANTS.DEFAULT_TARGET_RETENTION,
-    };
-
-    this.managementConfig = {
-      minRevealSeconds: managementConfig?.minRevealSeconds ?? DEFAULT_MANAGEMENT_CONFIG.MIN_REVEAL_SECONDS,
-      fuzzingHoursMin: managementConfig?.fuzzingHoursMin ?? DEFAULT_MANAGEMENT_CONFIG.FUZZING_HOURS_MIN,
-      fuzzingHoursMax: managementConfig?.fuzzingHoursMax ?? DEFAULT_MANAGEMENT_CONFIG.FUZZING_HOURS_MAX,
-      adaptiveFuzzing: managementConfig?.adaptiveFuzzing ?? DEFAULT_MANAGEMENT_CONFIG.ADAPTIVE_FUZZING,
-      warnBeforeManaging: managementConfig?.warnBeforeManaging ?? DEFAULT_MANAGEMENT_CONFIG.WARN_BEFORE_MANAGING,
     };
 
     // Validate weights - require exactly 21 weights
@@ -170,10 +100,6 @@ export class FSRS {
 
   /**
    * Review a card and update its state
-   * 
-   * Note: Only actual reviews with ratings affect FSRS state. Management views
-   * (editing, filtering, handling duplicates) do not count, as the app's purpose
-   * is memorization through active recall, not passive exposure.
    * 
    * @param state Current FSRS state (null for new cards)
    * @param rating User's rating (1-4)
@@ -357,98 +283,6 @@ export class FSRS {
       .slice(0, limit);
   }
 
-  // ============================================================================
-  // Management View Handling
-  // ============================================================================
-
-  /**
-   * Calculate management risk for a single card
-   * 
-   * Risk is based on:
-   * - Retrievability (lower R = higher risk)
-   * - Time until due (sooner = higher risk)
-   * - Stability (lower S = higher risk from fuzzing)
-   * 
-   * @param state Current FSRS state
-   * @returns Risk assessment
-   */
-  calculateManagementRisk(state: FSRSState): ManagementRisk {
-    return calculateManagementRiskForState(state, {
-      now: new Date(),
-      getElapsedDays,
-      getElapsedHours,
-      calculateRetrievability: this.calculateRetrievability.bind(this),
-    });
-  }
-
-  /**
-   * Calculate management risk for an entire deck
-   * 
-   * @param cards Array of cards with FSRS state
-   * @returns Deck-level risk assessment
-   */
-  calculateDeckManagementRisk(
-    cards: Array<{ id: string; state: FSRSState }>
-  ): DeckManagementRisk {
-    return calculateDeckManagementRiskForCards(cards, this.calculateManagementRisk.bind(this));
-  }
-
-  /**
-   * Apply management penalty (fuzzing) if user revealed answer during management
-   * 
-   * This pushes next_review forward without affecting stability/difficulty.
-   * Fuzzing is now adaptive based on card state:
-   * - High stability + due soon: Minimal fuzzing (card is strong)
-   * - Low stability: Proportional fuzzing (don't over-penalize)
-   * - Medium stability: Standard fuzzing
-   * 
-   * @param state Current FSRS state
-   * @param revealedForSeconds How long answer was revealed
-   * @returns Updated state with fuzzed next_review (or original if no penalty)
-   */
-  applyManagementPenalty(
-    state: FSRSState,
-    revealedForSeconds: number
-  ): FSRSState {
-    return applyManagementPenaltyToState(state, revealedForSeconds, this.managementConfig, {
-      now: new Date(),
-      getElapsedDays,
-      getElapsedHours,
-      calculateRetrievability: this.calculateRetrievability.bind(this),
-      addHours,
-    });
-  }
-
-  /**
-   * Get cards recommended for pre-study before management
-   * 
-   * Uses higher target retention (e.g., 95%) to strengthen cards
-   * before user manages the deck.
-   * 
-   * @param cards Array of cards with FSRS state
-   * @param targetRetention Optional: Higher retention for pre-study (default: 0.95)
-   * @param limit Maximum number of cards to return
-   * @returns Cards sorted by risk (highest first)
-   */
-  getPreStudyCards(
-    cards: Array<{ id: string; state: FSRSState }>,
-    targetRetention: number = FSRS_CONSTANTS.PRE_STUDY_TARGET_RETENTION,
-    limit: number = API_LIMITS.DEFAULT_PRE_STUDY_LIMIT
-  ): Array<{ id: string; state: FSRSState; risk: ManagementRisk }> {
-    return getPreStudyCardsByRisk(
-      cards,
-      targetRetention,
-      limit,
-      this.calculateManagementRisk.bind(this),
-      {
-        now: new Date(),
-        getElapsedDays,
-        getElapsedHours,
-        calculateRetrievability: this.calculateRetrievability.bind(this),
-      }
-    );
-  }
-
   /**
    * Detect if content changed significantly
    * 
@@ -493,15 +327,9 @@ export class FSRS {
 /**
  * Create FSRS instance with default v6 weights (21 weights)
  */
-export function createFSRS(
-  config?: Partial<FSRSConfig>,
-  managementConfig?: Partial<ManagementPenaltyConfig>
-): FSRS {
-  return new FSRS(
-    {
-      ...config,
-      weights: config?.weights ?? [...FSRS_V6_DEFAULT_WEIGHTS],
-    },
-    managementConfig
-  );
+export function createFSRS(config?: Partial<FSRSConfig>): FSRS {
+  return new FSRS({
+    ...config,
+    weights: config?.weights ?? [...FSRS_V6_DEFAULT_WEIGHTS],
+  });
 }

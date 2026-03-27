@@ -1,11 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import LoginPage from '../page';
 
 const mockPost = vi.hoisted(() => vi.fn());
 const mockSetAuthSuccess = vi.hoisted(() => vi.fn());
-const mockPush = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/api', () => ({
   default: { post: mockPost },
@@ -25,7 +24,7 @@ vi.mock('next/navigation', async () => {
   return {
     ...actual,
     useRouter: () => ({
-      push: mockPush,
+      push: vi.fn(),
       replace: vi.fn(),
       refresh: vi.fn(),
       back: vi.fn(),
@@ -35,9 +34,30 @@ vi.mock('next/navigation', async () => {
   };
 });
 
+const originalWindowLocation = window.location;
+
 describe('LoginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const mockLocation = {
+      href: '',
+      assign: vi.fn(),
+      replace: vi.fn(),
+      reload: vi.fn(),
+    };
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: mockLocation,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalWindowLocation,
+    });
   });
 
   it('submits normalized credentials and stores auth on success', async () => {
@@ -66,7 +86,7 @@ describe('LoginPage', () => {
       accessToken: 'token-1',
       user: { id: 'u1', email: 'user@example.com', name: 'User' },
     });
-    expect(mockPush).toHaveBeenCalledWith('/en/app');
+    expect(window.location.href).toBe('/en/app');
   }, 15000);
 
   it('shows API error message on login failure', async () => {

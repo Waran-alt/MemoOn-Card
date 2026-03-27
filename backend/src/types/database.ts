@@ -54,11 +54,7 @@ export interface Card {
   updated_at: Date;
   /** Set when card is soft-deleted; study data (review_logs, etc.) keeps linking to the row */
   deleted_at?: Date | null;
-  /** Short-FSRS: stability in minutes while in learning; NULL when not in learning */
-  short_stability_minutes?: number | null;
-  /** Short-FSRS: number of learning reviews in current run; NULL when not in learning */
-  learning_review_count?: number | null;
-  /** Set when card graduates from short-term learning (for analytics) */
+  /** Historical: former learning-phase graduation timestamp; optional. */
   graduated_from_learning_at?: Date | null;
   /** Category IDs or summary attached to this card (when included in response) */
   category_ids?: string[];
@@ -157,19 +153,11 @@ export interface UserSettings {
   timezone?: string; // IANA timezone (e.g., "America/New_York")
   day_start?: number; // Hour (0-23) when user's day starts
   study_intensity_mode?: 'light' | 'default' | 'intensive';
-  /** Short-FSRS learning */
-  learning_graduation_cap_days?: number;
-  learning_target_retention_short?: number;
+  /** Minimum gap (minutes) between reverse-pair sides in a study session. */
   learning_min_interval_minutes?: number;
-  learning_max_attempts_before_graduate?: number;
-  learning_apply_to_lapses?: 'always' | 'within_days' | 'off';
-  learning_lapse_within_days?: number | null;
-  /** Set when user runs the Short-term optimizer (learning params are not user-editable). */
-  learning_last_optimized_at?: Date | null;
-  /** Fitted short-FSRS params from optimizer (initial S by rating, Again reset, growth by rating). */
-  learning_short_fsrs_params?: Record<string, unknown> | null;
   /** When true, user can use knowledge textarea and reversed cards in UI. */
   knowledge_enabled?: boolean;
+  session_auto_end_away_minutes?: number;
 }
 
 export interface RefreshTokenSession {
@@ -252,20 +240,6 @@ export interface UserWeightSnapshot {
   activated_by: string | null;
   activated_at: Date | null;
   activation_reason: string | null;
-  created_at: Date;
-}
-
-export interface CardManagementView {
-  id: string;
-  card_id: string;
-  user_id: string;
-  action: 'edit' | 'duplicate_check' | 'filter' | 'tag' | 'other';
-  revealed_at: Date;
-  revealed_for_seconds: number;
-  content_changed: boolean;
-  change_percent: number | null;
-  fuzzing_applied: boolean;
-  fuzzing_hours: number | null;
   created_at: Date;
 }
 
