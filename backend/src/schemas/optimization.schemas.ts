@@ -18,7 +18,6 @@ const DaysQuerySchema = z.object({
 
 export const FsrsMetricsDailyQuerySchema = DaysQuerySchema;
 export const FsrsMetricsSummaryQuerySchema = DaysQuerySchema;
-export const FsrsMetricsSessionsQuerySchema = DaysQuerySchema;
 
 export const FsrsMetricsRefreshSchema = z.object({
   days: z.number().int().min(1).max(180).optional(),

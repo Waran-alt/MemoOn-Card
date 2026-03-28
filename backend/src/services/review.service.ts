@@ -4,16 +4,18 @@ import { CardService } from './card.service';
 import { UserSettings } from '../types/database';
 import { FSRS_V6_DEFAULT_WEIGHTS, FSRS_CONSTANTS } from '../constants/fsrs.constants';
 import { STUDY_INTERVAL } from '../constants/study.constants';
-import { StudyEventsService } from './study-events.service';
 import { CardJourneyService } from './card-journey.service';
 import { elapsedDaysAtRetrievability } from './fsrs-core.utils';
 import { addDays, addMinutes, toValidDate } from './fsrs-time.utils';
 type ReviewTiming = {
+  /** Client ms when user revealed the question (front). */
   shownAt?: number;
+  /** Client ms when user revealed the answer (back). */
   revealedAt?: number;
+  /** Client ms when user submitted rating. */
   ratedAt?: number;
-  sessionId?: string;
-  sequenceInSession?: number;
+  /** ms from question reveal to answer reveal (stored; FSRS review_duration uses same). */
+  thinkingDurationMs?: number;
   clientEventId?: string;
   intensityMode?: 'light' | 'default' | 'intensive';
 };
@@ -34,12 +36,10 @@ function ensureNextReviewInFuture(lastReview: Date, nextReview: Date): Date {
 
 export class ReviewService {
   private cardService: CardService;
-  private studyEventsService: StudyEventsService;
   private journeyService: CardJourneyService;
 
   constructor() {
     this.cardService = new CardService();
-    this.studyEventsService = new StudyEventsService();
     this.journeyService = new CardJourneyService();
   }
 
@@ -177,32 +177,14 @@ export class ReviewService {
         timing
       );
 
-      await this.studyEventsService.logEvents(userId, [
-        {
-          eventType: 'rating_submitted',
-          clientEventId: timing?.clientEventId,
-          sessionId: timing?.sessionId,
-          cardId,
-          deckId: card.deck_id,
-          occurredAtClient: timing?.ratedAt ?? timing?.revealedAt ?? timing?.shownAt,
-          sequenceInSession: timing?.sequenceInSession,
-          payload: {
-            rating,
-            reviewIntervalDays: reviewResult.interval,
-          },
-        },
-      ], client);
-
       const idBase =
-        timing?.clientEventId ??
-        `${cardId}:${rating}:${timing?.sessionId ?? 'none'}:${timing?.sequenceInSession ?? 0}:${Date.now()}`;
+        timing?.clientEventId ?? `${cardId}:${rating}:${Date.now()}`;
       await this.journeyService.appendEvents(
         userId,
         [
           {
             cardId,
             deckId: card.deck_id,
-            sessionId: timing?.sessionId,
             eventType: 'rating_submitted',
             eventTime: timing?.ratedAt ?? timing?.revealedAt ?? timing?.shownAt ?? Date.now(),
             actor: 'user',
@@ -256,10 +238,14 @@ export class ReviewService {
   ): Promise<string> {
     const now = new Date();
     const reviewTime = now.getTime(); // Timestamp in milliseconds (UTC)
-    const duration =
-      reviewDuration ??
-      (timing?.shownAt != null ? Math.max(0, Math.round(reviewTime - timing.shownAt)) : undefined);
-    
+    const thinkingMs =
+      timing?.thinkingDurationMs != null && Number.isFinite(timing.thinkingDurationMs)
+        ? Math.max(0, Math.round(timing.thinkingDurationMs))
+        : timing?.shownAt != null && timing?.revealedAt != null
+          ? Math.max(0, Math.round(timing.revealedAt - timing.shownAt))
+          : null;
+    const duration = reviewDuration ?? (thinkingMs != null ? thinkingMs : undefined);
+
     let elapsedDays = 0;
     let retrievabilityBefore = null;
     let determinedReviewState: 0 | 1 | 2 | 3 = 0; // Default to New
@@ -313,7 +299,7 @@ export class ReviewService {
     const insertResult = await client.query<{ id: string }>(
       `INSERT INTO review_logs (
         card_id, user_id, rating, review_time, review_state, review_duration,
-        shown_at, revealed_at, session_id,
+        shown_at, revealed_at, thinking_duration_ms,
         scheduled_days, elapsed_days, review_date,
         stability_before, difficulty_before, retrievability_before,
         stability_after, difficulty_after
@@ -329,7 +315,7 @@ export class ReviewService {
         duration ?? null,
         timing?.shownAt ?? null,
         timing?.revealedAt ?? null,
-        timing?.sessionId ?? null,
+        thinkingMs,
         scheduledDays,
         elapsedDays,
         now,
@@ -344,21 +330,43 @@ export class ReviewService {
   }
 
   /**
-   * Batch review multiple cards. Optional sessionId links review_logs to the study session.
+   * Batch review multiple cards (no per-card timing; used as fallback path).
    */
   async batchReview(
     reviews: Array<{ cardId: string; rating: 1 | 2 | 3 | 4 }>,
-    userId: string,
-    options?: { sessionId?: string }
+    userId: string
   ): Promise<Array<{ cardId: string; result: ReviewResult | null }>> {
-    const timing = options?.sessionId ? { sessionId: options.sessionId } : undefined;
     const results = await Promise.all(
       reviews.map(async ({ cardId, rating }) => ({
         cardId,
-        result: await this.reviewCard(cardId, userId, rating, timing),
+        result: await this.reviewCard(cardId, userId, rating, undefined),
       }))
     );
     return results;
+  }
+
+  /** Review counts per calendar day for a card (revision history). */
+  async getReviewDayCountsForCard(
+    cardId: string,
+    userId: string,
+    options?: { days?: number }
+  ): Promise<Array<{ day: string; count: number }>> {
+    const days = Math.max(1, Math.min(180, options?.days ?? 90));
+    const result = await pool.query<{ day: string; count: string }>(
+      `
+      SELECT TO_CHAR(review_date::date, 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
+      FROM review_logs
+      WHERE user_id = $1 AND card_id = $2
+        AND review_date >= (CURRENT_DATE - ($3::int * INTERVAL '1 day'))
+      GROUP BY review_date::date
+      ORDER BY day DESC
+      `,
+      [userId, cardId, days]
+    );
+    return result.rows.map((row) => ({
+      day: String(row.day),
+      count: Number(row.count ?? 0),
+    }));
   }
 
   async getUserStudyIntensity(

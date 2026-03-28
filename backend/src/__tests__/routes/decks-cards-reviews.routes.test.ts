@@ -55,6 +55,7 @@ const {
     getUserStudyIntensity: vi.fn(),
     updateUserStudyIntensity: vi.fn(),
     getReviewLogsByCardId: vi.fn(),
+    getReviewDayCountsForCard: vi.fn(),
   },
   cardJourneyServiceMock: {
     appendEvent: vi.fn(),
@@ -331,7 +332,7 @@ describe('Deck/Card/Review routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(reviewServiceMock.batchReview).toHaveBeenCalledWith(reviews, mockUserId, expect.objectContaining({ sessionId: undefined }));
+      expect(reviewServiceMock.batchReview).toHaveBeenCalledWith(reviews, mockUserId);
     });
   });
 
@@ -666,19 +667,20 @@ describe('Deck/Card/Review routes', () => {
       cardJourneyServiceMock.getCardHistorySummary = vi.fn().mockResolvedValueOnce({
         cardId: mockCardId,
         days: 30,
-        totalEvents: 5,
+        totalJourneyEvents: 5,
         byEventType: [{ eventType: 'rating_submitted', count: 3 }],
-        byDay: [{ day: '2026-02-16', count: 5 }],
-        bySession: [],
       });
+      reviewServiceMock.getReviewDayCountsForCard.mockResolvedValueOnce([
+        { day: '2026-02-16', count: 2 },
+      ]);
 
-      const res = await request(app).get(`/api/cards/${mockCardId}/history/summary?days=30&sessionLimit=5`);
+      const res = await request(app).get(`/api/cards/${mockCardId}/history/summary?days=30`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(cardJourneyServiceMock.getCardHistorySummary).toHaveBeenCalledWith(
         mockUserId,
         mockCardId,
-        expect.objectContaining({ days: 30, sessionLimit: 5 })
+        expect.objectContaining({ days: 30 })
       );
     });
 
@@ -742,14 +744,13 @@ describe('Deck/Card/Review routes', () => {
   });
 
   describe('Card flag', () => {
-    it('creates a card flag with reason and optional note/sessionId', async () => {
+    it('creates a card flag with reason and optional note', async () => {
       const mockFlag = {
         id: '33333333-3333-4333-8333-333333333333',
         card_id: mockCardId,
         user_id: mockUserId,
         reason: 'wrong_content',
         note: 'Fix the answer',
-        flagged_during_session_id: '44444444-4444-4444-8444-444444444444',
         resolved: false,
         created_at: new Date(),
       };
@@ -760,7 +761,6 @@ describe('Deck/Card/Review routes', () => {
         .send({
           reason: 'wrong_content',
           note: 'Fix the answer',
-          sessionId: '44444444-4444-4444-8444-444444444444',
         });
 
       expect(res.status).toBe(201);
@@ -772,7 +772,6 @@ describe('Deck/Card/Review routes', () => {
         expect.objectContaining({
           reason: 'wrong_content',
           note: 'Fix the answer',
-          sessionId: '44444444-4444-4444-8444-444444444444',
         })
       );
     });

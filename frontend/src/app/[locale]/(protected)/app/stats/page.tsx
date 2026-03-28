@@ -69,7 +69,6 @@ export default function StatsPage() {
   const categories = categoriesData?.data ?? [];
 
   const { data: userSettings } = useApiGet<{
-    session_auto_end_away_minutes?: number;
     learning_min_interval_minutes?: number;
     knowledge_enabled?: boolean;
     fsrs_weights?: number[];
@@ -150,12 +149,6 @@ export default function StatsPage() {
           {ta('statsUserSection')}
         </h2>
         <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div title={ta('statsAwayMinutesTooltip')}>
-            <dt className="text-(--mc-text-muted)">{ta('statsAwayMinutes')}</dt>
-            <dd className="font-medium text-(--mc-text-primary)">
-              {userSettings?.session_auto_end_away_minutes ?? '—'}
-            </dd>
-          </div>
           <div title={ta('statsLearningMinIntervalTooltip')}>
             <dt className="text-(--mc-text-muted)">{ta('statsLearningMinInterval')}</dt>
             <dd className="font-medium text-(--mc-text-primary)">

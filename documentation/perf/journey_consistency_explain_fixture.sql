@@ -57,22 +57,21 @@ SELECT
 FROM review_source;
 
 WITH review_source AS (
-  SELECT gs, md5('review-' || gs::text) AS rm, md5('card-' || ((gs % 3000) + 1)::text) AS cm, md5('session-' || ((gs % 1200) + 1)::text) AS sm
+  SELECT gs, md5('review-' || gs::text) AS rm, md5('card-' || ((gs % 3000) + 1)::text) AS cm
   FROM generate_series(1, 30000) gs
 )
 INSERT INTO card_journey_events (
-  user_id, card_id, deck_id, session_id, event_type, event_time,
+  user_id, card_id, deck_id, event_type, event_time,
   actor, source, idempotency_key, review_log_id, causation_id, payload_json
 )
 SELECT
   '11111111-1111-4111-8111-111111111111',
   (substr(cm,1,8) || '-' || substr(cm,9,4) || '-' || substr(cm,13,4) || '-' || substr(cm,17,4) || '-' || substr(cm,21,12))::uuid,
   '22222222-2222-4222-8222-222222222222',
-  (substr(sm,1,8) || '-' || substr(sm,9,4) || '-' || substr(sm,13,4) || '-' || substr(sm,17,4) || '-' || substr(sm,21,12))::uuid,
   'rating_submitted',
   CAST(EXTRACT(EPOCH FROM (NOW() - ((gs % 30) * INTERVAL '1 day'))) * 1000 AS BIGINT),
   'user',
-  'study_events',
+  'review_service',
   'perf-rating-' || gs,
   (substr(rm,1,8) || '-' || substr(rm,9,4) || '-' || substr(rm,13,4) || '-' || substr(rm,17,4) || '-' || substr(rm,21,12))::uuid,
   NULL,
@@ -82,23 +81,21 @@ FROM review_source;
 WITH answer_source AS (
   SELECT gs,
          md5('card-' || ((gs % 3000) + 1)::text) AS cm,
-         md5('session-' || ((gs % 1200) + 1)::text) AS sm,
          (CASE WHEN (gs % 2) = 0 THEN 120000 ELSE 86400000 END) AS delta_ms
   FROM generate_series(1, 90000) gs
 )
 INSERT INTO card_journey_events (
-  user_id, card_id, deck_id, session_id, event_type, event_time,
+  user_id, card_id, deck_id, event_type, event_time,
   actor, source, idempotency_key, review_log_id, causation_id, payload_json
 )
 SELECT
   '11111111-1111-4111-8111-111111111111',
   (substr(cm,1,8) || '-' || substr(cm,9,4) || '-' || substr(cm,13,4) || '-' || substr(cm,17,4) || '-' || substr(cm,21,12))::uuid,
   '22222222-2222-4222-8222-222222222222',
-  (substr(sm,1,8) || '-' || substr(sm,9,4) || '-' || substr(sm,13,4) || '-' || substr(sm,17,4) || '-' || substr(sm,21,12))::uuid,
   'answer_revealed',
   CAST(EXTRACT(EPOCH FROM (NOW() - ((gs % 30) * INTERVAL '1 day'))) * 1000 AS BIGINT) + delta_ms,
   'user',
-  'study_events',
+  'ui',
   'perf-answer-' || gs,
   NULL,
   NULL,
@@ -117,7 +114,7 @@ WITH review_scope AS (
     AND review_date >= NOW() - (30 * INTERVAL '1 day')
 ),
 journey_scope AS (
-  SELECT id, review_log_id, card_id, session_id, event_time
+  SELECT id, review_log_id, card_id, event_time
   FROM card_journey_events
   WHERE user_id = '11111111-1111-4111-8111-111111111111'
     AND event_type = 'rating_submitted'
@@ -145,7 +142,6 @@ ordering_issues AS (
     WHERE r.user_id = '11111111-1111-4111-8111-111111111111'
       AND r.event_type = 'answer_revealed'
       AND r.card_id = j.card_id
-      AND COALESCE(r.session_id::text, '') = COALESCE(j.session_id::text, '')
       AND r.event_time > j.event_time
   )
 )
@@ -165,7 +161,7 @@ WITH review_scope AS (
     AND review_date >= NOW() - (30 * INTERVAL '1 day')
 ),
 journey_scope AS (
-  SELECT id, review_log_id, card_id, session_id, event_time
+  SELECT id, review_log_id, card_id, event_time
   FROM card_journey_events
   WHERE user_id = '11111111-1111-4111-8111-111111111111'
     AND event_type = 'rating_submitted'
@@ -193,7 +189,6 @@ ordering_issues AS (
     WHERE r.card_id = j.card_id
       AND r.user_id = '11111111-1111-4111-8111-111111111111'
       AND r.event_type = 'answer_revealed'
-      AND r.session_id IS NOT DISTINCT FROM j.session_id
       AND r.event_time > j.event_time
       AND r.event_time <= j.event_time + 300000
   )
@@ -214,7 +209,7 @@ WITH review_scope AS (
     AND review_date >= NOW() - (30 * INTERVAL '1 day')
 ),
 journey_scope AS (
-  SELECT id, review_log_id, card_id, session_id, event_time
+  SELECT id, review_log_id, card_id, event_time
   FROM card_journey_events
   WHERE user_id = '11111111-1111-4111-8111-111111111111'
     AND event_type = 'rating_submitted'
@@ -242,7 +237,6 @@ ordering_issues AS (
     WHERE r.user_id = '11111111-1111-4111-8111-111111111111'
       AND r.event_type = 'answer_revealed'
       AND r.card_id = j.card_id
-      AND r.session_id IS NOT DISTINCT FROM j.session_id
       AND r.event_time > j.event_time
       AND r.event_time <= j.event_time + 300000
     ORDER BY r.event_time ASC

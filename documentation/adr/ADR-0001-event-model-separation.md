@@ -1,14 +1,13 @@
 # ADR-0001: Event Model Separation
 
-- Status: Accepted
+- Status: Accepted (superseded in part — see note)
 - Date: 2026-02-09
 
 ## Context
 
 The system captures:
 
-- raw client-side study interactions,
-- immutable card journey history,
+- immutable card journey history (including study-relevant events),
 - and operational auth/API telemetry.
 
 Each stream serves a different consumer and has different retention and query patterns.
@@ -17,11 +16,12 @@ Each stream serves a different consumer and has different retention and query pa
 
 Keep these streams as separate models/tables:
 
-- `study_events` for client action ingestion and replay/debug.
 - `card_journey_events` for immutable, user-facing timeline and consistency checks.
 - `user_operational_events` for service health/latency/auth telemetry.
 
 Cross-stream analysis happens in read-model services (`study-health-dashboard`, consistency reports), not by collapsing the source-of-truth schemas.
+
+**Evolution (2026-03):** The dedicated `study_events` table and session-centric ingestion path were removed (migration `043-remove-sessions-simplify-reviews`). Client study actions are reflected in `card_journey_events` and `review_logs` without a separate raw-ingest table.
 
 ## Consequences
 

@@ -9,22 +9,14 @@ import type { Deck, Card, ReviewResult } from '@/types';
 import type { Rating } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useConnectionState } from '@/hooks/useConnectionState';
-import {
-  retryWithBackoff,
-  addToPendingQueue,
-  getPendingCount,
-  flushPendingQueue,
-  buildStudyEventsBody,
-  type StudyEventPayload,
-} from '@/lib/studySync';
+import { retryWithBackoff, addToPendingQueue, getPendingCount, flushPendingQueue } from '@/lib/studySync';
 import { parseSessionSize, getSessionLimit, type SessionSizeKey } from '@/lib/sessionSize';
 import { useUserStudySettings } from '@/hooks/useUserStudySettings';
 import { STUDY_INTERVAL } from '@memoon-card/shared';
 import { CardFormFields } from '../CardFormFields';
 
-const STUDY_EVENTS_URL = '/api/study/events';
-/** Below this (ms), tab hidden is ignored. Above: session pauses; above user threshold: session ends. */
-const PAUSE_GRACE_MS = 5000;
+/** When remaining queue size is at or below this, fetch more due cards (up to session ceiling). */
+const QUEUE_LOW_WATER = 5;
 /** Minimum time (ms) between showing the two cards of a reverse pair; uses STUDY_INTERVAL.MIN_INTERVAL_MINUTES. */
 const REVERSE_PAIR_MIN_TIME_MS = STUDY_INTERVAL.MIN_INTERVAL_MINUTES * 60 * 1000;
 
@@ -42,9 +34,8 @@ function formatStudyDuration(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-interface SavedStudySession {
+interface SavedStudyQueue {
   deckId: string;
-  sessionId: string;
   reviewedCardIds: string[];
   queue: Card[];
   reviewedCount: number;
@@ -52,12 +43,12 @@ interface SavedStudySession {
   savedAt: number;
 }
 
-function getSavedStudySession(deckId: string): SavedStudySession | null {
+function getSavedStudyQueue(deckId: string): SavedStudyQueue | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = sessionStorage.getItem(`${STUDY_SESSION_STORAGE_KEY_PREFIX}${deckId}`);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as SavedStudySession;
+    const parsed = JSON.parse(raw) as SavedStudyQueue;
     if (parsed.savedAt < Date.now() - STUDY_SESSION_MAX_AGE_MS) return null;
     if (parsed.deckId !== deckId || !Array.isArray(parsed.queue) || !Array.isArray(parsed.reviewedCardIds)) return null;
     return parsed;
@@ -66,9 +57,8 @@ function getSavedStudySession(deckId: string): SavedStudySession | null {
   }
 }
 
-function saveStudySession(
+function saveStudyQueue(
   deckId: string,
-  sessionId: string,
   reviewedCardIds: string[],
   queue: Card[],
   reviewedCount: number,
@@ -76,9 +66,8 @@ function saveStudySession(
 ): void {
   if (typeof window === 'undefined') return;
   try {
-    const state: SavedStudySession = {
+    const state: SavedStudyQueue = {
       deckId,
-      sessionId,
       reviewedCardIds,
       queue,
       reviewedCount,
@@ -91,7 +80,7 @@ function saveStudySession(
   }
 }
 
-function clearStudySession(deckId: string): void {
+function clearStudyQueue(deckId: string): void {
   if (typeof window === 'undefined') return;
   try {
     sessionStorage.removeItem(`${STUDY_SESSION_STORAGE_KEY_PREFIX}${deckId}`);
@@ -173,34 +162,23 @@ export default function StudyPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [reviewError, setReviewError] = useState('');
   const [reviewedCount, setReviewedCount] = useState(0);
-  const sessionIdRef = useRef(crypto.randomUUID());
-  const sequenceRef = useRef(0);
   const reviewedCardIdsRef = useRef<string[]>([]);
-  /** When each card was last shown (for reverse-pair 1‑min gap and review payload). */
+  /** When each card was last shown (for reverse-pair gap and review payload). */
   const lastShownAtRef = useRef<Record<string, number>>({});
   const queueRef = useRef<Card[]>([]);
   queueRef.current = queue;
+  const prefetchAbortRef = useRef<AbortController | null>(null);
 
   const { isOnline, hadFailure, setHadFailure } = useConnectionState();
   const [pendingCount, setPendingCount] = useState(0);
-  const [extendLoading, setExtendLoading] = useState(false);
-  /** When session is done: true = show extend buttons, false = hide, null = still checking */
-  const [hasMoreCardsToStudy, setHasMoreCardsToStudy] = useState<boolean | null>(null);
-  /** When session is done and we have more cards: number of cards available for extend (used to show only feasible options). */
-  const [availableCardsCount, setAvailableCardsCount] = useState<number | null>(null);
-  const { awayMinutes, learningMinIntervalMinutes } = useUserStudySettings();
+  const { learningMinIntervalMinutes } = useUserStudySettings();
 
-  const [isPaused, setIsPaused] = useState(false);
-  const [sessionEndedByAway, setSessionEndedByAway] = useState(false);
-  const [sessionElapsedMs, setSessionElapsedMs] = useState(0);
-  const [cardElapsedMs, setCardElapsedMs] = useState(0);
-  const hiddenAtRef = useRef<number | null>(null);
-  const totalPausedMsRef = useRef(0);
-  const sessionStartRef = useRef<number | null>(null);
-  /** Timestamp when user clicked "Show answer" for the current card; avoids rating_submitted before answer_revealed when click is fast. */
+  /** Thinking time: question reveal → answer reveal (ms), frozen once answer is shown. */
+  const [thinkingElapsedMs, setThinkingElapsedMs] = useState(0);
+  /** Timestamp when user clicked "Show answer" for the current card. */
   const answerRevealedAtRef = useRef<number | null>(null);
-  /** When the current card became active (effect run); fallback for shownAt if user rates before card_shown timeout. */
-  const cardBecameCurrentAtRef = useRef<number | null>(null);
+  /** When the user revealed the question (thinking timer starts). */
+  const questionRevealedAtRef = useRef<number | null>(null);
 
   const sessionSize = parseSessionSize(searchParams.get('sessionSize'));
   const sessionLimit = getSessionLimit(sessionSize);
@@ -213,47 +191,7 @@ export default function StudyPage() {
     { code: 'other', labelKey: 'needManagementReasonOther' },
   ];
 
-  const nextSequence = useCallback(() => {
-    sequenceRef.current += 1;
-    return sequenceRef.current;
-  }, []);
-
-  const sendStudyEvents = useCallback(
-    async (events: StudyEventPayload[]) => {
-      if (events.length === 0) return;
-      const body = buildStudyEventsBody(events);
-      try {
-        await retryWithBackoff(() => apiClient.post(STUDY_EVENTS_URL, body));
-        setHadFailure(false);
-      } catch {
-        setHadFailure(true);
-        addToPendingQueue({ type: 'events', url: STUDY_EVENTS_URL, payload: body });
-        setPendingCount(getPendingCount());
-      }
-    },
-    [setHadFailure]
-  );
-
-  const emitStudyEvent = useCallback(
-    (eventType: string, payload?: Record<string, unknown>, cardId?: string) => {
-      const event: StudyEventPayload = {
-        eventType,
-        clientEventId: crypto.randomUUID(),
-        sessionId: sessionIdRef.current ?? undefined,
-        deckId: id || undefined,
-        cardId,
-        occurredAtClient: Date.now(),
-        sequenceInSession: nextSequence(),
-        payload,
-      };
-      void sendStudyEvents([event]);
-    },
-    [id, nextSequence, sendStudyEvents]
-  );
-
   const currentCard = queue[0];
-  const sessionStartEmittedRef = useRef(false);
-  const sessionEndEmittedRef = useRef(false);
 
   useEffect(() => {
     setNeedManage(false);
@@ -261,9 +199,9 @@ export default function StudyPage() {
     setOtherNote('');
     setShowQuestion(false);
     setShowAnswer(false);
-    setCardElapsedMs(0);
+    setThinkingElapsedMs(0);
     answerRevealedAtRef.current = null;
-    cardBecameCurrentAtRef.current = null;
+    questionRevealedAtRef.current = null;
   }, [currentCard?.id]);
 
   const reversePairMinGapMs = Math.max(
@@ -271,16 +209,7 @@ export default function StudyPage() {
     learningMinIntervalMinutes * 60 * 1000
   );
 
-  useEffect(() => {
-    if (queue.length > 0 && !sessionStartEmittedRef.current) {
-      sessionStartEmittedRef.current = true;
-      emitStudyEvent('session_start', { cardCount: queue.length });
-    }
-  }, [queue.length, emitStudyEvent]);
-
-  // cardBecameCurrentAtRef is set when user clicks "Show question" so the card timer starts on reveal only.
-
-  // Enforce min time gap between reverse-pair cards (≥ 1 min or user's learning_min_interval_minutes); if none can be shown, end session
+  // Enforce min time gap between reverse-pair cards (≥ 1 min or user's learning_min_interval_minutes); if none can be shown, clear queue
   useEffect(() => {
     if (queue.length === 0) return;
     const now = Date.now();
@@ -301,73 +230,21 @@ export default function StudyPage() {
     setQueue(reordered);
   }, [queue, reversePairMinGapMs]);
 
-  // Session start time for chrono (stops while paused)
-  useEffect(() => {
-    if (queue.length > 0 && sessionStartRef.current == null) {
-      sessionStartRef.current = Date.now();
-    }
-  }, [queue.length]);
-
-  // Timers: session and per-card elapsed (pause excluded when tab hidden)
+  // Thinking timer: runs after question reveal until answer reveal (then stays fixed).
   useEffect(() => {
     const tick = () => {
-      const now = Date.now();
-      const currentPauseMs =
-        typeof document !== 'undefined' && document.hidden && hiddenAtRef.current != null
-          ? now - hiddenAtRef.current
-          : 0;
-      if (sessionStartRef.current != null) {
-        const sessionMs = Math.max(0, now - sessionStartRef.current - totalPausedMsRef.current - currentPauseMs);
-        setSessionElapsedMs(sessionMs);
+      const start = questionRevealedAtRef.current;
+      if (start == null) {
+        setThinkingElapsedMs(0);
+        return;
       }
-      if (cardBecameCurrentAtRef.current != null) {
-        const endMs = answerRevealedAtRef.current ?? now;
-        const cardMs = answerRevealedAtRef.current != null
-          ? Math.max(0, endMs - cardBecameCurrentAtRef.current)
-          : Math.max(0, now - cardBecameCurrentAtRef.current - currentPauseMs);
-        setCardElapsedMs(cardMs);
-      } else {
-        setCardElapsedMs(0);
-      }
+      const end = answerRevealedAtRef.current ?? Date.now();
+      setThinkingElapsedMs(Math.max(0, end - start));
     };
     tick();
-    const interval = setInterval(tick, 1000);
+    const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [currentCard?.id, queue.length]);
-
-  // Pause/resume/auto-end: < 5s nothing; 5s–threshold pause and offer resume; > threshold end session.
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const thresholdMs = awayMinutes * 60 * 1000;
-    const handleVisibility = () => {
-      const active = queue.length > 0 || reviewedCount > 0;
-      if (!active || sessionEndedByAway) return;
-      if (document.hidden) {
-        hiddenAtRef.current = Date.now();
-        emitStudyEvent('tab_hidden', { at: Date.now() });
-      } else {
-        const hiddenAt = hiddenAtRef.current;
-        hiddenAtRef.current = null;
-        emitStudyEvent('tab_visible', { at: Date.now() });
-        if (hiddenAt == null) return;
-        const duration = Date.now() - hiddenAt;
-        if (duration < PAUSE_GRACE_MS) return;
-        if (duration >= thresholdMs) {
-          if (!sessionEndEmittedRef.current) {
-            sessionEndEmittedRef.current = true;
-            emitStudyEvent('session_end', { reviewedCount, reason: 'away_too_long', awayMs: duration });
-          }
-          clearStudySession(id);
-          setSessionEndedByAway(true);
-          return;
-        }
-        totalPausedMsRef.current += duration;
-        setIsPaused(true);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [id, queue.length, reviewedCount, sessionEndedByAway, awayMinutes, emitStudyEvent]);
+  }, [currentCard?.id, showQuestion, showAnswer]);
 
   useEffect(() => {
     if (!id) return;
@@ -377,10 +254,10 @@ export default function StudyPage() {
     setLoading(true);
     setError('');
 
-    const saved = getSavedStudySession(id);
-    // Only restore if there are still cards to review; otherwise start fresh (avoids showing "session ended" immediately)
+    const saved = getSavedStudyQueue(id);
+    // Only restore if there are still cards to review; otherwise start fresh
     const canRestore = saved && saved.queue.length > 0;
-    if (saved && !canRestore) clearStudySession(id);
+    if (saved && !canRestore) clearStudyQueue(id);
 
     if (canRestore) {
       apiClient
@@ -394,9 +271,7 @@ export default function StudyPage() {
           lastShownAtRef.current = {};
           setQueue(separateReversedPairs(saved.queue));
           setReviewedCount(saved.reviewedCount);
-          sessionIdRef.current = saved.sessionId;
           reviewedCardIdsRef.current = saved.reviewedCardIds;
-          sessionStartEmittedRef.current = true;
           setHadFailure(false);
         })
         .catch((err) => {
@@ -438,31 +313,23 @@ export default function StudyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ta() is stable enough for error messages; including it causes infinite re-fetch loop
   }, [id, searchParams.get('sessionSize')]);
 
-  // Reinsertion: ready learning cards are injected only when transitioning (handleSubmitRating).
-  // No interval here — injecting mid-session caused cards to "auto-advance" while the user was still viewing one.
-
-  // When session is done, fetch how many cards are available to study (to show extend buttons and only feasible options)
-  // Cards blocked by reverse-pair time gap count as 0 (same rule as during session)
+  /** Top up queue when it runs low, staying under the session-size ceiling. */
   useEffect(() => {
-    if (queue.length > 0 || reviewedCount === 0 || !id) {
-      if (queue.length > 0) {
-        setHasMoreCardsToStudy(null);
-        setAvailableCardsCount(null);
-      }
-      return;
-    }
-    const excludeIds = reviewedCardIdsRef.current;
+    if (!id || !deck || loading) return;
+    if (queue.length === 0 || queue.length > QUEUE_LOW_WATER) return;
+    const ceiling = getSessionLimit(sessionSize);
+    const slots = ceiling - queue.length;
+    if (slots <= 0) return;
+
+    prefetchAbortRef.current?.abort();
     const ac = new AbortController();
-    const params = new URLSearchParams({ limit: '50' });
+    prefetchAbortRef.current = ac;
+
+    const excludeIds = [...new Set([...reviewedCardIdsRef.current, ...queueRef.current.map((c) => c.id)])];
+    const params = new URLSearchParams({ limit: String(slots) });
     excludeIds.forEach((cid) => params.append('excludeCardIds', cid));
-    const gapMs = Math.max(REVERSE_PAIR_MIN_TIME_MS, learningMinIntervalMinutes * 60 * 1000);
-    const isBlocked = (c: Card) => {
-      if (!c.reverse_card_id) return false;
-      const t = lastShownAtRef.current[c.reverse_card_id];
-      if (t == null) return false;
-      return (Date.now() - t) < gapMs;
-    };
-    apiClient
+
+    void apiClient
       .get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards/study?${params.toString()}`, { signal: ac.signal })
       .catch(() =>
         apiClient.get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`, { signal: ac.signal }).then((r) => {
@@ -470,76 +337,38 @@ export default function StudyPage() {
           const now = new Date().toISOString();
           const due = cards.filter((c) => c.next_review && c.next_review <= now);
           const newCards = cards.filter((c) => c.stability == null);
-          const filtered = [...due, ...newCards].filter((c) => !excludeIds.includes(c.id)).slice(0, 50);
+          const filtered = [...due, ...newCards].filter((c) => !excludeIds.includes(c.id)).slice(0, slots);
           return { data: { success: true, data: filtered } };
         })
       )
       .then((res) => {
-        const list = res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
-        const unblocked = list.filter((c) => !isBlocked(c));
-        setHasMoreCardsToStudy(unblocked.length > 0);
-        setAvailableCardsCount(unblocked.length);
+        if (ac.signal.aborted) return;
+        const fresh = res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+        setQueue((prev) => {
+          const seen = new Set(prev.map((c) => c.id));
+          const extra = fresh.filter((c) => !seen.has(c.id));
+          if (extra.length === 0) return prev;
+          return separateReversedPairs([...prev, ...shuffleCards(extra)]);
+        });
       })
-      .catch(() => {
-        setHasMoreCardsToStudy(false);
-        setAvailableCardsCount(0);
+      .catch((err) => {
+        if (!isRequestCancelled(err)) {
+          /* keep studying with remaining cards */
+        }
       });
+
     return () => ac.abort();
-  }, [id, queue.length, reviewedCount, learningMinIntervalMinutes]);
+  }, [id, deck, loading, queue.length, sessionSize]);
 
   useEffect(() => {
     if (!id || !deck || (queue.length === 0 && reviewedCount === 0)) return;
-    saveStudySession(id, sessionIdRef.current ?? '', reviewedCardIdsRef.current, queue, reviewedCount, sessionSize);
+    saveStudyQueue(id, reviewedCardIdsRef.current, queue, reviewedCount, sessionSize);
   }, [id, deck, queue, reviewedCount, sessionSize]);
 
   function goToDeck() {
-    if (reviewedCount > 0 && !sessionEndEmittedRef.current) {
-      sessionEndEmittedRef.current = true;
-      emitStudyEvent('session_end', { reviewedCount });
-    }
-    clearStudySession(id);
+    clearStudyQueue(id);
     router.push(`/${locale}/app/decks/${id}`);
   }
-
-  async function extendSession(size: SessionSizeKey) {
-    const excludeIds = reviewedCardIdsRef.current;
-    const limit = getSessionLimit(size);
-    if (limit < 1) return;
-    setExtendLoading(true);
-    setReviewError('');
-    const ac = new AbortController();
-    const timeoutId = setTimeout(() => ac.abort(), 15000);
-    try {
-      const params = new URLSearchParams({ limit: String(limit) });
-      excludeIds.forEach((cid) => params.append('excludeCardIds', cid));
-      const res = await apiClient.get<{ success: boolean; data?: Card[] }>(
-        `/api/decks/${id}/cards/study?${params.toString()}`,
-        { signal: ac.signal }
-      ).catch(() =>
-        apiClient.get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`, { signal: ac.signal }).then((r) => {
-          const cards = r.data?.data ?? [];
-          const now = new Date().toISOString();
-          const due = cards.filter((c) => c.next_review && c.next_review <= now);
-          const newCards = cards.filter((c) => c.stability == null);
-          const filtered = [...due, ...newCards].filter((c) => !excludeIds.includes(c.id)).slice(0, limit);
-          return { data: { success: true, data: filtered } };
-        })
-      );
-      const list = res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
-      if (list.length > 0) {
-        setQueue(separateReversedPairs(shuffleCards(list)));
-        setShowAnswer(false);
-        setHadFailure(false);
-      }
-    } catch (err) {
-      if (!isRequestCancelled(err)) setReviewError(getApiErrorMessage(err, ta('failedLoadCards')));
-    } finally {
-      clearTimeout(timeoutId);
-      setExtendLoading(false);
-    }
-  }
-
-  // session_end is emitted only when leaving (goToDeck), not when queue becomes empty, so user can extend
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -563,20 +392,19 @@ export default function StudyPage() {
     setSubmitting(true);
     setReviewError('');
     const now = Date.now();
-    // Use refs set at event time so payload timestamps match actual UI moments (no fake "60s ago" — that could put rating_submitted before answer_revealed).
-    const shownAt = lastShownAtRef.current[card.id] ?? cardBecameCurrentAtRef.current ?? now;
+    const shownAt = lastShownAtRef.current[card.id] ?? questionRevealedAtRef.current ?? now;
     const revealedAt = answerRevealedAtRef.current ?? (showAnswer ? now : undefined);
-    const ratedAt = now; // Moment user clicked rating; ensures rating_submitted is after answer_revealed in replay
+    const ratedAt = now;
+    const thinkingDurationMs =
+      shownAt != null && revealedAt != null ? Math.max(0, Math.round(revealedAt - shownAt)) : undefined;
     const payload = {
       rating,
       shownAt,
       revealedAt,
       ratedAt,
-      sessionId: sessionIdRef.current,
-      sequenceInSession: nextSequence(),
+      thinkingDurationMs,
       clientEventId: crypto.randomUUID(),
     };
-    /* rating_submitted is created by the backend when the review is saved; no client emit to avoid duplicate in session replay */
     try {
       try {
         await retryWithBackoff(() =>
@@ -587,7 +415,6 @@ export default function StudyPage() {
           await retryWithBackoff(() =>
             apiClient.post<{ success: boolean; data?: ReviewResult[] }>('/api/reviews/batch', {
               reviews: [{ cardId: card.id, rating }],
-              sessionId: sessionIdRef.current ?? undefined,
             })
           );
         } catch {
@@ -621,7 +448,6 @@ export default function StudyPage() {
       await apiClient.post(`/api/cards/${currentCard.id}/flag`, {
         reason,
         note: note || undefined,
-        sessionId: sessionIdRef.current ?? undefined,
       });
       setNeedManage(false);
     } catch {
@@ -638,7 +464,6 @@ export default function StudyPage() {
     setEditVerso(currentCard.verso);
     setEditComment(currentCard.comment ?? '');
     setEditError('');
-    emitStudyEvent('card_edit_opened_during_study', { cardId: currentCard.id }, currentCard.id);
   }
 
   function closeEditModal() {
@@ -711,80 +536,21 @@ export default function StudyPage() {
     );
   }
 
-  if (sessionEndedByAway) {
-    const endedAwayLabel = ta('studySessionEndedAway') !== 'studySessionEndedAway' ? ta('studySessionEndedAway') : 'Session ended';
-    const endedAwayHint = ta('studySessionEndedAwayHint') !== 'studySessionEndedAwayHint' ? ta('studySessionEndedAwayHint') : 'You were away for longer than your limit. Progress has been saved.';
-    return (
-      <div className="mc-study-page mx-auto max-w-2xl space-y-6">
-        <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
-          <p className="text-lg font-medium text-(--mc-text-primary)">{endedAwayLabel}</p>
-          <p className="mt-2 text-sm text-(--mc-text-secondary)">{endedAwayHint}</p>
-          <div className="mt-6">
-            <button type="button" onClick={goToDeck} className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100">
-              {ta('backToDeck')}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (sessionDone) {
-    const allExtendOptions: { key: SessionSizeKey; labelKey: string }[] = [
-      { key: 'one', labelKey: 'studyExtendOne' },
-      { key: 'small', labelKey: 'studyExtendSmall' },
-      { key: 'medium', labelKey: 'studyExtendMedium' },
-      { key: 'large', labelKey: 'studyExtendLarge' },
-    ];
-    const count = availableCardsCount ?? 0;
-    const extendOptions = allExtendOptions.filter((opt) => getSessionLimit(opt.key) <= count);
-    const showExtendButtons = hasMoreCardsToStudy === true && extendOptions.length > 0;
-    const checkingExtend = hasMoreCardsToStudy === null;
-    const allCardsReviewed = hasMoreCardsToStudy === false;
     return (
       <div className="mc-study-page mx-auto max-w-2xl space-y-6">
         <div className="mc-study-surface rounded-xl border p-8 text-center shadow-sm">
           <p className="text-lg font-medium text-(--mc-text-primary)">{ta('sessionComplete')}</p>
           <p className="mt-2 text-sm text-(--mc-text-secondary)">{ta('reviewedCount', { count: reviewedCount })}</p>
-          {allCardsReviewed && (
-            <p className="mt-4 text-base font-medium text-(--mc-accent-primary)">{ta('studyAllCardsReviewed')}</p>
-          )}
-          {showExtendButtons && (
-            <>
-              <p className="mt-4 text-sm font-medium text-(--mc-text-secondary)">{ta('studyExtendPrompt')}</p>
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
-                {extendOptions.map(({ key, labelKey }) => {
-                  const label =
-                    key === 'one'
-                      ? ta(labelKey)
-                      : ta(labelKey, { vars: { count: String(getSessionLimit(key)) } });
-                  const fallback = key === 'one' ? '1 more card' : key.charAt(0).toUpperCase() + key.slice(1);
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      disabled={extendLoading}
-                      onClick={() => extendSession(key)}
-                      className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-card) px-3 py-2 text-sm font-medium hover:bg-(--mc-bg-elevated) disabled:opacity-50"
-                    >
-                      {label !== labelKey ? label : fallback}
-                    </button>
-                  );
-                })}
-              </div>
-              {reviewError && <p className="mt-2 text-sm text-(--mc-accent-danger)" role="alert">{reviewError}</p>}
-            </>
-          )}
-          {checkingExtend && (
-            <p className="mt-4 text-sm text-(--mc-text-muted)">{ta('studyExtendChecking') !== 'studyExtendChecking' ? ta('studyExtendChecking') : 'Checking for more cards…'}</p>
-          )}
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <button type="button" onClick={goToDeck} className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100">
+          <p className="mt-4 text-sm text-(--mc-text-muted)">{ta('studyNoMoreDue')}</p>
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={goToDeck}
+              className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100"
+            >
               {ta('backToDeck')}
             </button>
-            <Link href={`/${locale}/app/study-sessions`} className="rounded-lg border border-(--mc-border-subtle) px-4 py-2 text-sm font-medium hover:bg-(--mc-bg-card)">
-              {ta('viewStudySessions')}
-            </Link>
           </div>
         </div>
       </div>
@@ -801,21 +567,6 @@ export default function StudyPage() {
 
   return (
     <div className="mc-study-page mx-auto max-w-2xl space-y-6 relative">
-      {isPaused && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-(--mc-bg-page)/90 backdrop-blur-sm" role="dialog" aria-label={ta('studyPausedTitle') !== 'studyPausedTitle' ? ta('studyPausedTitle') : 'Session paused'}>
-          <div className="mx-4 rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-card) p-6 text-center shadow-lg">
-            <p className="text-lg font-medium text-(--mc-text-primary)">{ta('studyPausedTitle') !== 'studyPausedTitle' ? ta('studyPausedTitle') : 'Session paused'}</p>
-            <p className="mt-2 text-sm text-(--mc-text-secondary)">{ta('studyPausedResumeHint') !== 'studyPausedResumeHint' ? ta('studyPausedResumeHint') : 'The timer stopped. Resume to continue.'}</p>
-            <button
-              type="button"
-              onClick={() => setIsPaused(false)}
-              className="mt-4 rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100"
-            >
-              {ta('studyResumeSession') !== 'studyResumeSession' ? ta('studyResumeSession') : 'Resume session'}
-            </button>
-          </div>
-        </div>
-      )}
       {showConnectionBanner && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-(--mc-accent-warning)/50 bg-(--mc-accent-warning)/10 px-3 py-2 text-sm text-(--mc-accent-warning)" role="status">
           <span>{connectionMessage}</span>
@@ -835,12 +586,11 @@ export default function StudyPage() {
           ← {ta('exitStudy')}
         </button>
         <div className="flex items-center gap-4 text-sm text-(--mc-text-secondary)">
-          <span title={ta('studyTimerSession')}>
-            {ta('studyTimerSession')}: <span className="font-mono tabular-nums">{formatStudyDuration(sessionElapsedMs)}</span>
-          </span>
-          {currentCard && (
-            <span title={ta('studyTimerCard')}>
-              {ta('studyTimerCard')}: <span className="font-mono tabular-nums">{formatStudyDuration(cardElapsedMs)}</span>
+          {showQuestion && (
+            <span title={ta('studyTimerThinkingTooltip')}>
+              {ta('studyTimerThinking')}
+              :{' '}
+              <span className="font-mono tabular-nums">{formatStudyDuration(thinkingElapsedMs)}</span>
             </span>
           )}
           <span>
@@ -862,8 +612,7 @@ export default function StudyPage() {
                   if (!card?.id) return;
                   const at = Date.now();
                   lastShownAtRef.current[card.id] = at;
-                  cardBecameCurrentAtRef.current = at;
-                  emitStudyEvent('card_shown', { queueSize: queueRef.current.length }, card.id);
+                  questionRevealedAtRef.current = at;
                   setShowQuestion(true);
                 }}
                 className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100"
@@ -886,7 +635,6 @@ export default function StudyPage() {
                 onClick={() => {
                   const at = Date.now();
                   answerRevealedAtRef.current = at;
-                  emitStudyEvent('answer_revealed', undefined, card?.id);
                   setShowAnswer(true);
                 }}
                 className="rounded-lg bg-(--mc-accent-primary) px-4 py-2 text-sm font-medium text-white opacity-90 hover:opacity-100"
@@ -909,6 +657,13 @@ export default function StudyPage() {
             </p>
             <p className="mt-2 whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
               {card.verso}
+            </p>
+            <p className="mt-3 text-sm text-(--mc-text-muted)">
+              {ta('studyThinkingTimeLabel')}
+              :{' '}
+              <span className="font-mono tabular-nums text-(--mc-text-secondary)">
+                {formatStudyDuration(thinkingElapsedMs)}
+              </span>
             </p>
             <div className="mt-6 space-y-4">
             <div className="flex flex-wrap gap-2">

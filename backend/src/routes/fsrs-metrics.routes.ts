@@ -6,7 +6,6 @@ import {
   FsrsMetricsDailyQuerySchema,
   FsrsMetricsRefreshSchema,
   FsrsMetricsSummaryQuerySchema,
-  FsrsMetricsSessionsQuerySchema,
 } from '@/schemas/optimization.schemas';
 import { FsrsMetricsService } from '@/services/fsrs-metrics.service';
 
@@ -31,14 +30,6 @@ router.get('/summary', validateQuery(FsrsMetricsSummaryQuerySchema), asyncHandle
   const days = query.validatedQuery?.days ?? 30;
   const summary = await fsrsMetricsService.getSummary(userId, days);
   return res.json({ success: true, data: summary });
-}));
-
-router.get('/sessions', validateQuery(FsrsMetricsSessionsQuerySchema), asyncHandler(async (req, res) => {
-  const userId = getUserId(req);
-  const query = req as RequestWithValidatedQuery;
-  const days = query.validatedQuery?.days ?? 30;
-  const rows = await fsrsMetricsService.getSessionMetrics(userId, days);
-  return res.json({ success: true, data: { days, rows } });
 }));
 
 router.get('/windows', asyncHandler(async (req, res) => {

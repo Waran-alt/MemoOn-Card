@@ -137,7 +137,7 @@ export class DeckService {
   }
 
   /**
-   * Soft-delete a deck. Row and FKs (cards, study_events, etc.) are kept; cards and study data remain.
+   * Soft-delete a deck. Row and FKs (cards, review logs, etc.) are kept; cards and study data remain.
    */
   async deleteDeck(deckId: string, userId: string): Promise<boolean> {
     const result = await pool.query(

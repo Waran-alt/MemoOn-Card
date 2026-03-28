@@ -18,9 +18,9 @@ vi.mock('@/hooks/useTranslation', () => ({
     t: (key: string) => {
       const map: Record<string, string> = {
         loading: 'Loading…',
-        viewStudySessions: 'View study sessions',
+        backToDecks: 'Back to decks',
         studyHealthDashboardTitle: 'Review stats & system health',
-        studyHealthDashboardIntro: 'Overview of your review activity, session consistency, and service status.',
+        studyHealthDashboardIntro: 'Overview of your review activity, journey consistency, and service status.',
         studyHealthDashboardLoadError: 'Failed to load health dashboard.',
         studyHealthDashboardUnavailable: 'Health dashboard unavailable.',
         studyHealthChartRefreshFailuresTitle: 'Refresh failures',

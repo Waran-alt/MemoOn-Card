@@ -59,7 +59,7 @@ const mockCard: Card = {
 
 function defaultGetImpl(url: string) {
   if (url === '/api/user/settings') {
-    return Promise.resolve({ data: { success: true, data: { session_auto_end_away_minutes: 5 } } });
+    return Promise.resolve({ data: { success: true, data: { learning_min_interval_minutes: 1 } } });
   }
   if (url.includes('/cards/study')) return Promise.resolve({ data: { success: true, data: [] } });
   if (url === '/api/decks/deck-123') return Promise.resolve({ data: { success: true, data: mockDeck } });
@@ -106,7 +106,7 @@ describe('StudyPage', () => {
 
   it('shows deck not found when deck API returns no data', async () => {
     mockGet.mockImplementation((url: string) => {
-      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { session_auto_end_away_minutes: 5 } } });
+      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { learning_min_interval_minutes: 1 } } });
       if (url === '/api/decks/deck-123') return Promise.resolve({ data: { success: true, data: undefined } });
       if (url.includes('/cards/study')) return Promise.resolve({ data: { success: true, data: [] } });
       return Promise.resolve({ data: { success: true, data: null } });
@@ -134,7 +134,7 @@ describe('StudyPage', () => {
 
   it('shows card recto and Show answer, then verso and rating buttons', async () => {
     mockGet.mockImplementation((url: string) => {
-      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { session_auto_end_away_minutes: 5 } } });
+      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { learning_min_interval_minutes: 1 } } });
       if (url.includes('/cards/study')) return Promise.resolve({ data: { success: true, data: [mockCard] } });
       if (url === '/api/decks/deck-123') return Promise.resolve({ data: { success: true, data: mockDeck } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
@@ -159,7 +159,7 @@ describe('StudyPage', () => {
 
   it('calls POST review and shows session complete after rating last card', async () => {
     mockGet.mockImplementation((url: string) => {
-      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { session_auto_end_away_minutes: 5 } } });
+      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { learning_min_interval_minutes: 1 } } });
       if (url.includes('/cards/study')) return Promise.resolve({ data: { success: true, data: [mockCard] } });
       if (url === '/api/decks/deck-123') return Promise.resolve({ data: { success: true, data: mockDeck } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
@@ -187,13 +187,12 @@ describe('StudyPage', () => {
       expect(screen.getByText(/Session complete/)).toBeInTheDocument();
     });
     expect(screen.getByText(/You reviewed 1 card/)).toBeInTheDocument();
-    const sessionsLink = screen.getByRole('link', { name: 'View study sessions' });
-    expect(sessionsLink).toHaveAttribute('href', '/en/app/study-sessions');
+    expect(screen.getByRole('button', { name: /Back to deck/ })).toBeInTheDocument();
   });
 
   it('shows Need management checkbox and Add note / Edit card now when checked after revealing answer', async () => {
     mockGet.mockImplementation((url: string) => {
-      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { session_auto_end_away_minutes: 5 } } });
+      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { learning_min_interval_minutes: 1 } } });
       if (url.includes('/cards/study')) return Promise.resolve({ data: { success: true, data: [mockCard] } });
       if (url === '/api/decks/deck-123') return Promise.resolve({ data: { success: true, data: mockDeck } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
@@ -220,7 +219,7 @@ describe('StudyPage', () => {
 
   it('opens edit modal when Edit card now is clicked without leaving session', async () => {
     mockGet.mockImplementation((url: string) => {
-      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { session_auto_end_away_minutes: 5 } } });
+      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { learning_min_interval_minutes: 1 } } });
       if (url.includes('/cards/study')) return Promise.resolve({ data: { success: true, data: [mockCard] } });
       if (url === '/api/decks/deck-123') return Promise.resolve({ data: { success: true, data: mockDeck } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });
@@ -249,7 +248,7 @@ describe('StudyPage', () => {
 
   it('calls POST /api/cards/:id/flag when Add note reason is selected', async () => {
     mockGet.mockImplementation((url: string) => {
-      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { session_auto_end_away_minutes: 5 } } });
+      if (url === '/api/user/settings') return Promise.resolve({ data: { success: true, data: { learning_min_interval_minutes: 1 } } });
       if (url.includes('/cards/study')) return Promise.resolve({ data: { success: true, data: [mockCard] } });
       if (url === '/api/decks/deck-123') return Promise.resolve({ data: { success: true, data: mockDeck } });
       return Promise.resolve({ data: { success: true, data: mockDeck } });

@@ -17,22 +17,14 @@ describe('FsrsMetricsService', () => {
     vi.clearAllMocks();
   });
 
-  it('refreshRecentMetrics runs daily and session upserts', async () => {
-    (pool.query as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] });
+  it('refreshRecentMetrics upserts daily metrics only', async () => {
+    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ rows: [] });
 
     await service.refreshRecentMetrics(userId, 14);
 
-    expect(pool.query).toHaveBeenCalledTimes(2);
-    expect(pool.query).toHaveBeenNthCalledWith(
-      1,
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO user_fsrs_daily_metrics'),
-      [userId, 14]
-    );
-    expect(pool.query).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('INSERT INTO user_fsrs_session_metrics'),
       [userId, 14]
     );
   });
@@ -110,16 +102,6 @@ describe('FsrsMetricsService', () => {
           avg_predicted_recall: 0.8,
           brier_score: 0.16,
         }],
-      })
-      // session window aggregate
-      .mockResolvedValueOnce({
-        rows: [{
-          session_count: 8,
-          review_count: 390,
-          observed_recall_rate: 0.79,
-          avg_brier_score: 0.18,
-          avg_fatigue_slope: -0.012,
-        }],
       });
 
     const result = await service.getWindows(userId);
@@ -131,8 +113,10 @@ describe('FsrsMetricsService', () => {
     expect(result.reviewWindows[1].reliability).toBe('medium');
     expect(result.reviewWindows[2].windowSize).toBe(1000);
     expect(result.reviewWindows[2].reliability).toBe('high');
-    expect(result.sessionWindow.sessionCount).toBe(8);
-    expect(result.sessionWindow.avgFatigueSlope).toBeCloseTo(-0.012, 6);
+    expect(result.sessionWindow.sessionCount).toBe(0);
+    expect(result.sessionWindow.reviewCount).toBe(10);
+    expect(result.sessionWindow.observedRecallRate).toBeCloseTo(0.7, 6);
+    expect(result.sessionWindow.avgFatigueSlope).toBeNull();
   });
 
   it('getLearningVsGraduatedCounts returns counts from review_logs', async () => {

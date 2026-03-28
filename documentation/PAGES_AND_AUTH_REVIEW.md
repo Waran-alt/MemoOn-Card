@@ -14,9 +14,8 @@ Review of the MemoOn Card web app routes: what each page does and who can access
 | `/[locale]/register` | Create account | Public |
 | `/[locale]/app` | My decks (list, create) | **Authenticated** |
 | `/[locale]/app/decks/[id]` | Deck detail (cards, edit) | **Authenticated** |
-| `/[locale]/app/decks/[id]/study` | Study session | **Authenticated** |
+| `/[locale]/app/decks/[id]/study` | Study (queue, rate cards) | **Authenticated** |
 | `/[locale]/app/optimizer` | FSRS optimizer | **Authenticated** |
-| `/[locale]/app/study-sessions` | Session history + health summary | **Authenticated** |
 | `/[locale]/app/study-health` | Health dashboard (trends) | **Authenticated** |
 | `/[locale]/app/admin` | User management (block, assign role) | **Admin only** |
 | `/[locale]/app/dev` | Feature flags & technical panels | **Dev only** |
@@ -54,7 +53,7 @@ All routes under `/[locale]/(protected)/app/*` use the **protected layout** (`(p
 - Server-side: `getSession(cookieStore)`; if no session → redirect to `/login`.
 - Client: `AuthHydrate` provides the server user to the auth store.
 
-Inside the app, **AppLayoutShell** wraps all app pages and shows the main nav (decks, optimizer, study-sessions, study-health; admin only when `user?.role === 'admin'`).
+Inside the app, **AppLayoutShell** wraps all app pages and shows the main nav (decks, optimizer, study-health; admin only when `user?.role === 'admin'`).
 
 ### `/[locale]/app` — My decks
 
@@ -66,20 +65,15 @@ Inside the app, **AppLayoutShell** wraps all app pages and shows the main nav (d
 - **Purpose:** View and manage a single deck: list cards, search/filter, add cards (recto/verso/comment), edit/delete cards, “reveal all”, “treat as new”, “expand delay”, link to study this deck.
 - **Auth:** Any authenticated user. Deck access is scoped by backend (user’s decks). No role check.
 
-### `/[locale]/app/decks/[id]/study` — Study session
+### `/[locale]/app/decks/[id]/study` — Study
 
-- **Purpose:** Run a spaced-repetition study session for one deck: card queue, show/reveal, rate (Again / Hard / Good / Easy), submit reviews, session stats and duration.
-- **Auth:** Any authenticated user. Session and reviews are user-scoped. No role check.
+- **Purpose:** Run spaced repetition for one deck: card queue, show/reveal, rate (Again / Hard / Good / Easy), submit reviews. No server-side session entity; reviews and journey events are persisted per action.
+- **Auth:** Any authenticated user. Reviews are user-scoped. No role check.
 
 ### `/[locale]/app/optimizer` — FSRS optimizer
 
 - **Purpose:** Show optimization status (ready to optimize, last run, review counts, etc.) and trigger the FSRS parameter optimizer. Explains requirements (e.g. minimum reviews, days since last run).
 - **Auth:** Any authenticated user. Optimizer runs in the context of the current user’s data. No role check.
-
-### `/[locale]/app/study-sessions` — Study sessions
-
-- **Purpose:** List past study sessions (summary: started/ended, event count, card count, rating counts). Per-session detail and a compact “study health” dashboard (auth refresh, journey consistency, study API latency, throughput). Links to the full study-health page.
-- **Auth:** Any authenticated user. Data is user-scoped. No role check.
 
 ### `/[locale]/app/study-health` — Study health dashboard
 
@@ -114,7 +108,7 @@ Inside the app, **AppLayoutShell** wraps all app pages and shows the main nav (d
 ## Summary
 
 - **Public:** `/`, `/[locale]` (landing or redirect), `/[locale]/login`, `/[locale]/register`.
-- **Authenticated (any logged-in user):** `/[locale]/app`, `/[locale]/app/decks/[id]`, `/[locale]/app/decks/[id]/study`, `/[locale]/app/optimizer`, `/[locale]/app/study-sessions`, `/[locale]/app/study-health`.
+- **Authenticated (any logged-in user):** `/[locale]/app`, `/[locale]/app/decks/[id]`, `/[locale]/app/decks/[id]/study`, `/[locale]/app/optimizer`, `/[locale]/app/study-health`.
 - **Admin only:** `/[locale]/app/admin` (user management). **Dev only:** `/[locale]/app/dev` (feature flags, technical panels). Each enforced in the UI and backend (requireAdmin vs requireDev).
 
 Session is established via cookies and read in the protected layout and on the home page. Roles: **admin** = user management only (no technical APIs); **dev** = technical APIs and reserved panels (no user management). A user has one role: `user`, `admin`, or `dev`.

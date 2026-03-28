@@ -2,6 +2,8 @@
 
 Goal: capture `EXPLAIN ANALYZE` evidence for consistency-report query shape, then set index and retention guidance.
 
+**Schema note (post-2026-03):** Migration `043-remove-sessions-simplify-reviews` dropped `session_id` from `card_journey_events` and `review_logs`. The consistency query matches `answer_revealed` to `rating_submitted` by `user_id`, `card_id`, and a 5-minute time window only. Migration `044-card-journey-drop-study-events-source` removes `study_events` as a valid `source` value on journey rows.
+
 ---
 
 ## How This Was Measured
@@ -57,14 +59,13 @@ Goal: capture `EXPLAIN ANALYZE` evidence for consistency-report query shape, the
 Current relevant indexes:
 
 - `idx_review_logs_user_review_date_id`
-- `idx_cje_user_type_time_card_session`
-- `idx_cje_answer_lookup`
+- `idx_cje_answer_lookup` (partial on `answer_revealed`; `session_id` removed from the schema — any older doc reference to `idx_cje_user_type_time_card_session` applied before column drop)
 
 Candidate alternate index tested locally (not adopted in migrations):
 
 ```sql
 CREATE INDEX CONCURRENTLY idx_cje_answer_lookup_time_first
-ON card_journey_events (user_id, event_time, card_id, session_id)
+ON card_journey_events (user_id, event_time, card_id)
 WHERE event_type = 'answer_revealed';
 ```
 
@@ -88,7 +89,7 @@ Tradeoff:
 
 ## Next Optimization Pass
 
-- Validate p95 with larger fixture sizes and production-like card/session skew.
+- Validate p95 with larger fixture sizes and production-like card/time skew.
 - Add observability around consistency endpoint latency buckets by `days` window.
 - Revisit index variants only if runtime telemetry shows sustained regressions.
 

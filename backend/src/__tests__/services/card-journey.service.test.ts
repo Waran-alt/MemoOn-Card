@@ -46,8 +46,8 @@ describe('CardJourneyService', () => {
     );
     expect(insertCall).toBeDefined();
     const params = insertCall?.[1] as unknown[];
-    expect(params[11]).toBe('exp-v3');
-    expect(String(params[12])).toContain('"policyVersion":"exp-v3"');
+    expect(params[10]).toBe('exp-v3');
+    expect(String(params[11])).toContain('"policyVersion":"exp-v3"');
   });
 
   it('reads card history in reverse chronological order', async () => {
@@ -65,15 +65,11 @@ describe('CardJourneyService', () => {
   it('builds card history summary', async () => {
     (pool.query as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ rows: [{ total_events: 12 }] })
-      .mockResolvedValueOnce({ rows: [{ event_type: 'rating_submitted', count: 8 }] })
-      .mockResolvedValueOnce({ rows: [{ day: '2026-02-16', count: 5 }] })
-      .mockResolvedValueOnce({ rows: [{ session_id: 's1', count: 3, first_event_at: 10, last_event_at: 20 }] });
+      .mockResolvedValueOnce({ rows: [{ event_type: 'rating_submitted', count: 8 }] });
 
-    const summary = await service.getCardHistorySummary(userId, cardId, { days: 30, sessionLimit: 5 });
-    expect(summary.totalEvents).toBe(12);
+    const summary = await service.getCardHistorySummary(userId, cardId, { days: 30 });
+    expect(summary.totalJourneyEvents).toBe(12);
     expect(summary.byEventType[0]).toEqual({ eventType: 'rating_submitted', count: 8 });
-    expect(summary.byDay[0]).toEqual({ day: '2026-02-16', count: 5 });
-    expect(summary.bySession[0]).toEqual({ sessionId: 's1', count: 3, firstEventAt: 10, lastEventAt: 20 });
   });
 
   it('computes consistency health level from mismatch rate', async () => {

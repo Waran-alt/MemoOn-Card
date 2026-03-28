@@ -1,6 +1,5 @@
 /**
- * User routes: settings (study session auto-end after away, etc.).
- * Requires auth (Bearer). Mount at /api/user with authMiddleware.
+ * User routes: settings (study preferences, knowledge, etc.).
  */
 
 import { Router } from 'express';
@@ -8,17 +7,12 @@ import { getUserId } from '@/middleware/auth';
 import { asyncHandler } from '@/middleware/errorHandler';
 import {
   getStudySessionSettings,
-  updateSessionAutoEndAwayMinutes,
   updateKnowledgeEnabled,
 } from '@/services/user-settings.service';
 import { UpdateUserSettingsSchema } from '@/schemas/user-settings.schemas';
 
 const router = Router();
 
-/**
- * GET /api/user/settings
- * Returns study/session settings (e.g. session_auto_end_away_minutes).
- */
 router.get(
   '/settings',
   asyncHandler(async (req, res) => {
@@ -28,10 +22,6 @@ router.get(
   })
 );
 
-/**
- * PATCH /api/user/settings
- * Update settings. Body: { session_auto_end_away_minutes?: number (1–120), knowledge_enabled?: boolean }.
- */
 router.patch(
   '/settings',
   asyncHandler(async (req, res) => {
@@ -45,9 +35,6 @@ router.patch(
       });
     }
     const data = parsed.data;
-    if (data.session_auto_end_away_minutes !== undefined) {
-      await updateSessionAutoEndAwayMinutes(userId, data.session_auto_end_away_minutes);
-    }
     if (data.knowledge_enabled !== undefined) {
       await updateKnowledgeEnabled(userId, data.knowledge_enabled);
     }

@@ -177,12 +177,13 @@ router.get('/:id/history/summary', validateParams(CardIdSchema), validateQuery(C
   if (!card) {
     throw new NotFoundError('Card');
   }
-  const validated = (req as { validatedQuery?: { days?: number; sessionLimit?: number } }).validatedQuery;
-  const summary = await cardJourneyService.getCardHistorySummary(userId, cardId, {
-    days: validated?.days,
-    sessionLimit: validated?.sessionLimit,
-  });
-  return res.json({ success: true, data: summary });
+  const validated = (req as { validatedQuery?: { days?: number } }).validatedQuery;
+  const days = validated?.days ?? 90;
+  const [summary, byReviewDay] = await Promise.all([
+    cardJourneyService.getCardHistorySummary(userId, cardId, { days }),
+    reviewService.getReviewDayCountsForCard(cardId, userId, { days }),
+  ]);
+  return res.json({ success: true, data: { ...summary, byReviewDay } });
 }));
 
 /**
@@ -281,7 +282,7 @@ router.delete('/:id', validateParams(CardIdSchema), asyncHandler(async (req, res
 router.post('/:id/review', validateParams(CardIdSchema), validateRequest(ReviewCardSchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);
   const cardId = String(req.params.id);
-  const { rating, shownAt, revealedAt, ratedAt, sessionId, sequenceInSession, clientEventId, intensityMode } = req.body;
+  const { rating, shownAt, revealedAt, ratedAt, thinkingDurationMs, clientEventId, intensityMode } = req.body;
   
   if (![1, 2, 3, 4].includes(rating)) {
     throw new ValidationError('Valid rating (1-4) is required');
@@ -291,11 +292,10 @@ router.post('/:id/review', validateParams(CardIdSchema), validateRequest(ReviewC
     shownAt != null ||
     revealedAt != null ||
     ratedAt != null ||
-    sessionId != null ||
-    sequenceInSession != null ||
+    thinkingDurationMs != null ||
     clientEventId != null ||
     intensityMode != null
-      ? { shownAt, revealedAt, ratedAt, sessionId, sequenceInSession, clientEventId, intensityMode }
+      ? { shownAt, revealedAt, ratedAt, thinkingDurationMs, clientEventId, intensityMode }
       : undefined;
   const result = await reviewService.reviewCard(cardId, userId, rating, timing);
   

@@ -32,7 +32,6 @@ describe('CardFlagService', () => {
         user_id: mockUserId,
         reason: 'wrong_content',
         note: 'Fix the answer',
-        flagged_during_session_id: 'session-abc',
         resolved: false,
         created_at: new Date(),
       };
@@ -43,13 +42,12 @@ describe('CardFlagService', () => {
       const result = await service.createFlag(mockCardId, mockUserId, {
         reason: 'wrong_content',
         note: 'Fix the answer',
-        sessionId: 'session-abc',
       });
 
       expect(result).toEqual(mockFlag);
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO card_flags'),
-        [mockCardId, mockUserId, 'wrong_content', 'Fix the answer', 'session-abc']
+        [mockCardId, mockUserId, 'wrong_content', 'Fix the answer']
       );
     });
 
@@ -61,7 +59,6 @@ describe('CardFlagService', () => {
         user_id: mockUserId,
         reason: 'a'.repeat(50),
         note: null,
-        flagged_during_session_id: null,
         resolved: false,
         created_at: new Date(),
       };
@@ -73,7 +70,7 @@ describe('CardFlagService', () => {
 
       expect(pool.query).toHaveBeenCalledWith(
         expect.any(String),
-        expect.arrayContaining([mockCardId, mockUserId, 'a'.repeat(50), null, null])
+        [mockCardId, mockUserId, 'a'.repeat(50), null]
       );
     });
 
@@ -89,7 +86,7 @@ describe('CardFlagService', () => {
       expect(result).toBeNull();
     });
 
-    it('passes null for optional note and sessionId', async () => {
+    it('passes null for optional note', async () => {
       (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
         createMockQueryResult([
           {
@@ -98,7 +95,6 @@ describe('CardFlagService', () => {
             user_id: mockUserId,
             reason: 'duplicate',
             note: null,
-            flagged_during_session_id: null,
             resolved: false,
             created_at: new Date(),
           },
@@ -109,7 +105,7 @@ describe('CardFlagService', () => {
 
       expect(pool.query).toHaveBeenCalledWith(
         expect.any(String),
-        [mockCardId, mockUserId, 'duplicate', null, null]
+        [mockCardId, mockUserId, 'duplicate', null]
       );
     });
   });

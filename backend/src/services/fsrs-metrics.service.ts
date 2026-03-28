@@ -2,8 +2,6 @@ import { pool } from '@/config/database';
 
 const DEFAULT_DAYS = 30;
 const REVIEW_WINDOWS = [100, 300, 1000] as const;
-const SESSION_WINDOW_COUNT = 10;
-
 type Numeric = string | number | null | undefined;
 
 function toNumber(value: Numeric): number | null {
@@ -36,22 +34,6 @@ export interface DailyMetricRow {
   p90ReviewDurationMs: number | null;
   avgElapsedDays: number | null;
   avgScheduledDays: number | null;
-  sessionCount: number | null;
-}
-
-export interface SessionMetricRow {
-  sessionId: string;
-  sessionDate: string;
-  sessionStartedAt: number | null;
-  sessionEndedAt: number | null;
-  reviewCount: number;
-  passCount: number;
-  failCount: number;
-  avgPredictedRecall: number | null;
-  observedRecallRate: number | null;
-  brierScore: number | null;
-  meanReviewDurationMs: number | null;
-  fatigueSlope: number | null;
 }
 
 export interface MetricsSummary {
@@ -144,8 +126,7 @@ export class FsrsMetricsService {
           PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY review_duration)
             FILTER (WHERE review_duration IS NOT NULL) AS p90_review_duration_ms,
           AVG(elapsed_days) AS avg_elapsed_days,
-          AVG(scheduled_days) AS avg_scheduled_days,
-          COUNT(DISTINCT session_id) FILTER (WHERE session_id IS NOT NULL)::int AS session_count
+          AVG(scheduled_days) AS avg_scheduled_days
         FROM review_logs
         WHERE user_id = $1
           AND review_date::date >= (CURRENT_DATE - ($2::int - 1))
@@ -155,7 +136,7 @@ export class FsrsMetricsService {
         user_id, metric_date, review_count, pass_count, fail_count,
         avg_predicted_recall, observed_recall_rate, brier_score,
         mean_review_duration_ms, p50_review_duration_ms, p90_review_duration_ms,
-        avg_elapsed_days, avg_scheduled_days, session_count, updated_at
+        avg_elapsed_days, avg_scheduled_days, updated_at
       )
       SELECT
         user_id,
@@ -171,7 +152,6 @@ export class FsrsMetricsService {
         ROUND(p90_review_duration_ms)::int,
         avg_elapsed_days,
         avg_scheduled_days,
-        session_count,
         NOW()
       FROM daily_source
       ON CONFLICT (user_id, metric_date)
@@ -187,79 +167,6 @@ export class FsrsMetricsService {
         p90_review_duration_ms = EXCLUDED.p90_review_duration_ms,
         avg_elapsed_days = EXCLUDED.avg_elapsed_days,
         avg_scheduled_days = EXCLUDED.avg_scheduled_days,
-        session_count = EXCLUDED.session_count,
-        updated_at = NOW()
-      `,
-      [userId, normalizedDays]
-    );
-
-    await pool.query(
-      `
-      WITH session_rows AS (
-        SELECT
-          user_id,
-          session_id,
-          review_date,
-          review_time,
-          shown_at,
-          rating,
-          review_duration,
-          retrievability_before,
-          CASE WHEN rating IN (2, 3, 4) THEN 1.0 ELSE 0.0 END AS outcome,
-          ROW_NUMBER() OVER (PARTITION BY user_id, session_id ORDER BY review_time) AS review_index
-        FROM review_logs
-        WHERE user_id = $1
-          AND session_id IS NOT NULL
-          AND review_date::date >= (CURRENT_DATE - ($2::int - 1))
-      ),
-      session_agg AS (
-        SELECT
-          user_id,
-          session_id,
-          MIN(review_date)::date AS session_date,
-          MIN(COALESCE(shown_at, review_time)) AS session_started_at,
-          MAX(review_time) AS session_ended_at,
-          COUNT(*)::int AS review_count,
-          COUNT(*) FILTER (WHERE rating IN (2, 3, 4))::int AS pass_count,
-          COUNT(*) FILTER (WHERE rating = 1)::int AS fail_count,
-          AVG(retrievability_before) AS avg_predicted_recall,
-          AVG(outcome) AS observed_recall_rate,
-          AVG(
-            CASE
-              WHEN retrievability_before IS NULL THEN NULL
-              ELSE POWER(retrievability_before - outcome, 2)
-            END
-          ) AS brier_score,
-          AVG(review_duration) FILTER (WHERE review_duration IS NOT NULL) AS mean_review_duration_ms,
-          REGR_SLOPE(outcome, review_index::double precision) AS fatigue_slope
-        FROM session_rows
-        GROUP BY user_id, session_id
-      )
-      INSERT INTO user_fsrs_session_metrics (
-        user_id, session_id, session_date, session_started_at, session_ended_at,
-        review_count, pass_count, fail_count,
-        avg_predicted_recall, observed_recall_rate, brier_score,
-        mean_review_duration_ms, fatigue_slope, updated_at
-      )
-      SELECT
-        user_id, session_id, session_date, session_started_at, session_ended_at,
-        review_count, pass_count, fail_count,
-        avg_predicted_recall, observed_recall_rate, brier_score,
-        mean_review_duration_ms, fatigue_slope, NOW()
-      FROM session_agg
-      ON CONFLICT (user_id, session_id)
-      DO UPDATE SET
-        session_date = EXCLUDED.session_date,
-        session_started_at = EXCLUDED.session_started_at,
-        session_ended_at = EXCLUDED.session_ended_at,
-        review_count = EXCLUDED.review_count,
-        pass_count = EXCLUDED.pass_count,
-        fail_count = EXCLUDED.fail_count,
-        avg_predicted_recall = EXCLUDED.avg_predicted_recall,
-        observed_recall_rate = EXCLUDED.observed_recall_rate,
-        brier_score = EXCLUDED.brier_score,
-        mean_review_duration_ms = EXCLUDED.mean_review_duration_ms,
-        fatigue_slope = EXCLUDED.fatigue_slope,
         updated_at = NOW()
       `,
       [userId, normalizedDays]
@@ -284,8 +191,7 @@ export class FsrsMetricsService {
         p50_review_duration_ms,
         p90_review_duration_ms,
         avg_elapsed_days,
-        avg_scheduled_days,
-        session_count
+        avg_scheduled_days
       FROM user_fsrs_daily_metrics
       WHERE user_id = $1
         AND metric_date >= (CURRENT_DATE - ($2::int - 1))
@@ -307,7 +213,6 @@ export class FsrsMetricsService {
       p90ReviewDurationMs: toNumber(row.p90_review_duration_ms),
       avgElapsedDays: toNumber(row.avg_elapsed_days),
       avgScheduledDays: toNumber(row.avg_scheduled_days),
-      sessionCount: toNumber(row.session_count),
     }));
   }
 
@@ -431,7 +336,6 @@ export class FsrsMetricsService {
       p90ReviewDurationMs: null,
       avgElapsedDays: null,
       avgScheduledDays: null,
-      sessionCount: null,
     }));
 
     const lvRow = learningResult.rows[0];
@@ -441,49 +345,6 @@ export class FsrsMetricsService {
     };
 
     return { summary, daily, learningVsGraduated };
-  }
-
-  async getSessionMetrics(userId: string, days?: number): Promise<SessionMetricRow[]> {
-    const normalizedDays = this.normalizeDays(days);
-    await this.refreshRecentMetrics(userId, normalizedDays);
-
-    const result = await pool.query(
-      `
-      SELECT
-        session_id,
-        session_date,
-        session_started_at,
-        session_ended_at,
-        review_count,
-        pass_count,
-        fail_count,
-        avg_predicted_recall,
-        observed_recall_rate,
-        brier_score,
-        mean_review_duration_ms,
-        fatigue_slope
-      FROM user_fsrs_session_metrics
-      WHERE user_id = $1
-        AND session_date >= (CURRENT_DATE - ($2::int - 1))
-      ORDER BY COALESCE(session_started_at, 0) DESC
-      `,
-      [userId, normalizedDays]
-    );
-
-    return result.rows.map((row) => ({
-      sessionId: String(row.session_id),
-      sessionDate: String(row.session_date),
-      sessionStartedAt: toNumber(row.session_started_at),
-      sessionEndedAt: toNumber(row.session_ended_at),
-      reviewCount: toInt(row.review_count),
-      passCount: toInt(row.pass_count),
-      failCount: toInt(row.fail_count),
-      avgPredictedRecall: toNumber(row.avg_predicted_recall),
-      observedRecallRate: toNumber(row.observed_recall_rate),
-      brierScore: toNumber(row.brier_score),
-      meanReviewDurationMs: toNumber(row.mean_review_duration_ms),
-      fatigueSlope: toNumber(row.fatigue_slope),
-    }));
   }
 
   async getSummary(userId: string, days?: number): Promise<MetricsSummary> {
@@ -609,44 +470,15 @@ export class FsrsMetricsService {
       });
     }
 
-    const sessionResult = await pool.query(
-      `
-      WITH latest_sessions AS (
-        SELECT
-          review_count,
-          pass_count,
-          fail_count,
-          brier_score,
-          fatigue_slope
-        FROM user_fsrs_session_metrics
-        WHERE user_id = $1
-        ORDER BY COALESCE(session_started_at, 0) DESC
-        LIMIT $2
-      )
-      SELECT
-        COUNT(*)::int AS session_count,
-        COALESCE(SUM(review_count), 0)::int AS review_count,
-        CASE
-          WHEN COALESCE(SUM(review_count), 0) = 0 THEN NULL
-          ELSE SUM(pass_count)::double precision / SUM(review_count)
-        END AS observed_recall_rate,
-        AVG(brier_score) AS avg_brier_score,
-        AVG(fatigue_slope) AS avg_fatigue_slope
-      FROM latest_sessions
-      `,
-      [userId, SESSION_WINDOW_COUNT]
-    );
-
-    const sessionRow = sessionResult.rows[0];
-
+    const w0 = reviewWindows[0];
     return {
       reviewWindows,
       sessionWindow: {
-        sessionCount: toInt(sessionRow.session_count),
-        reviewCount: toInt(sessionRow.review_count),
-        observedRecallRate: toNumber(sessionRow.observed_recall_rate),
-        avgBrierScore: toNumber(sessionRow.avg_brier_score),
-        avgFatigueSlope: toNumber(sessionRow.avg_fatigue_slope),
+        sessionCount: 0,
+        reviewCount: w0?.reviewCount ?? 0,
+        observedRecallRate: w0?.observedRecallRate ?? null,
+        avgBrierScore: w0?.brierScore ?? null,
+        avgFatigueSlope: null,
       },
     };
   }

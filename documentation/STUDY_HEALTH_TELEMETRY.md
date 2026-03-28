@@ -25,15 +25,16 @@ Use this file to understand:
 
 ## Telemetry Streams
 
-- `study_events`: client-side study activity stream.
-- `card_journey_events`: immutable card lifecycle and study journey events.
+- `card_journey_events`: immutable card lifecycle and study journey events (writes align with `review_logs` from `review.service`).
 - `user_operational_events`: auth refresh and study API operational metrics.
+
+**Note:** The former `study_events` ingestion table was removed (migration 043); journey rows are the durable study-activity trail for consistency checks and timelines.
 
 ## Policy Version Tagging
 
 Telemetry now includes `policy_version` to compare behavior across policy rollouts.
 
-- Source field: `policy_version` column in all three telemetry tables.
+- Source field: `policy_version` column on `card_journey_events` and `user_operational_events` (and related payloads).
 - Payload mirror: event payload JSON includes `policyVersion` for downstream tools.
 - Default value:
   - from env `ADAPTIVE_POLICY_VERSION` when set and valid

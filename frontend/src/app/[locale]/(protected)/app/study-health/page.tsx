@@ -123,10 +123,10 @@ export default function StudyHealthPage() {
           {error || ta('studyHealthDashboardUnavailable')}
         </p>
         <Link
-          href={`/${locale}/app/study-sessions`}
+          href={`/${locale}/app`}
           className="text-sm font-medium text-(--mc-text-secondary) underline hover:no-underline"
         >
-          {ta('viewStudySessions')}
+          {ta('backToDecks')}
         </Link>
       </div>
     );
@@ -157,10 +157,10 @@ export default function StudyHealthPage() {
           <p className="mt-1 text-sm text-(--mc-text-secondary)">{ta('studyHealthDashboardIntro')}</p>
         </div>
         <Link
-          href={`/${locale}/app/study-sessions`}
+          href={`/${locale}/app`}
           className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
         >
-          {ta('viewStudySessions')}
+          {ta('backToDecks')}
         </Link>
       </div>
 

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="043-01-drop-cje-answer-idx" author="memo" runInTransaction="false">
+        <comment>Drop partial index that includes session_id before altering card_journey_events.</comment>
+        <sql splitStatements="false" stripComments="true">
+            DROP INDEX CONCURRENTLY IF EXISTS idx_cje_answer_lookup;
+        </sql>
+    </changeSet>
+
+    <changeSet id="043-02-drop-study-events-and-session-artifacts" author="memo">
+        <comment>Remove study session model: events table, session metrics, session_id columns, away setting.</comment>
+
+        <dropTable tableName="study_events" cascadeConstraints="true"/>
+
+        <dropTable tableName="user_fsrs_session_metrics" cascadeConstraints="true"/>
+
+        <dropIndex indexName="idx_review_logs_session_id" tableName="review_logs"/>
+        <dropColumn tableName="review_logs" columnName="session_id"/>
+
+        <addColumn tableName="review_logs">
+            <column name="thinking_duration_ms" type="bigint">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <dropColumn tableName="card_journey_events" columnName="session_id"/>
+
+        <dropColumn tableName="user_settings" columnName="session_auto_end_away_minutes"/>
+
+        <dropColumn tableName="card_flags" columnName="flagged_during_session_id"/>
+
+        <dropColumn tableName="user_fsrs_daily_metrics" columnName="session_count"/>
+    </changeSet>
+
+    <changeSet id="043-03-recreate-cje-answer-idx" author="memo" runInTransaction="false">
+        <comment>Partial index for journey consistency (answer_revealed lookup by card, no session).</comment>
+        <sql splitStatements="false" stripComments="true">
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_cje_answer_lookup
+            ON card_journey_events (user_id, card_id, event_time)
+            WHERE event_type = 'answer_revealed';
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

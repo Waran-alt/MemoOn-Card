@@ -12,9 +12,8 @@ export interface CardJourneyEventInput {
   policyVersion?: string;
   eventTime?: number;
   deckId?: string;
-  sessionId?: string;
   actor?: 'user' | 'system';
-  source?: 'ui' | 'review_service' | 'study_events' | 'cards_route' | 'decks_route';
+  source?: 'ui' | 'review_service' | 'cards_route' | 'decks_route';
   idempotencyKey: string;
   reviewLogId?: string;
   causationId?: string;
@@ -24,10 +23,8 @@ export interface CardJourneyEventInput {
 export interface CardJourneySummary {
   cardId: string;
   days: number;
-  totalEvents: number;
+  totalJourneyEvents: number;
   byEventType: Array<{ eventType: string; count: number }>;
-  byDay: Array<{ day: string; count: number }>;
-  bySession: Array<{ sessionId: string; count: number; firstEventAt: number; lastEventAt: number }>;
 }
 
 export interface JourneyConsistencyReport {
@@ -87,15 +84,14 @@ export class CardJourneyService {
       const policyVersion = normalizePolicyVersion(
         event.policyVersion ?? payloadRecord.policyVersion ?? getDefaultPolicyVersion()
       );
-      const base = index * 13;
+      const base = index * 12;
       valuesSql.push(
-        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}, $${base + 13}::jsonb)`
+        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}, $${base + 11}, $${base + 12}::jsonb)`
       );
       params.push(
         userId,
         event.cardId,
         event.deckId ?? null,
-        event.sessionId ?? null,
         event.eventType,
         event.eventTime ?? Date.now(),
         event.actor ?? 'system',
@@ -113,7 +109,6 @@ export class CardJourneyService {
         user_id,
         card_id,
         deck_id,
-        session_id,
         event_type,
         event_time,
         actor,
@@ -154,12 +149,11 @@ export class CardJourneyService {
   async getCardHistorySummary(
     userId: string,
     cardId: string,
-    options?: { days?: number; sessionLimit?: number }
+    options?: { days?: number }
   ): Promise<CardJourneySummary> {
     const days = Math.max(1, Math.min(180, options?.days ?? 30));
-    const sessionLimit = Math.max(1, Math.min(50, options?.sessionLimit ?? 10));
 
-    const [totalResult, byTypeResult, byDayResult, bySessionResult] = await Promise.all([
+    const [totalResult, byTypeResult] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int AS total_events
          FROM card_journey_events
@@ -178,55 +172,17 @@ export class CardJourneyService {
          ORDER BY count DESC, event_type ASC`,
         [userId, cardId, days]
       ),
-      pool.query(
-        `SELECT
-           TO_CHAR(TO_TIMESTAMP(event_time / 1000.0), 'YYYY-MM-DD') AS day,
-           COUNT(*)::int AS count
-         FROM card_journey_events
-         WHERE user_id = $1
-           AND card_id = $2
-           AND event_time >= CAST(EXTRACT(EPOCH FROM (NOW() - ($3::int * INTERVAL '1 day'))) * 1000 AS BIGINT)
-         GROUP BY day
-         ORDER BY day DESC`,
-        [userId, cardId, days]
-      ),
-      pool.query(
-        `SELECT
-           session_id::text AS session_id,
-           COUNT(*)::int AS count,
-           MIN(event_time)::bigint AS first_event_at,
-           MAX(event_time)::bigint AS last_event_at
-         FROM card_journey_events
-         WHERE user_id = $1
-           AND card_id = $2
-           AND session_id IS NOT NULL
-           AND event_time >= CAST(EXTRACT(EPOCH FROM (NOW() - ($3::int * INTERVAL '1 day'))) * 1000 AS BIGINT)
-         GROUP BY session_id
-         ORDER BY last_event_at DESC
-         LIMIT $4`,
-        [userId, cardId, days, sessionLimit]
-      ),
     ]);
 
-    const totalEvents = Number(totalResult.rows[0]?.total_events ?? 0);
+    const totalJourneyEvents = Number(totalResult.rows[0]?.total_events ?? 0);
 
     return {
       cardId,
       days,
-      totalEvents,
+      totalJourneyEvents,
       byEventType: byTypeResult.rows.map((row) => ({
         eventType: String(row.event_type),
         count: Number(row.count ?? 0),
-      })),
-      byDay: byDayResult.rows.map((row) => ({
-        day: String(row.day),
-        count: Number(row.count ?? 0),
-      })),
-      bySession: bySessionResult.rows.map((row) => ({
-        sessionId: String(row.session_id),
-        count: Number(row.count ?? 0),
-        firstEventAt: Number(row.first_event_at ?? 0),
-        lastEventAt: Number(row.last_event_at ?? 0),
       })),
     };
   }
@@ -248,7 +204,7 @@ export class CardJourneyService {
             AND review_date >= NOW() - ($2::int * INTERVAL '1 day')
         ),
         journey_scope AS (
-          SELECT id, review_log_id, card_id, session_id, event_time
+          SELECT id, review_log_id, card_id, event_time
           FROM card_journey_events
           WHERE user_id = $1
             AND event_type = 'rating_submitted'
@@ -277,7 +233,6 @@ export class CardJourneyService {
             WHERE r.user_id = $1
               AND r.event_type = 'answer_revealed'
               AND r.card_id = j.card_id
-              AND r.session_id IS NOT DISTINCT FROM j.session_id
               AND r.event_time > j.event_time
               AND r.event_time <= j.event_time + 300000
             ORDER BY r.event_time ASC
@@ -336,7 +291,6 @@ export class CardJourneyService {
             FROM card_journey_events r
             WHERE r.user_id = j.user_id
               AND r.card_id = j.card_id
-              AND r.session_id IS NOT DISTINCT FROM j.session_id
               AND r.event_type = 'answer_revealed'
               AND r.event_time > j.event_time
               AND r.event_time <= j.event_time + 300000

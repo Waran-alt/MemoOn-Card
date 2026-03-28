@@ -317,7 +317,7 @@ describe('DeckDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/You just reviewed 1 cards/)).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: 'View study sessions' })).toHaveAttribute('href', '/en/app/study-sessions');
+    expect(screen.getByRole('link', { name: 'View stats & health dashboard' })).toHaveAttribute('href', '/en/app/study-health');
     expect(screen.getByRole('button', { name: 'Show only reviewed' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
     // Reviewed card (c1) is revealed (content + Edit); other (c2) is still placeholder
@@ -486,7 +486,7 @@ describe('DeckDetailPage', () => {
         return Promise.resolve({
           data: {
             success: true,
-            data: { cardId: 'c1', days: 90, totalEvents: 0, byEventType: [], byDay: [], bySession: [] },
+            data: { cardId: 'c1', days: 90, totalJourneyEvents: 0, byEventType: [], byReviewDay: [] },
           },
         });
       if (url.includes('/cards/') && url.includes('/history') && !url.includes('summary'))

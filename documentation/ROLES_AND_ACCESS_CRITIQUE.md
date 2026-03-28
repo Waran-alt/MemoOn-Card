@@ -20,7 +20,7 @@ Review of **which elements should be accessible to whom**, and a **critical look
 |------|--------------------|------------------------|---------|
 | Landing, login, register | ✅ | Redirect to app | Redirect to app |
 | My decks, deck detail, study | ❌ | ✅ | ✅ |
-| Optimizer, study-sessions, stats & health | ❌ | ✅ | ✅ |
+| Optimizer, study-health & stats | ❌ | ✅ | ✅ |
 | Admin panel (feature flags) | ❌ | ❌ (access denied) | ✅ |
 | Admin API (`/api/admin/*`) | ❌ | ❌ 403 | ✅ |
 

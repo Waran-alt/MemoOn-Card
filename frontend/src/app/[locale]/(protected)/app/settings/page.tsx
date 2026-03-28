@@ -7,8 +7,6 @@ import apiClient, { getApiErrorMessage } from '@/lib/api';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuthStore } from '@/store/auth.store';
 
-const MIN_AWAY = 1;
-const MAX_AWAY = 120;
 const SETTINGS_URL = '/api/user/settings';
 
 export default function SettingsPage() {
@@ -16,7 +14,6 @@ export default function SettingsPage() {
   const { t: tc } = useTranslation('common', locale);
   const { t: ta } = useTranslation('app', locale);
   const user = useAuthStore((s) => s.user);
-  const [awayMinutes, setAwayMinutes] = useState(5);
   const [knowledgeEnabled, setKnowledgeEnabled] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,23 +23,15 @@ export default function SettingsPage() {
   useEffect(() => {
     let cancelled = false;
     apiClient
-      .get<{ success: boolean; data?: { session_auto_end_away_minutes: number; knowledge_enabled?: boolean } }>(SETTINGS_URL)
+      .get<{ success: boolean; data?: { knowledge_enabled?: boolean } }>(SETTINGS_URL)
       .then((res) => {
         if (cancelled) return;
         const data = res.data?.data;
-        if (data) {
-          const min = data.session_auto_end_away_minutes;
-          if (typeof min === 'number' && min >= MIN_AWAY && min <= MAX_AWAY) {
-            setAwayMinutes(min);
-          }
-          if (typeof data.knowledge_enabled === 'boolean') {
-            setKnowledgeEnabled(data.knowledge_enabled);
-          }
+        if (data && typeof data.knowledge_enabled === 'boolean') {
+          setKnowledgeEnabled(data.knowledge_enabled);
         }
       })
-      .catch(() => {
-        if (!cancelled) setAwayMinutes(5);
-      })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setSettingsLoading(false);
       });
@@ -55,14 +44,11 @@ export default function SettingsPage() {
     e.preventDefault();
     setError('');
     setSaveSuccess(false);
-    const value = Math.max(MIN_AWAY, Math.min(MAX_AWAY, awayMinutes));
     setSaving(true);
     try {
       await apiClient.patch(SETTINGS_URL, {
-        session_auto_end_away_minutes: value,
         knowledge_enabled: knowledgeEnabled,
       });
-      setAwayMinutes(value);
       setKnowledgeEnabled(knowledgeEnabled);
       setSaveSuccess(true);
     } catch (err) {
@@ -126,42 +112,26 @@ export default function SettingsPage() {
         </dl>
       </section>
 
-      {/* Study session */}
+      {/* Study & knowledge */}
       <section className="rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-card) p-6 shadow-sm">
         <h3 className="text-sm font-medium text-(--mc-text-primary)">
-          {ta('settingsStudySession') !== 'settingsStudySession' ? ta('settingsStudySession') : 'Study session'}
+          {ta('settingsStudyPreferences') !== 'settingsStudyPreferences'
+            ? ta('settingsStudyPreferences')
+            : 'Study preferences'}
         </h3>
         <p className="mt-1 text-xs text-(--mc-text-secondary)">
-          {ta('settingsAwayMinutesHint') !== 'settingsAwayMinutesHint'
-            ? ta('settingsAwayMinutesHint')
-            : 'If you leave the tab for longer than this, the session will end. Between 5 seconds and this limit, the session pauses and you can resume.'}
+          {ta('settingsStudyPreferencesHint') !== 'settingsStudyPreferencesHint'
+            ? ta('settingsStudyPreferencesHint')
+            : 'Optional features for card creation and learning units.'}
         </p>
         <form onSubmit={handleSubmit} className="mt-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <label htmlFor="away-minutes" className="text-sm text-(--mc-text-secondary)">
-              {ta('settingsEndSessionAfterAway') !== 'settingsEndSessionAfterAway'
-                ? ta('settingsEndSessionAfterAway')
-                : 'End session after away (minutes)'}
-            </label>
-            <input
-              id="away-minutes"
-              type="number"
-              min={MIN_AWAY}
-              max={MAX_AWAY}
-              value={settingsLoading ? '' : awayMinutes}
-              onChange={(e) => setAwayMinutes(Math.max(MIN_AWAY, Math.min(MAX_AWAY, parseInt(e.target.value, 10) || MIN_AWAY)))}
-              disabled={settingsLoading}
-              className="w-20 rounded border border-(--mc-border-subtle) bg-(--mc-bg-page) px-2 py-1.5 text-sm"
-            />
-            <span className="text-xs text-(--mc-text-secondary)">1–120</span>
-          </div>
           {error && <p className="mt-2 text-sm text-(--mc-accent-danger)" role="alert">{error}</p>}
           {saveSuccess && (
             <p className="mt-2 text-sm text-(--mc-accent-success)" role="status">
               {ta('settingsSaved') !== 'settingsSaved' ? ta('settingsSaved') : 'Saved.'}
             </p>
           )}
-          <div className="mt-4 flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <input
               id="knowledge-enabled"
               type="checkbox"
@@ -190,11 +160,6 @@ export default function SettingsPage() {
           {ta('settingsQuickLinks') !== 'settingsQuickLinks' ? ta('settingsQuickLinks') : 'Quick links'}
         </h3>
         <ul className="mt-3 space-y-2">
-          <li>
-            <Link href={`/${locale}/app/study-sessions`} className="text-sm text-(--mc-accent-primary) underline hover:no-underline">
-              {ta('viewStudySessions') !== 'viewStudySessions' ? ta('viewStudySessions') : 'View study sessions'}
-            </Link>
-          </li>
           <li>
             <Link href={`/${locale}/app/study-health`} className="text-sm text-(--mc-accent-primary) underline hover:no-underline">
               {ta('viewStudyHealthDashboard') !== 'viewStudyHealthDashboard' ? ta('viewStudyHealthDashboard') : 'Study health dashboard'}

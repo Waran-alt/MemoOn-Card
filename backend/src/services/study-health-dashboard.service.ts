@@ -117,7 +117,7 @@ export class StudyHealthDashboardService {
 
   async recordStudyApiMetric(input: {
     userId: string;
-    route: '/api/study/sessions' | '/api/study/sessions/:sessionId' | '/api/study/journey-consistency';
+    route: '/api/study/journey-consistency';
     statusCode: number;
     durationMs: number;
     policyVersion?: string | null;

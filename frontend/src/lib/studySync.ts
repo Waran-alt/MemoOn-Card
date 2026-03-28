@@ -35,9 +35,7 @@ export async function retryWithBackoff<T>(
   throw lastError;
 }
 
-export type PendingItem =
-  | { type: 'review'; url: string; payload: unknown }
-  | { type: 'events'; url: string; payload: unknown };
+export type PendingItem = { type: 'review'; url: string; payload: unknown };
 
 const pending: PendingItem[] = [];
 const PENDING_KEY = 'memoon_study_pending';
@@ -64,7 +62,7 @@ function savePending(items: PendingItem[]) {
   }
 }
 
-/** Add a failed review or events payload to the offline queue (in memory + localStorage). */
+/** Add a failed review payload to the offline queue (in memory + localStorage). */
 export function addToPendingQueue(item: PendingItem): void {
   pending.push(item);
   savePending(pending);
@@ -101,18 +99,3 @@ export async function flushPendingQueue(
   return { flushed, failed: stillPending.length };
 }
 
-/** Study event payload for POST /api/study/events (or equivalent). */
-export interface StudyEventPayload {
-  eventType: string;
-  clientEventId?: string;
-  sessionId?: string;
-  deckId?: string;
-  cardId?: string;
-  occurredAtClient?: number;
-  sequenceInSession?: number;
-  payload?: Record<string, unknown>;
-}
-
-export function buildStudyEventsBody(events: StudyEventPayload[]): { events: StudyEventPayload[] } {
-  return { events };
-}

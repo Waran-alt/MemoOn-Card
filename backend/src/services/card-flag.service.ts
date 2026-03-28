@@ -4,7 +4,6 @@ import type { CardFlag } from '../types/database';
 export interface CreateCardFlagInput {
   reason: string;
   note?: string | null;
-  sessionId?: string | null;
 }
 
 export interface FlagWithCard {
@@ -13,7 +12,6 @@ export interface FlagWithCard {
   user_id: string;
   reason: string;
   note: string | null;
-  flagged_during_session_id: string | null;
   resolved: boolean;
   created_at: Date;
   deck_id: string;
@@ -30,18 +28,12 @@ export interface ListFlagsOptions {
 export class CardFlagService {
   async createFlag(cardId: string, userId: string, input: CreateCardFlagInput): Promise<CardFlag | null> {
     const result = await pool.query<CardFlag>(
-      `INSERT INTO card_flags (card_id, user_id, reason, note, flagged_during_session_id)
-       SELECT $1, $2, $3, $4, $5
+      `INSERT INTO card_flags (card_id, user_id, reason, note)
+       SELECT $1, $2, $3, $4
        FROM cards c
        WHERE c.id = $1 AND c.user_id = $2 AND c.deleted_at IS NULL
        RETURNING *`,
-      [
-        cardId,
-        userId,
-        input.reason.slice(0, 50),
-        input.note ?? null,
-        input.sessionId ?? null,
-      ]
+      [cardId, userId, input.reason.slice(0, 50), input.note ?? null]
     );
     return result.rows[0] || null;
   }
@@ -88,7 +80,7 @@ export class CardFlagService {
     }
     params.push(limit);
     const result = await pool.query<FlagWithCard>(
-      `SELECT f.id, f.card_id, f.user_id, f.reason, f.note, f.flagged_during_session_id,
+      `SELECT f.id, f.card_id, f.user_id, f.reason, f.note,
               f.resolved, f.created_at,
               c.deck_id, d.title AS deck_title,
               LEFT(c.recto, 80) AS recto_snippet

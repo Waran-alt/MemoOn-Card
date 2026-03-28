@@ -166,10 +166,9 @@ export default function DeckDetailPage() {
   const [cardDetailsCard, setCardDetailsCard] = useState<Card | null>(null);
   const [cardDetailsHistory, setCardDetailsHistory] = useState<Array<{ event_type: string; event_time: number; payload?: Record<string, unknown> }>>([]);
   const [cardDetailsSummary, setCardDetailsSummary] = useState<{
-    totalEvents: number;
+    totalJourneyEvents: number;
     byEventType: Array<{ eventType: string; count: number }>;
-    byDay: Array<{ day: string; count: number }>;
-    bySession: Array<{ sessionId: string; count: number; firstEventAt: number; lastEventAt: number }>;
+    byReviewDay: Array<{ day: string; count: number }>;
   } | null>(null);
   const [cardDetailsReviewLogs, setCardDetailsReviewLogs] = useState<Array<{
     id: string;
@@ -430,7 +429,7 @@ export default function DeckDetailPage() {
     Promise.all([
       apiClient.get<{ success: boolean; data?: Card }>(`/api/cards/${card.id}`),
       apiClient.get<{ success: boolean; data?: Array<{ event_type: string; event_time: number; payload?: Record<string, unknown> }> }>(`/api/cards/${card.id}/history?limit=100`),
-      apiClient.get<{ success: boolean; data?: { totalEvents: number; byEventType: Array<{ eventType: string; count: number }>; byDay: Array<{ day: string; count: number }>; bySession: Array<{ sessionId: string; count: number; firstEventAt: number; lastEventAt: number }> } }>(`/api/cards/${card.id}/history/summary?days=90&sessionLimit=20`),
+      apiClient.get<{ success: boolean; data?: { totalJourneyEvents: number; byEventType: Array<{ eventType: string; count: number }>; byReviewDay: Array<{ day: string; count: number }> } }>(`/api/cards/${card.id}/history/summary?days=90`),
       apiClient.get<{ success: boolean; data?: Array<{ id: string; rating: number; review_time: number; review_date: string; scheduled_days: number; elapsed_days: number; stability_before: number | null; difficulty_before: number | null; retrievability_before: number | null; stability_after: number | null; difficulty_after: number | null }> }>(`/api/cards/${card.id}/review-logs?limit=50`),
     ])
       .then(([cardRes, historyRes, summaryRes, logsRes]) => {
@@ -1379,10 +1378,10 @@ export default function DeckDetailPage() {
                   {ta('dismiss')}
                 </button>
                 <Link
-                  href={`/${locale}/app/study-sessions`}
+                  href={`/${locale}/app/study-health`}
                   className="text-sm font-medium text-(--mc-accent-primary) underline hover:no-underline"
                 >
-                  {ta('viewStudySessions')}
+                  {ta('viewStudyHealthDashboard')}
                 </Link>
               </div>
             </div>
@@ -2053,15 +2052,15 @@ export default function DeckDetailPage() {
                   {cardDetailsSummary && (
                     <>
                       <section className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3">
-                        <h4 className="text-sm font-medium text-(--mc-text-primary) mb-2">{ta('cardDetailsSessions')}</h4>
+                        <h4 className="text-sm font-medium text-(--mc-text-primary) mb-2">{ta('cardDetailsJourneySummary')}</h4>
                         <p className="text-xs text-(--mc-text-secondary) mb-2">
-                          {ta('cardDetailsTotalEvents', { vars: { count: String(cardDetailsSummary.totalEvents) } })} · {cardDetailsSummary.bySession.length} {ta('cardDetailsSessionsCount')}
+                          {ta('cardDetailsTotalJourneyEvents', { vars: { count: String(cardDetailsSummary.totalJourneyEvents) } })}
                         </p>
-                        {cardDetailsSummary.bySession.length > 0 ? (
-                          <ul className="space-y-1 text-xs">
-                            {cardDetailsSummary.bySession.slice(0, 10).map((s) => (
-                              <li key={s.sessionId} className="text-(--mc-text-secondary)">
-                                {s.count} {ta('cardDetailsEvents')} · {formatEventTime(s.lastEventAt, locale)}
+                        {cardDetailsSummary.byEventType.length > 0 ? (
+                          <ul className="space-y-1 text-xs text-(--mc-text-secondary)">
+                            {cardDetailsSummary.byEventType.map((row) => (
+                              <li key={row.eventType}>
+                                {row.eventType}: {row.count}
                               </li>
                             ))}
                           </ul>
@@ -2110,17 +2109,18 @@ export default function DeckDetailPage() {
                           </section>
                         );
                       })()}
-                      {cardDetailsSummary.byDay.length > 0 && (
+                      {(cardDetailsSummary.byReviewDay?.length ?? 0) > 0 && (
                         <section className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3">
-                          <h4 className="text-sm font-medium text-(--mc-text-primary) mb-2">{ta('cardDetailsEventsByDay')}</h4>
+                          <h4 className="text-sm font-medium text-(--mc-text-primary) mb-2">{ta('cardDetailsReviewsByDay')}</h4>
+                          <p className="text-xs text-(--mc-text-secondary) mb-2">{ta('cardDetailsReviewsByDayHint')}</p>
                           <div className="flex items-end gap-0.5 overflow-x-auto pb-2" style={{ minHeight: 80 }}>
-                            {[...cardDetailsSummary.byDay].reverse().slice(0, 30).map((row) => {
-                              const max = Math.max(1, ...cardDetailsSummary!.byDay.map((d) => d.count));
+                            {[...(cardDetailsSummary.byReviewDay ?? [])].reverse().slice(0, 90).map((row) => {
+                              const max = Math.max(1, ...(cardDetailsSummary.byReviewDay ?? []).map((d) => d.count));
                               const h = max > 0 ? (row.count / max) * 56 : 0;
                               return (
-                                <div key={row.day} className="flex flex-1 flex-col items-center gap-0.5" title={`${row.day}: ${row.count}`}>
-                                  <div className="w-full min-w-[6px] max-w-[16px] rounded-t bg-(--mc-accent-primary)/70" style={{ height: `${h}px` }} />
-                                  <span className="text-[10px] text-(--mc-text-secondary)">{row.count}</span>
+                                <div key={row.day} className="flex flex-1 flex-col items-center gap-0.5 min-w-0" title={`${row.day}: ${row.count}`}>
+                                  <div className="w-full min-w-[5px] max-w-[12px] rounded-t bg-(--mc-accent-success)/70" style={{ height: `${h}px` }} />
+                                  <span className="text-[9px] text-(--mc-text-muted) truncate max-w-full">{row.day.slice(5)}</span>
                                 </div>
                               );
                             })}

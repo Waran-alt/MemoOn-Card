@@ -93,9 +93,10 @@ export interface ReviewLog {
   review_time: number; // Timestamp in milliseconds (UTC) - matches FSRS Optimizer schema
   review_state?: 0 | 1 | 2 | 3; // 0=New, 1=Learning, 2=Review, 3=Relearning
   review_duration?: number; // Time spent reviewing in milliseconds
+  /** Question shown → answer revealed (ms), when tracked separately from review_duration */
+  thinking_duration_ms?: number | null;
   shown_at?: number | null; // Client timestamp in milliseconds when card was shown
   revealed_at?: number | null; // Client timestamp in milliseconds when answer was revealed
-  session_id?: string | null; // Groups reviews from a single study session
   scheduled_days: number; // Interval scheduled for next review
   elapsed_days: number; // Days elapsed since last review
   stability_before: number | null;
@@ -120,25 +121,6 @@ export interface UserFsrsDailyMetric {
   p90_review_duration_ms: number | null;
   avg_elapsed_days: number | null;
   avg_scheduled_days: number | null;
-  session_count: number | null;
-  updated_at: Date;
-}
-
-export interface UserFsrsSessionMetric {
-  id: string;
-  user_id: string;
-  session_id: string;
-  session_date: string;
-  session_started_at: number | null;
-  session_ended_at: number | null;
-  review_count: number;
-  pass_count: number;
-  fail_count: number;
-  avg_predicted_recall: number | null;
-  observed_recall_rate: number | null;
-  brier_score: number | null;
-  mean_review_duration_ms: number | null;
-  fatigue_slope: number | null;
   updated_at: Date;
 }
 
@@ -157,7 +139,6 @@ export interface UserSettings {
   learning_min_interval_minutes?: number;
   /** When true, user can use knowledge textarea and reversed cards in UI. */
   knowledge_enabled?: boolean;
-  session_auto_end_away_minutes?: number;
 }
 
 export interface RefreshTokenSession {
@@ -170,31 +151,6 @@ export interface RefreshTokenSession {
   user_agent: string | null;
   ip_address: string | null;
   last_used_at: Date;
-  created_at: Date;
-}
-
-export type StudyEventType =
-  | 'session_start'
-  | 'session_end'
-  | 'card_shown'
-  | 'answer_revealed'
-  | 'rating_submitted'
-  | 'importance_toggled';
-
-export interface StudyEvent {
-  id: string;
-  user_id: string;
-  deck_id: string | null;
-  card_id: string | null;
-  session_id: string | null;
-  client_event_id: string | null;
-  event_type: StudyEventType;
-  event_version: number;
-  occurred_at_client: number | null;
-  received_at_server: number;
-  sequence_in_session: number | null;
-  policy_version: string;
-  payload_json: Record<string, unknown>;
   created_at: Date;
 }
 
@@ -212,11 +168,10 @@ export interface CardJourneyEvent {
   user_id: string;
   card_id: string;
   deck_id: string | null;
-  session_id: string | null;
   event_type: CardJourneyEventType;
   event_time: number;
   actor: 'user' | 'system';
-  source: 'ui' | 'review_service' | 'study_events' | 'cards_route' | 'decks_route';
+  source: 'ui' | 'review_service' | 'cards_route' | 'decks_route';
   idempotency_key: string;
   review_log_id: string | null;
   causation_id: string | null;
@@ -249,7 +204,6 @@ export interface CardFlag {
   user_id: string;
   reason: string;
   note: string | null;
-  flagged_during_session_id: string | null;
   resolved: boolean;
   created_at: Date;
 }

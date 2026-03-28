@@ -31,7 +31,6 @@ vi.mock('@/hooks/useTranslation', () => ({
           myDecks: 'My decks',
           decks: 'Decks',
           optimizer: 'Optimizer',
-          studySessions: 'Study sessions',
           studyHealth: 'Stats & health',
           admin: 'Admin',
           dev: 'Dev',
@@ -86,13 +85,13 @@ describe('AppLayoutShell', () => {
     );
     expect(screen.getByRole('heading', { name: 'Decks' })).toBeInTheDocument();
 
-    pathnameState.value = '/en/app/study-sessions';
+    pathnameState.value = '/en/app/study-health';
     rerender(
       <AppLayoutShell>
         <div>child</div>
       </AppLayoutShell>
     );
-    expect(screen.getByRole('heading', { name: 'Study sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Stats & health' })).toBeInTheDocument();
   });
 
   it('sets E2E readiness data attributes on document root', async () => {

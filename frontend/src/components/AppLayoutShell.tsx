@@ -17,7 +17,6 @@ const userNavItems = [
   { path: '/app/flagged-cards', labelKey: 'flaggedCards' as const },
   { path: '/app/import-export', labelKey: 'importExport' as const },
   { path: '/app/optimizer', labelKey: 'optimizer' as const },
-  { path: '/app/study-sessions', labelKey: 'studySessions' as const },
   { path: '/app/study-health', labelKey: 'studyHealth' as const },
   { path: '/app/settings', labelKey: 'settings' as const },
 ] as const;
@@ -49,9 +48,7 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
           ? tc('flaggedCards')
         : pathname === `/${locale}/app/import-export`
           ? tc('importExport')
-          : pathname === `/${locale}/app/study-sessions`
-          ? tc('studySessions')
-        : pathname === `/${locale}/app/study-health`
+          : pathname === `/${locale}/app/study-health`
           ? tc('studyHealth')
         : pathname === `/${locale}/app/settings`
           ? tc('settings')

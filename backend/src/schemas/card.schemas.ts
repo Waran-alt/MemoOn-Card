@@ -89,8 +89,7 @@ export const ReviewCardSchema = z.object({
   shownAt: z.number().int().min(0).optional(),
   revealedAt: z.number().int().min(0).optional(),
   ratedAt: z.number().int().min(0).optional(),
-  sessionId: z.string().uuid().optional(),
-  sequenceInSession: z.number().int().min(0).optional(),
+  thinkingDurationMs: z.number().int().min(0).optional(),
   clientEventId: z.string().uuid().optional(),
   intensityMode: z.enum(['light', 'default', 'intensive']).optional(),
 }).superRefine((data, ctx) => {
@@ -122,7 +121,11 @@ export const ReviewCardSchema = z.object({
     });
   }
 
-  for (const [key, value] of [['shownAt', data.shownAt], ['revealedAt', data.revealedAt], ['ratedAt', data.ratedAt]] as const) {
+  for (const [key, value] of [
+    ['shownAt', data.shownAt],
+    ['revealedAt', data.revealedAt],
+    ['ratedAt', data.ratedAt],
+  ] as const) {
     if (value == null) continue;
     if (value > maxFuture) {
       ctx.addIssue({
@@ -147,31 +150,6 @@ export const UpdateCardImportanceSchema = z.object({
 
 export const UpdateStudyIntensitySchema = z.object({
   intensityMode: z.enum(['light', 'default', 'intensive']),
-});
-
-export const StudyEventTypeSchema = z.enum([
-  'session_start',
-  'session_end',
-  'card_shown',
-  'answer_revealed',
-  'rating_submitted',
-  'importance_toggled',
-]);
-
-export const StudyEventSchema = z.object({
-  eventType: StudyEventTypeSchema,
-  clientEventId: z.string().uuid(),
-  policyVersion: z.string().regex(/^[a-zA-Z0-9._-]{1,64}$/).optional(),
-  sessionId: z.string().uuid().optional(),
-  cardId: z.string().uuid().optional(),
-  deckId: z.string().uuid().optional(),
-  occurredAtClient: z.number().int().min(0).optional(),
-  sequenceInSession: z.number().int().min(0).optional(),
-  payload: z.record(z.string(), z.unknown()).optional(),
-});
-
-export const StudyEventsBatchSchema = z.object({
-  events: z.array(StudyEventSchema).min(1).max(200),
 });
 
 export const CardIdSchema = z.object({
@@ -215,7 +193,6 @@ export const SetCardCategoriesSchema = z.object({
 export const CreateCardFlagSchema = z.object({
   reason: z.string().min(1, 'Reason is required').max(50, 'Reason must be at most 50 characters').trim(),
   note: z.string().max(500).trim().optional().nullable(),
-  sessionId: z.string().uuid().optional(),
 });
 
 export const ListFlagsQuerySchema = z.object({
@@ -257,37 +234,12 @@ export const CardHistorySummaryQuerySchema = z.object({
   days: z.string().regex(/^\d+$/).transform(Number).pipe(
     z.number().int().min(1).max(180)
   ).optional(),
-  sessionLimit: z.string().regex(/^\d+$/).transform(Number).pipe(
-    z.number().int().min(1).max(50)
-  ).optional(),
 });
 
 export const CardReviewLogsQuerySchema = z.object({
   limit: z.string().regex(/^\d+$/).transform(Number).pipe(
     z.number().int().min(1).max(100)
   ).optional(),
-});
-
-export const StudySessionHistoryQuerySchema = z.object({
-  days: z.string().regex(/^\d+$/).transform(Number).pipe(
-    z.number().int().min(1).max(180)
-  ).optional(),
-  limit: z.string().regex(/^\d+$/).transform(Number).pipe(
-    z.number().int().min(1).max(200)
-  ).optional(),
-  offset: z.string().regex(/^\d+$/).transform(Number).pipe(
-    z.number().int().min(0)
-  ).optional(),
-});
-
-export const StudySessionDetailQuerySchema = z.object({
-  eventLimit: z.string().regex(/^\d+$/).transform(Number).pipe(
-    z.number().int().min(1).max(1000)
-  ).optional(),
-});
-
-export const StudySessionIdParamSchema = z.object({
-  sessionId: z.string().uuid('Invalid session ID format'),
 });
 
 export const JourneyConsistencyQuerySchema = z.object({

@@ -9,7 +9,6 @@ const mockUserId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 const fsrsMetricsServiceMock = vi.hoisted(() => ({
   getDailyMetrics: vi.fn(),
   getSummary: vi.fn(),
-  getSessionMetrics: vi.fn(),
   getWindows: vi.fn(),
   refreshRecentMetrics: vi.fn(),
 }));
@@ -77,19 +76,6 @@ describe('FSRS metrics routes', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.days).toBe(30);
     expect(fsrsMetricsServiceMock.getSummary).toHaveBeenCalledWith(mockUserId, 30);
-  });
-
-  it('GET /sessions returns session rows', async () => {
-    fsrsMetricsServiceMock.getSessionMetrics.mockResolvedValue([
-      { sessionId: '11111111-1111-4111-8111-111111111111', reviewCount: 20 },
-    ]);
-
-    const res = await request(app).get('/api/optimization/metrics/sessions?days=14');
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.days).toBe(14);
-    expect(fsrsMetricsServiceMock.getSessionMetrics).toHaveBeenCalledWith(mockUserId, 14);
   });
 
   it('GET /windows returns volume windows', async () => {
