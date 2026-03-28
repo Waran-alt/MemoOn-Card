@@ -16,7 +16,7 @@ memoon-card/
 ├── migrations/            # Database migrations (Liquibase)
 │   ├── changelog.xml      # Main changelog file
 │   └── changesets/        # Individual migration files
-├── documentation/         # Project documentation
+├── documentation/         # Project docs (see documentation/README.md; archived notes in documentation/private/)
 ├── docker-compose.yml     # Docker Compose configuration
 ├── .env                   # Environment variables template
 └── package.json          # Root configuration
@@ -65,7 +65,16 @@ E2E smoke tests (Playwright) are available via `yarn test:e2e` after installing 
 
 ## 📚 Documentation
 
-**`documentation/README.md`** is the docs index. Start with **`documentation/SETUP.md`** or **`documentation/QUICK_START.md`**.
+**`documentation/README.md`** is the full index. New contributors: **`documentation/SETUP.md`** or **`documentation/QUICK_START.md`**, then **`documentation/ARCHITECTURE.md`** for the big picture. Internal or archived material lives under **`documentation/private/`** (see `private/README.md` there).
+
+## ✅ Quality gates
+
+From the repo root:
+
+```bash
+yarn check    # TypeScript (shared + frontend + backend) + ESLint
+yarn test     # Unit tests (Vitest)
+```
 
 ## 🔗 Links
 

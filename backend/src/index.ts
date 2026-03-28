@@ -1,3 +1,11 @@
+/**
+ * MemoOn-Card API entrypoint.
+ *
+ * Middleware order: security → CORS → rate limits → cookies/body → public routes (`/health`, `/api/auth`, `/api/version`)
+ * → CSRF for mutating `/api/*` → authenticated routers from `routes/*.routes.ts`.
+ *
+ * Business logic: `services/`. Request validation: `schemas/` (Zod). DB pool: `config/database.ts`.
+ */
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

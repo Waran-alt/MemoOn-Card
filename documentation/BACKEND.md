@@ -1,6 +1,8 @@
-# Backend Guide
+# Backend guide
 
-Backend service for MemoOn-Card built with Express 5 + TypeScript.
+Express 5 + TypeScript API. **Process entry:** `backend/src/index.ts` (middleware stack, mounts `routes/*`, starts FSRS metrics job).
+
+System overview: `documentation/ARCHITECTURE.md`.
 
 ## Run
 
@@ -47,13 +49,43 @@ Important variables:
 
 For full env reference, see `documentation/ENVIRONMENT_SETUP.md`.
 
-## API and Health
+## API and health
 
 - API base: `http://localhost:4002/api`
-- Health: `http://localhost:4002/health`
+- Health (no auth): `http://localhost:4002/health`
 
-## Related Docs
+## Route modules (`backend/src/routes/`)
+
+Mounted from `index.ts` under `/api` unless noted.
+
+- `auth.routes.ts` — `/auth` register, login, refresh cookie, logout, session
+- `users.routes.ts` / `user.routes.ts` — `/users`, `/user` profile and settings
+- `decks.routes.ts` — `/decks` CRUD, cards in deck, due/new queues
+- `cards.routes.ts` — `/cards` CRUD, single-card review, flags, journey summary
+- `reviews.routes.ts` — `/reviews` batch review
+- `knowledge.routes.ts` — `/knowledge`
+- `study.routes.ts` — `/study` journey consistency, study health dashboard, deck stats
+- `optimization.routes.ts` — `/optimization` optimizer and snapshots
+- `fsrs-metrics.routes.ts` — `/optimization/metrics` daily, summary, windows, refresh
+- `admin.routes.ts` / `dev.routes.ts` — `/admin`, `/dev` (role gates)
+
+Mutating requests use CSRF protection via `X-Requested-With` (see `index.ts`).
+
+## Services worth opening first
+
+- `services/review.service.ts` — writes `review_logs`, updates card FSRS state, appends journey events for ratings
+- `services/card-journey.service.ts` — append-only `card_journey_events`, consistency report
+- `services/fsrs.service.ts` — FSRS v6 scheduling
+- `schemas/*.ts` — Zod validation; `types/database.ts` — row shapes (keep aligned with Liquibase)
+
+## Database
+
+- Pool: `config/database.ts`
+- Migrations: repo `migrations/` (`yarn migrate:up` / `migrate:docker`)
+
+## Related docs
 
 - `documentation/SETUP.md`
 - `documentation/ENVIRONMENT_SETUP.md`
+- `documentation/WEBAPP_SCENARIOS.md`
 - `documentation/FSRS_OPTIMIZER.md`

@@ -1,5 +1,6 @@
 /**
- * Database type definitions matching the schema
+ * TypeScript shapes for DB rows and payloads. Source of truth for columns is Liquibase;
+ * update this file when migrations add or rename columns.
  */
 
 export interface User {

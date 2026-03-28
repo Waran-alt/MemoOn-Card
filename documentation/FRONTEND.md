@@ -1,6 +1,8 @@
-# Frontend Guide
+# Frontend guide
 
-Frontend app for MemoOn-Card built with Next.js 16 + TypeScript.
+Next.js App Router + TypeScript + Tailwind. Locales **`en`** and **`fr`** at `/{locale}/...`.
+
+Layout shell for the product: `frontend/src/components/AppLayoutShell.tsx`. System overview: `documentation/ARCHITECTURE.md`.
 
 ## Run
 
@@ -47,8 +49,22 @@ For full env reference, see `documentation/ENVIRONMENT_SETUP.md`.
 - Frontend: `http://localhost:3002`
 - Locale routes: `http://localhost:3002/en` and `http://localhost:3002/fr`
 
-## Related Docs
+## App Router layout (mental model)
+
+- `src/app/[locale]/(protected)/layout.tsx` — requires login (server session check)
+- `src/app/[locale]/(protected)/app/layout.tsx` — wraps pages with **AppLayoutShell** (nav)
+- `src/app/[locale]/(protected)/app/decks/[id]/study/page.tsx` — study queue and review submission
+
+## API client and auth
+
+- `src/lib/api.ts` — Axios client: bearer token, `X-Requested-With` on mutations, 401 refresh retry
+- `src/store/auth.store.ts` — access token + user
+- `src/lib/auth.ts` — server-side session from cookies
+- `public/locales/{en,fr}/` — i18n JSON; `src/hooks/useTranslation.ts` — typed access
+
+## Related docs
 
 - `documentation/SETUP.md`
 - `documentation/QUICK_START.md`
 - `documentation/ENVIRONMENT_SETUP.md`
+- `documentation/PAGES_AND_AUTH_REVIEW.md`

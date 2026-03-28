@@ -1,3 +1,6 @@
+/**
+ * Shared PostgreSQL pool for the API. Schema is defined by Liquibase (`migrations/`).
+ */
 import { Pool, PoolConfig } from 'pg';
 import {
   POSTGRES_HOST,

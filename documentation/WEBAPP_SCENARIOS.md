@@ -54,16 +54,16 @@ This document maps user-facing UX flows to backend API calls.
   - `PUT /api/cards/:id`
   - `DELETE /api/cards/:id`
 
-## Scenario 3: Study session and card review (Implemented)
+## Scenario 3: Study and card review (Implemented)
 
 ### UX interaction
 
-1. User starts study for a deck.
+1. User opens study for a deck.
 2. For each card:
    - user sees front (`recto`)
-   - clicks "Show answer"
+   - reveals question / answer as per UI flow
    - rates recall (Again/Hard/Good/Easy)
-3. Session summary shown when queue ends.
+3. When the client-side queue is empty, a completion message is shown (no server “session” record).
 
 ### API calls
 
@@ -72,16 +72,12 @@ This document maps user-facing UX flows to backend API calls.
    - `GET /api/decks/:id/cards/due`
    - `GET /api/decks/:id/cards/new?limit=...`
 2. Per-card review:
-   - `POST /api/cards/:id/review` with:
-     - `rating`
-     - `shownAt` (optional, now used)
-     - `revealedAt` (optional, now used)
-     - `sessionId` (optional, now used)
+   - `POST /api/cards/:id/review` with `rating` and optional timing fields (`shownAt`, `revealedAt`, `ratedAt`, `thinkingDurationMs`, etc.).
 
 ### UX/FSRS notes
 
 - Review updates FSRS state immediately.
-- Review log persists timing metadata for analytics/session grouping.
+- **`review_logs`** stores the authoritative review row; **`card_journey_events`** records the journey trail (see `JOURNEY-CONSISTENCY-AUDIT.md`).
 
 ## Scenario 4: Manage reviewed/edited card impact (Implemented)
 
@@ -119,14 +115,13 @@ This document maps user-facing UX flows to backend API calls.
 ### UX interaction
 
 1. User/admin opens optimization metrics panel.
-2. User inspects daily trends, sessions, and rolling windows.
+2. User inspects daily trends, summary aggregates, and rolling windows.
 3. User triggers manual refresh if needed.
 
 ### API calls
 
 - `GET /api/optimization/metrics/daily?days=...`
 - `GET /api/optimization/metrics/summary?days=...`
-- `GET /api/optimization/metrics/sessions?days=...`
 - `GET /api/optimization/metrics/windows`
 - `POST /api/optimization/metrics/refresh` with optional `{ "days": N }`
 

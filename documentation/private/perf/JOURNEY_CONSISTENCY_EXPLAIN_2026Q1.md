@@ -8,7 +8,7 @@ Goal: capture `EXPLAIN ANALYZE` evidence for consistency-report query shape, the
 
 ## How This Was Measured
 
-- Fixture + query harness: `documentation/perf/journey_consistency_explain_fixture.sql`
+- Fixture + query harness: `documentation/private/perf/journey_consistency_explain_fixture.sql`
 - Environment:
   - Local Docker Postgres `postgres:17-alpine`
   - DB: `memoon_card_db`

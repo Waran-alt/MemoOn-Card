@@ -1,3 +1,9 @@
+/**
+ * Single write path for scheduling: persists `review_logs`, updates card FSRS fields, and appends
+ * matching `card_journey_events` (e.g. `rating_submitted`) via `CardJourneyService`.
+ *
+ * Called from card/review routes — keep journey idempotency keys stable when changing payloads.
+ */
 import { pool } from '../config/database';
 import { FSRSState, ReviewResult, createFSRS } from './fsrs.service';
 import { CardService } from './card.service';

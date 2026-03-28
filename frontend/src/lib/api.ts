@@ -1,3 +1,7 @@
+/**
+ * Browser Axios client for `/api/*`: attaches JWT, sets `X-Requested-With` on mutations (CSRF),
+ * retries once after `refreshAccess` on 401. Base URL from `NEXT_PUBLIC_API_URL` / `getClientApiBaseUrl`.
+ */
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { getClientApiBaseUrl } from '@/lib/env';
 import { useAuthStore } from '@/store/auth.store';

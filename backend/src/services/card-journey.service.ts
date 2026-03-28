@@ -1,3 +1,7 @@
+/**
+ * Append-only `card_journey_events` + read helpers (per-card summary, admin consistency report).
+ * Writers use `(user_id, idempotency_key)` uniqueness; see ADR-0002 in `documentation/adr/`.
+ */
 import { pool } from '@/config/database';
 import { CardJourneyEvent, CardJourneyEventType } from '@/types/database';
 import {

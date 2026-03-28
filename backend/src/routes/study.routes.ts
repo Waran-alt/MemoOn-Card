@@ -1,3 +1,7 @@
+/**
+ * Study-adjacent **read** APIs: journey consistency, study health dashboard/alerts, deck study stats.
+ * Card reviews are posted via `cards.routes` / `reviews.routes`, not here.
+ */
 import { Router } from 'express';
 import { getUserId } from '@/middleware/auth';
 import { asyncHandler } from '@/middleware/errorHandler';

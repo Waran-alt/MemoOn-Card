@@ -2,7 +2,7 @@
 
 Get the app running and use it in a few minutes.
 
-For contributor onboarding, use `documentation/SETUP.md` as the canonical path.
+For contributor onboarding, use `documentation/SETUP.md` as the canonical path. For a one-page system map, see `documentation/ARCHITECTURE.md`.
 
 ## Prerequisites
 

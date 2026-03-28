@@ -18,3 +18,7 @@ Un ancien chemin « apprentissage court » pouvait autrefois omettre des événe
 ## Source unique pour review_logs
 
 Seul `review.service.ts` insère dans `review_logs` (via `logReview`).
+
+## Profiling (archived)
+
+Ancien jeu de requêtes **EXPLAIN ANALYZE** et fixture SQL volumineuse : `documentation/private/perf/` (voir `private/README.md`).

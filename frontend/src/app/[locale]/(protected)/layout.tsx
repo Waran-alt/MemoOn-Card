@@ -1,3 +1,6 @@
+/**
+ * Gate for all `(protected)` routes: no session → redirect to login. Hydrates client auth from server user.
+ */
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { getSession } from '@/lib/auth';

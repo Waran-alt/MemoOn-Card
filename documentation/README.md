@@ -1,30 +1,49 @@
-# Documentation Index
+# Documentation index
 
-Source of truth for project documentation. Internal planning lives in `private/` (see `private/README.md`).
+Canonical documentation for MemoOn-Card. If you are new, start with **SETUP.md**.
 
-## Start here
+## Orientation
 
-- **SETUP.md** – contributor setup (Docker-first)
-- **QUICK_START.md** – shortest path to run the app
-- **ENVIRONMENT_SETUP.md** – env vars and examples
-- **COMMAND_REFERENCE.md** – root scripts
-- **TROUBLESHOOTING.md** – symptom → fix
-- **PGADMIN.md** – connect pgAdmin to Postgres (shared network)
+- **ARCHITECTURE.md** — High-level system map (frontend, API, DB, main flows).
+- **SETUP.md** — Contributor setup (Docker-first, migrations, verify).
+- **QUICK_START.md** — Shortest path to a running stack.
+- **COMMAND_REFERENCE.md** — Root `yarn` scripts.
+- **ENVIRONMENT_SETUP.md** — Env vars, precedence, E2E.
+- **TROUBLESHOOTING.md** — Common failures and fixes.
 
-## Feature / domain
+## Product and security
 
-- **BACKEND.md**, **FRONTEND.md** – dev notes
-- **PAGES_AND_AUTH_REVIEW.md** – pages, purpose, and auth access (public vs authenticated vs admin)
-- **ROLES_AND_ACCESS_CRITIQUE.md** – critique of adding guest/moderator/dev roles; what should be accessible to whom
-- **TRANSLATION_REVIEW_NEW_USER.md** – translation review from a new user POV (e.g. “Santé étude” → clearer wording)
-- **FSRS_OPTIMIZER.md** – optimizer integration
-- **ADAPTIVE_FEATURE_FLAGS.md** – rollout flags and SQL runbook
-- **CODE_OWNERSHIP_MAP.md** – ownership and review routing
-- **WEBAPP_SCENARIOS.md** – UX → API mapping
-- **STUDY_HEALTH_TELEMETRY.md** – health telemetry and alerts
-- **perf/JOURNEY_CONSISTENCY_EXPLAIN_2026Q1.md** – consistency query profiling
+- **PAGES_AND_AUTH_REVIEW.md** — Routes, page purpose, access levels.
+- **ROLES_AND_ACCESS_CRITIQUE.md** — Role model discussion (`user` / `admin` / `dev`).
+- **WEBAPP_SCENARIOS.md** — UX flows mapped to HTTP APIs.
 
-## Architecture decisions
+## Backend and frontend development
 
-- **adr/README.md** – index and template
-- **adr/ADR-0001** … **ADR-0004** – event model, idempotency, refresh session, adaptive retention
+- **BACKEND.md** — API process, route map, where logic lives.
+- **FRONTEND.md** — Next.js structure, i18n, API client.
+- **PGADMIN.md** — Optional DB GUI on Docker network.
+
+## FSRS, metrics, and operations
+
+- **FSRS_OPTIMIZER.md** — Python optimizer integration.
+- **ADAPTIVE_FEATURE_FLAGS.md** — Feature flags and rollout notes.
+- **STUDY_HEALTH_TELEMETRY.md** — Health dashboard streams and alerts.
+- **JOURNEY-CONSISTENCY-AUDIT.md** — `review_logs` vs `card_journey_events` alignment.
+- **DEPLOYMENT-HOSTINGER.md** — Deployment notes.
+
+## Architecture decisions (ADR)
+
+See **adr/README.md** for the ADR index.
+
+## Private / archived
+
+**private/README.md** — Working notes, example ownership map, archived performance profiling. Not required for first-time setup.
+
+## Quality gates (repo root)
+
+```bash
+yarn check    # type-check + lint
+yarn test     # frontend + backend unit tests
+```
+
+The root **README.md** describes repository layout and external links.

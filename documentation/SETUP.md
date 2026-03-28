@@ -2,7 +2,7 @@
 
 This is the canonical contributor onboarding path for MemoOn-Card.
 
-For the full documentation map, see `documentation/README.md`.
+For the full documentation map, see `documentation/README.md`. For a one-page system overview, see `documentation/ARCHITECTURE.md`.
 
 ## Prerequisites
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
 import apiClient, { getApiErrorMessage } from '@/lib/api';
@@ -25,7 +25,9 @@ export default function AppPage() {
   const { data: decksData, loading, error, refetch } = useApiGet<Deck[]>('/api/decks', {
     errorFallback: ta('failedLoadDecks'),
   });
-  const decks = Array.isArray(decksData) ? decksData : [];
+  const decks = useMemo(() => (Array.isArray(decksData) ? decksData : []), [decksData]);
+  const deckIds = useMemo(() => decks.map((d) => d.id), [decks]);
+  const deckIdsKey = deckIds.join(',');
   const [deckStats, setDeckStats] = useState<Record<string, DeckStats>>({});
   const [showCreate, setShowCreate] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
@@ -34,32 +36,33 @@ export default function AppPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  // Fetch stats for each deck when list is loaded
+  // Fetch stats for each deck when list is loaded (async body avoids sync setState in effect)
   useEffect(() => {
-    if (decks.length === 0) {
-      setDeckStats({});
-      return;
-    }
-    const aborted = { current: false };
-    void Promise.all(
-      decks.map((deck) =>
-        apiClient
-          .get<{ success: boolean; data?: DeckStats }>(`/api/decks/${deck.id}/stats`)
-          .then((res) => (res.data?.success && res.data.data ? { id: deck.id, stats: res.data.data } : null))
-          .catch(() => ({ id: deck.id, stats: null }))
-      )
-    ).then((results) => {
-      if (aborted.current) return;
+    let cancelled = false;
+    void (async () => {
+      if (deckIds.length === 0) {
+        if (!cancelled) setDeckStats({});
+        return;
+      }
+      const results = await Promise.all(
+        deckIds.map((id) =>
+          apiClient
+            .get<{ success: boolean; data?: DeckStats }>(`/api/decks/${id}/stats`)
+            .then((res) => (res.data?.success && res.data.data ? { id, stats: res.data.data } : null))
+            .catch(() => ({ id, stats: null as DeckStats | null }))
+        )
+      );
+      if (cancelled) return;
       const next: Record<string, DeckStats> = {};
       results.forEach((r) => {
         if (r?.stats) next[r.id] = r.stats;
       });
-      setDeckStats((prev) => ({ ...prev, ...next }));
-    });
+      setDeckStats(next);
+    })();
     return () => {
-      aborted.current = true;
+      cancelled = true;
     };
-  }, [decks.map((d) => d.id).join(',')]);
+  }, [deckIdsKey, deckIds]);
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
