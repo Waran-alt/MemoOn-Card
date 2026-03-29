@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { useTranslation } from '@/hooks/useTranslation';
 import { SignOutButton } from './SignOutButton';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { ConnectionSyncBanner } from './ConnectionSyncBanner';
 
 /** Nav items visible to all authenticated users. */
 const userNavItems = [
@@ -179,6 +180,7 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
         </header>
+        <ConnectionSyncBanner />
         <main className="flex-1 overflow-auto p-6">
           {(() => {
             const deckStudyMatch = pathname.match(new RegExp(`^/${locale}/app/decks/([^/]+)/study$`));

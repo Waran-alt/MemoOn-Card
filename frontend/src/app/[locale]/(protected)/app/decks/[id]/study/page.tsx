@@ -9,7 +9,8 @@ import type { Deck, Card, ReviewResult } from '@/types';
 import type { Rating } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useConnectionState } from '@/hooks/useConnectionState';
-import { retryWithBackoff, addToPendingQueue, getPendingCount, flushPendingQueue } from '@/lib/studySync';
+import { retryWithBackoff, addToPendingQueue } from '@/lib/studySync';
+import { useConnectionSyncStore } from '@/store/connectionSync.store';
 import { parseSessionSize, getSessionLimit, type SessionSizeKey } from '@/lib/sessionSize';
 import { useUserStudySettings } from '@/hooks/useUserStudySettings';
 import { STUDY_INTERVAL } from '@memoon-card/shared';
@@ -169,8 +170,7 @@ export default function StudyPage() {
   queueRef.current = queue;
   const prefetchAbortRef = useRef<AbortController | null>(null);
 
-  const { isOnline, hadFailure, setHadFailure } = useConnectionState();
-  const [pendingCount, setPendingCount] = useState(0);
+  const { setHadFailure } = useConnectionState();
   const { learningMinIntervalMinutes } = useUserStudySettings();
 
   /** Thinking time: question reveal → answer reveal (ms), frozen once answer is shown. */
@@ -370,22 +370,6 @@ export default function StudyPage() {
     router.push(`/${locale}/app/decks/${id}`);
   }
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const flush = () => {
-      flushPendingQueue((url, payload) => apiClient.post(url, payload)).then(({ flushed }) => {
-        setPendingCount(getPendingCount());
-        if (flushed > 0) setHadFailure(false);
-      });
-    };
-    const onOnline = () => flush();
-    window.addEventListener('online', onOnline);
-    const initialPending = getPendingCount();
-    if (initialPending > 0) setPendingCount(initialPending);
-    if (navigator.onLine) flush();
-    return () => window.removeEventListener('online', onOnline);
-  }, [setHadFailure]);
-
   async function handleSubmitRating(rating: Rating) {
     const card = currentCard;
     if (!card || submitting) return;
@@ -420,7 +404,7 @@ export default function StudyPage() {
         } catch {
           setHadFailure(true);
           addToPendingQueue({ type: 'review', url: `/api/cards/${card.id}/review`, payload });
-          setPendingCount(getPendingCount());
+          useConnectionSyncStore.getState().refreshPendingCount();
           setReviewError(ta('failedSaveReview'));
           setSubmitting(false);
           return;
@@ -434,7 +418,7 @@ export default function StudyPage() {
     } catch {
       setHadFailure(true);
       addToPendingQueue({ type: 'review', url: `/api/cards/${card.id}/review`, payload });
-      setPendingCount(getPendingCount());
+      useConnectionSyncStore.getState().refreshPendingCount();
       setReviewError(ta('failedSaveReview'));
     } finally {
       setSubmitting(false);
@@ -560,25 +544,8 @@ export default function StudyPage() {
   const card = currentCard;
   if (!card) return null;
 
-  const showConnectionBanner = !isOnline || pendingCount > 0 || hadFailure;
-  const connectionMessage = !isOnline ? ta('offlineWillRetry') : ta('connectionLostWillRetry');
-
   return (
     <div className="mc-study-page mx-auto max-w-2xl space-y-6 relative">
-      {showConnectionBanner && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-(--mc-accent-warning)/50 bg-(--mc-accent-warning)/10 px-3 py-2 text-sm text-(--mc-accent-warning)" role="status">
-          <span>{connectionMessage}</span>
-          {isOnline && (
-            <button
-              type="button"
-              onClick={() => { setHadFailure(false); setPendingCount(getPendingCount()); }}
-              className="shrink-0 rounded px-2 py-1 text-xs font-medium hover:bg-(--mc-accent-warning)/20"
-            >
-              {ta('dismiss')}
-            </button>
-          )}
-        </div>
-      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button type="button" onClick={goToDeck} className="text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)">
           ← {ta('exitStudy')}

@@ -1,14 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useConnectionSyncStore } from '@/store/connectionSync.store';
 
-/** Tracks navigator.onLine and optionally a "recent failure" flag for showing connection lost message. */
+/** Tracks navigator.onLine and a shared "recent failure" flag (same across all callers / global banner). */
 export function useConnectionState(options?: { clearFailureOnOnline?: boolean }) {
   const clearFailureOnOnline = options?.clearFailureOnOnline ?? true;
+  const hadFailure = useConnectionSyncStore((s) => s.hadFailure);
+  const setHadFailure = useConnectionSyncStore((s) => s.setHadFailure);
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
-  const [hadFailure, setHadFailure] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -23,7 +25,7 @@ export function useConnectionState(options?: { clearFailureOnOnline?: boolean })
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
-  }, [clearFailureOnOnline]);
+  }, [clearFailureOnOnline, setHadFailure]);
 
   return {
     isOnline,

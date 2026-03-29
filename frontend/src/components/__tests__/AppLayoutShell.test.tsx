@@ -63,6 +63,10 @@ vi.mock('../LanguageSwitcher', () => ({
   LanguageSwitcher: () => <div>Language switcher</div>,
 }));
 
+vi.mock('../ConnectionSyncBanner', () => ({
+  ConnectionSyncBanner: () => null,
+}));
+
 describe('AppLayoutShell', () => {
   beforeEach(() => {
     pathnameState.value = '/en/app';

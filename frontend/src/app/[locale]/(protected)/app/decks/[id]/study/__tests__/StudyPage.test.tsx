@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import StudyPage from '../page';
 import type { Deck, Card } from '@/types';
+import { useConnectionSyncStore } from '@/store/connectionSync.store';
 
 vi.mock('@memoon-card/shared', () => ({
   STUDY_INTERVAL: { MIN_INTERVAL_MINUTES: 1, MAX_LEARNING_INTERVAL_MINUTES: 120 },
@@ -76,6 +77,7 @@ async function clickShowQuestion() {
 describe('StudyPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useConnectionSyncStore.setState({ hadFailure: false, pendingCount: 0 });
     useParams.mockReturnValue({ id: 'deck-123' });
     mockGet.mockImplementation(defaultGetImpl);
     mockPost.mockResolvedValue({ data: { success: true } });
