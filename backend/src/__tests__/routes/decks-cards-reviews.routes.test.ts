@@ -11,6 +11,7 @@ const {
   mockUserId,
   mockDeckId,
   mockCardId,
+  mockOtherCardId,
   deckServiceMock,
   cardServiceMock,
   reviewServiceMock,
@@ -22,6 +23,7 @@ const {
   mockUserId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   mockDeckId: '11111111-1111-4111-8111-111111111111',
   mockCardId: '22222222-2222-4222-8222-222222222222',
+  mockOtherCardId: '33333333-3333-4333-8333-333333333333',
   deckServiceMock: {
     getDecksByUserId: vi.fn(),
     getDeckById: vi.fn(),
@@ -47,6 +49,8 @@ const {
     getNewCards: vi.fn(),
     resetCardStability: vi.fn(),
     updateCardImportance: vi.fn(),
+    insertCardLink: vi.fn(),
+    removeCardLink: vi.fn(),
   },
   reviewServiceMock: {
     reviewCard: vi.fn(),
@@ -579,6 +583,59 @@ describe('Deck/Card/Review routes', () => {
 
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
+    });
+  });
+
+  describe('Card links', () => {
+    it('POST /api/cards/:id/links links two cards and returns source card', async () => {
+      cardServiceMock.insertCardLink.mockResolvedValueOnce(undefined);
+      const linkedCard = {
+        id: mockCardId,
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+        recto: 'A',
+        verso: 'B',
+        linked_card_ids: [mockOtherCardId],
+      };
+      cardServiceMock.getCardById.mockResolvedValueOnce(linkedCard);
+
+      const res = await request(app)
+        .post(`/api/cards/${mockCardId}/links`)
+        .send({ otherCardId: mockOtherCardId });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.linked_card_ids).toEqual([mockOtherCardId]);
+      expect(cardServiceMock.insertCardLink).toHaveBeenCalledWith(mockUserId, mockCardId, mockOtherCardId);
+    });
+
+    it('POST /api/cards/:id/links returns 400 when otherCardId equals id', async () => {
+      const res = await request(app)
+        .post(`/api/cards/${mockCardId}/links`)
+        .send({ otherCardId: mockCardId });
+
+      expect(res.status).toBe(400);
+      expect(cardServiceMock.insertCardLink).not.toHaveBeenCalled();
+    });
+
+    it('DELETE /api/cards/:id/links/:otherCardId removes link and returns card', async () => {
+      cardServiceMock.removeCardLink.mockResolvedValueOnce(true);
+      const unlinkedCard = {
+        id: mockCardId,
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+        recto: 'A',
+        verso: 'B',
+        linked_card_ids: [] as string[],
+      };
+      cardServiceMock.getCardById.mockResolvedValueOnce(unlinkedCard);
+
+      const res = await request(app).delete(`/api/cards/${mockCardId}/links/${mockOtherCardId}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.linked_card_ids).toEqual([]);
+      expect(cardServiceMock.removeCardLink).toHaveBeenCalledWith(mockUserId, mockCardId, mockOtherCardId);
     });
   });
 

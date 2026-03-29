@@ -59,8 +59,8 @@ export interface Card {
   categories?: { id: string; name: string }[];
   /** Link to knowledge (learning unit). */
   knowledge_id?: string | null;
-  /** Other card in the reverse pair. */
-  reverse_card_id?: string | null;
+  /** Directly linked card ids (undirected; study spacing uses these). */
+  linked_card_ids?: string[];
 }
 
 export interface Category {

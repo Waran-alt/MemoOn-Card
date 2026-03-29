@@ -8,6 +8,7 @@ import { Card, CreateCardRequest } from '@/types/database';
 import { pool } from '@/config/database';
 import { createMockQueryResult } from '@/__tests__/utils/test-helpers';
 import { FSRSState } from '@/services/fsrs.service';
+import { NotFoundError, ValidationError } from '@/utils/errors';
 
 // Mock database pool
 vi.mock('@/config/database', () => ({
@@ -56,11 +57,13 @@ describe('CardService', () => {
         },
       ];
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult(mockCards));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult(mockCards))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.getCardsByDeckId(mockDeckId, mockUserId);
 
-      expect(result).toEqual(mockCards);
+      expect(result).toEqual(mockCards.map((c) => ({ ...c, linked_card_ids: [] })));
       expect(pool.query).toHaveBeenCalledWith(
         'SELECT * FROM cards WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC',
         [mockDeckId, mockUserId]
@@ -90,11 +93,13 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.getCardById(mockCardId, mockUserId);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
     });
 
     it('should return null if card not found', async () => {
@@ -138,7 +143,7 @@ describe('CardService', () => {
 
       const result = await cardService.createCard(mockDeckId, mockUserId, createData);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO cards'),
         expect.arrayContaining([mockUserId, mockDeckId, createData.recto, createData.verso])
@@ -173,11 +178,13 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.updateCard(mockCardId, mockUserId, updateData);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
     });
   });
 
@@ -217,11 +224,13 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.updateCard(mockCardId, mockUserId, updateData);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE cards'),
         expect.arrayContaining([updateData.recto, mockCardId, mockUserId])
@@ -250,11 +259,13 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.updateCard(mockCardId, mockUserId, updateData);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
     });
 
     it('should update comment when provided', async () => {
@@ -279,11 +290,13 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.updateCard(mockCardId, mockUserId, updateData);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
     });
 
     it('should update multiple fields at once', async () => {
@@ -313,11 +326,13 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.updateCard(mockCardId, mockUserId, updateData);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
     });
 
     it('should return null when card not found', async () => {
@@ -355,7 +370,9 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       await cardService.updateCard(mockCardId, mockUserId, updateData);
 
@@ -469,11 +486,13 @@ describe('CardService', () => {
         },
       ];
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult(mockCards));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult(mockCards))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.getDueCards(mockDeckId, mockUserId);
 
-      expect(result).toEqual(mockCards);
+      expect(result).toEqual(mockCards.map((c) => ({ ...c, linked_card_ids: [] })));
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('deleted_at IS NULL'),
         [mockDeckId, mockUserId]
@@ -540,11 +559,13 @@ describe('CardService', () => {
         },
       ];
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult(mockCards));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult(mockCards))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.getNewCards(mockDeckId, mockUserId, 20);
 
-      expect(result).toEqual(mockCards);
+      expect(result).toEqual(mockCards.map((c) => ({ ...c, linked_card_ids: [] })));
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('deleted_at IS NULL'),
         [mockDeckId, mockUserId, 20]
@@ -636,11 +657,13 @@ describe('CardService', () => {
         updated_at: new Date(),
       };
 
-      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([mockCard]));
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([mockCard]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
 
       const result = await cardService.resetCardStability(mockCardId, mockUserId);
 
-      expect(result).toEqual(mockCard);
+      expect(result).toEqual({ ...mockCard, linked_card_ids: [] });
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('stability = NULL'),
         [mockCardId, mockUserId]
@@ -867,7 +890,7 @@ describe('CardService', () => {
   });
 
   describe('createReversedCard', () => {
-    it('should create reversed card and link both via reverse_card_id', async () => {
+    it('should create reversed card and insert card_links row', async () => {
       const sourceCard: Card = {
         id: 'source-card-id',
         deck_id: mockDeckId,
@@ -905,26 +928,86 @@ describe('CardService', () => {
         next_review: new Date(),
         created_at: new Date(),
         updated_at: new Date(),
-        reverse_card_id: 'source-card-id',
       };
 
       (pool.query as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(createMockQueryResult([sourceCard]))
         .mockResolvedValueOnce(createMockQueryResult([reversedCard]))
+        .mockResolvedValueOnce(createMockQueryResult([{ n: '2' }]))
         .mockResolvedValueOnce(createMockQueryResult([]))
-        .mockResolvedValueOnce(createMockQueryResult([]))
-        .mockResolvedValueOnce(createMockQueryResult([{ ...reversedCard, reverse_card_id: 'source-card-id' }]));
+        .mockResolvedValueOnce(createMockQueryResult([reversedCard]))
+        .mockResolvedValueOnce(createMockQueryResult([{ card_id_a: 'reversed-card-id', card_id_b: 'source-card-id' }]));
 
       const result = await cardService.createReversedCard('source-card-id', mockUserId);
 
       expect(result).not.toBeNull();
       expect(result?.recto).toBe('Back');
       expect(result?.verso).toBe('Front');
+      expect(result?.linked_card_ids).toEqual(['source-card-id']);
       expect(pool.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE cards SET reverse_card_id'),
+        expect.stringContaining('INSERT INTO card_links'),
         expect.any(Array)
       );
-      expect((pool.query as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes('UPDATE cards SET reverse_card_id'))).toHaveLength(2);
+    });
+
+    it('should omit knowledge_id on new card when copyKnowledge is false', async () => {
+      const knowledgeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const sourceCard: Card = {
+        id: 'source-card-id',
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+        recto: 'Front',
+        verso: 'Back',
+        comment: null,
+        recto_image: null,
+        verso_image: null,
+        recto_formula: false,
+        verso_formula: false,
+        reverse: true,
+        stability: 0,
+        difficulty: 0.3,
+        last_review: null,
+        next_review: new Date(),
+        created_at: new Date(),
+        updated_at: new Date(),
+        knowledge_id: knowledgeId,
+      };
+      const reversedCard: Card = {
+        id: 'reversed-card-id',
+        deck_id: mockDeckId,
+        user_id: mockUserId,
+        recto: 'Back',
+        verso: 'Front',
+        comment: null,
+        recto_image: null,
+        verso_image: null,
+        recto_formula: false,
+        verso_formula: false,
+        reverse: true,
+        stability: 0,
+        difficulty: 0.3,
+        last_review: null,
+        next_review: new Date(),
+        created_at: new Date(),
+        updated_at: new Date(),
+        knowledge_id: null,
+      };
+
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([sourceCard]))
+        .mockResolvedValueOnce(createMockQueryResult([reversedCard]))
+        .mockResolvedValueOnce(createMockQueryResult([{ n: '2' }]))
+        .mockResolvedValueOnce(createMockQueryResult([]))
+        .mockResolvedValueOnce(createMockQueryResult([reversedCard]))
+        .mockResolvedValueOnce(createMockQueryResult([{ card_id_a: 'reversed-card-id', card_id_b: 'source-card-id' }]));
+
+      await cardService.createReversedCard('source-card-id', mockUserId, undefined, { copyKnowledge: false });
+
+      const insertCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).includes('INSERT INTO cards')
+      );
+      expect(insertCall).toBeDefined();
+      expect(insertCall![1][10]).toBeNull();
     });
 
     it('should return null when source card not found', async () => {
@@ -937,7 +1020,7 @@ describe('CardService', () => {
   });
 
   describe('createCardPair', () => {
-    it('should create two cards and set mutual reverse_card_id', async () => {
+    it('should create two cards and insert card_links', async () => {
       const cardA = {
         id: 'card-a-id',
         deck_id: mockDeckId,
@@ -956,7 +1039,6 @@ describe('CardService', () => {
         next_review: new Date(),
         created_at: new Date(),
         updated_at: new Date(),
-        reverse_card_id: 'card-b-id',
       } as Card;
       const cardB = {
         id: 'card-b-id',
@@ -976,16 +1058,19 @@ describe('CardService', () => {
         next_review: new Date(),
         created_at: new Date(),
         updated_at: new Date(),
-        reverse_card_id: 'card-a-id',
       } as Card;
+
+      const linkRow = { card_id_a: 'card-a-id', card_id_b: 'card-b-id' };
 
       (pool.query as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(createMockQueryResult([cardA]))
         .mockResolvedValueOnce(createMockQueryResult([cardB]))
-        .mockResolvedValueOnce(createMockQueryResult([]))
+        .mockResolvedValueOnce(createMockQueryResult([{ n: '2' }]))
         .mockResolvedValueOnce(createMockQueryResult([]))
         .mockResolvedValueOnce(createMockQueryResult([cardA]))
-        .mockResolvedValueOnce(createMockQueryResult([cardB]));
+        .mockResolvedValueOnce(createMockQueryResult([linkRow]))
+        .mockResolvedValueOnce(createMockQueryResult([cardB]))
+        .mockResolvedValueOnce(createMockQueryResult([linkRow]));
 
       const [a, b] = await cardService.createCardPair(
         mockDeckId,
@@ -997,6 +1082,8 @@ describe('CardService', () => {
 
       expect(a.id).toBe('card-a-id');
       expect(b.id).toBe('card-b-id');
+      expect(a.linked_card_ids).toEqual(['card-b-id']);
+      expect(b.linked_card_ids).toEqual(['card-a-id']);
       expect(pool.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO cards'),
         expect.arrayContaining([mockUserId, mockDeckId, 'A1', 'A2'])
@@ -1005,10 +1092,41 @@ describe('CardService', () => {
         expect.stringContaining('INSERT INTO cards'),
         expect.arrayContaining([mockUserId, mockDeckId, 'B1', 'B2'])
       );
-      const updateCalls = (pool.query as ReturnType<typeof vi.fn>).mock.calls.filter((c) =>
-        String(c[0]).includes('UPDATE cards SET reverse_card_id')
+      expect(pool.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO card_links'),
+        expect.any(Array)
       );
-      expect(updateCalls).toHaveLength(2);
+    });
+  });
+
+  describe('insertCardLink and removeCardLink', () => {
+    const idA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const idB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+    it('throws ValidationError when linking a card to itself', async () => {
+      await expect(cardService.insertCardLink(mockUserId, idA, idA)).rejects.toThrow(ValidationError);
+    });
+
+    it('throws NotFoundError when one card is missing', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce(createMockQueryResult([{ n: '1' }]));
+      await expect(cardService.insertCardLink(mockUserId, idA, idB)).rejects.toThrow(NotFoundError);
+    });
+
+    it('inserts link when both cards exist', async () => {
+      (pool.query as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(createMockQueryResult([{ n: '2' }]))
+        .mockResolvedValueOnce(createMockQueryResult([]));
+      await cardService.insertCardLink(mockUserId, idA, idB);
+      expect(pool.query).toHaveBeenLastCalledWith(
+        expect.stringContaining('INSERT INTO card_links'),
+        [mockUserId, idA, idB]
+      );
+    });
+
+    it('removeCardLink returns true when a row was deleted', async () => {
+      (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ rowCount: 1, rows: [] });
+      const ok = await cardService.removeCardLink(mockUserId, idA, idB);
+      expect(ok).toBe(true);
     });
   });
 });

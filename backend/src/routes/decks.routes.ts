@@ -225,7 +225,7 @@ router.get('/:id/cards/study', validateParams(DeckIdSchema), validateQuery(Study
 
 /**
  * POST /api/decks/:id/cards/bulk
- * Create one or two cards (optionally with knowledge). When two cards, creates a reverse pair (mutual reverse_card_id).
+ * Create one or two cards (optionally with knowledge). When two cards, creates both and links them in card_links.
  */
 router.post('/:id/cards/bulk', validateParams(DeckIdSchema), validateRequest(BulkCreateCardsSchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);

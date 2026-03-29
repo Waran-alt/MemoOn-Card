@@ -19,6 +19,8 @@ import {
   CardHistorySummaryQuerySchema,
   CardReviewLogsQuerySchema,
   CreateReversedCardSchema,
+  LinkCardBodySchema,
+  CardLinkParamsSchema,
 } from '@/schemas/card.schemas';
 import { NotFoundError, ValidationError } from '@/utils/errors';
 import { CardJourneyService } from '@/services/card-journey.service';
@@ -88,8 +90,8 @@ router.put('/:id/categories', validateParams(CardIdSchema), validateRequest(SetC
 
 /**
  * POST /api/cards/:id/reversed
- * Create a reversed card (recto/verso swapped), same deck and knowledge; links the pair via reverse_card_id.
- * Optional body: { card_b?: { recto, verso, comment? } } to use custom content for the new card. Omit body for immediate create (swapped from source).
+ * Create a reversed card (recto/verso swapped), same deck as source; adds an undirected card link.
+ * Optional body: card_b, copy_categories (default true), copy_knowledge (default true).
  */
 router.post(
   '/:id/reversed',
@@ -98,20 +100,22 @@ router.post(
   asyncHandler(async (req, res) => {
     const userId = getUserId(req);
     const cardId = String(req.params.id);
-    const body = (req as { body?: { card_b?: { recto: string; verso: string; comment?: string | null } } }).body ?? {};
+    const body = req.body as {
+      card_b?: { recto: string; verso: string; comment?: string | null };
+      copy_categories: boolean;
+      copy_knowledge: boolean;
+    };
     const sourceCard = await cardService.getCardById(cardId, userId);
     if (!sourceCard) throw new NotFoundError('Card');
-    if (sourceCard.reverse_card_id) {
-      throw new ValidationError('Card already has a reversed card');
-    }
     const reversed = await cardService.createReversedCard(
       cardId,
       userId,
-      body.card_b ? { recto: body.card_b.recto, verso: body.card_b.verso, comment: body.card_b.comment ?? undefined } : undefined
+      body.card_b ? { recto: body.card_b.recto, verso: body.card_b.verso, comment: body.card_b.comment ?? undefined } : undefined,
+      { copyKnowledge: body.copy_knowledge }
     );
     if (!reversed) throw new NotFoundError('Card');
     const sourceCategories = await categoryService.getCategoriesForCard(cardId, userId);
-    if (sourceCategories.length > 0) {
+    if (body.copy_categories && sourceCategories.length > 0) {
       await categoryService.setCategoriesForCard(reversed.id, userId, sourceCategories.map((c) => c.id));
     }
     await cardJourneyService.appendEvent(userId, {
@@ -127,6 +131,53 @@ router.post(
     const categories = await categoryService.getCategoriesForCard(reversed.id, userId);
     const data = { ...reversed, category_ids: categories.map((c) => c.id), categories };
     return res.status(201).json({ success: true, data });
+  })
+);
+
+/**
+ * POST /api/cards/:id/links
+ * Link two existing cards (same user only). Idempotent if already linked.
+ */
+router.post(
+  '/:id/links',
+  validateParams(CardIdSchema),
+  validateRequest(LinkCardBodySchema),
+  asyncHandler(async (req, res) => {
+    const userId = getUserId(req);
+    const cardId = String(req.params.id);
+    const { otherCardId } = req.body as { otherCardId: string };
+    if (cardId === otherCardId) {
+      throw new ValidationError('Cannot link a card to itself');
+    }
+    await cardService.insertCardLink(userId, cardId, otherCardId);
+    const card = await cardService.getCardById(cardId, userId);
+    if (!card) throw new NotFoundError('Card');
+    const categories = await categoryService.getCategoriesForCard(cardId, userId);
+    const data = { ...card, category_ids: categories.map((c) => c.id), categories };
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * DELETE /api/cards/:id/links/:otherCardId
+ * Remove the direct link between two cards (same user). Idempotent if already unlinked.
+ */
+router.delete(
+  '/:id/links/:otherCardId',
+  validateParams(CardLinkParamsSchema),
+  asyncHandler(async (req, res) => {
+    const userId = getUserId(req);
+    const cardId = String(req.params.id);
+    const otherCardId = String(req.params.otherCardId);
+    if (cardId === otherCardId) {
+      throw new ValidationError('Cannot unlink a card from itself');
+    }
+    await cardService.removeCardLink(userId, cardId, otherCardId);
+    const card = await cardService.getCardById(cardId, userId);
+    if (!card) throw new NotFoundError('Card');
+    const categories = await categoryService.getCategoriesForCard(cardId, userId);
+    const data = { ...card, category_ids: categories.map((c) => c.id), categories };
+    return res.json({ success: true, data });
   })
 );
 

@@ -100,16 +100,16 @@ function shuffleCards<T>(arr: T[]): T[] {
   return out;
 }
 
-/** True if two cards form a reverse pair (same content, recto/verso swapped). */
-function isReversePair(a: Card, b: Card): boolean {
-  return !!(a && b && (a.reverse_card_id === b.id || b.reverse_card_id === a.id));
+/** True if two cards share a direct undirected link. */
+function areDirectlyLinked(a: Card, b: Card): boolean {
+  if (!a || !b) return false;
+  return !!(a.linked_card_ids?.includes(b.id) || b.linked_card_ids?.includes(a.id));
 }
 
 /**
- * Reorder queue so the two cards of each reverse pair are in different halves of the queue.
- * Avoids reviewing the same information (recto/verso) twice in quick succession and getting inflated intervals.
+ * Reorder queue so directly linked cards are not shown too close together initially.
  */
-function separateReversedPairs(queue: Card[]): Card[] {
+function separateLinkedCards(queue: Card[]): Card[] {
   if (queue.length <= 1) return queue;
   let arr = [...queue];
   const n = arr.length;
@@ -120,7 +120,7 @@ function separateReversedPairs(queue: Card[]): Card[] {
     let moved = false;
     for (let i = 0; i < arr.length; i++) {
       for (let j = i + 1; j < arr.length && j - i <= minGap; j++) {
-        if (isReversePair(arr[i], arr[j])) {
+        if (areDirectlyLinked(arr[i], arr[j])) {
           const removed = arr[j];
           arr.splice(j, 1);
           const insertAt = Math.min(i + minGap, arr.length);
@@ -164,7 +164,7 @@ export default function StudyPage() {
   const [reviewError, setReviewError] = useState('');
   const [reviewedCount, setReviewedCount] = useState(0);
   const reviewedCardIdsRef = useRef<string[]>([]);
-  /** When each card was last shown (for reverse-pair gap and review payload). */
+  /** When each card was last shown (for linked-card gap and review payload). */
   const lastShownAtRef = useRef<Record<string, number>>({});
   const queueRef = useRef<Card[]>([]);
   queueRef.current = queue;
@@ -214,10 +214,12 @@ export default function StudyPage() {
     if (queue.length === 0) return;
     const now = Date.now();
     const isBlocked = (c: Card) => {
-      if (!c.reverse_card_id) return false;
-      const t = lastShownAtRef.current[c.reverse_card_id];
-      if (t == null) return false;
-      return (now - t) < reversePairMinGapMs;
+      const neighbors = c.linked_card_ids ?? [];
+      for (const nid of neighbors) {
+        const t = lastShownAtRef.current[nid];
+        if (t != null && now - t < reversePairMinGapMs) return true;
+      }
+      return false;
     };
     if (!isBlocked(queue[0])) return;
     const idx = queue.findIndex((c) => !isBlocked(c));
@@ -269,7 +271,7 @@ export default function StudyPage() {
           }
           setDeck(deckRes.data.data);
           lastShownAtRef.current = {};
-          setQueue(separateReversedPairs(saved.queue));
+          setQueue(separateLinkedCards(saved.queue));
           setReviewedCount(saved.reviewedCount);
           reviewedCardIdsRef.current = saved.reviewedCardIds;
           setHadFailure(false);
@@ -301,7 +303,7 @@ export default function StudyPage() {
         setDeck(deckRes.data.data);
         const list = studyRes.data?.success && Array.isArray(studyRes.data.data) ? studyRes.data.data : [];
         lastShownAtRef.current = {};
-        setQueue(separateReversedPairs(shuffleCards(list).slice(0, limit)));
+        setQueue(separateLinkedCards(shuffleCards(list).slice(0, limit)));
         reviewedCardIdsRef.current = [];
         setHadFailure(false); // clear so "Connection lost" doesn't stick after a successful load
       })
@@ -348,7 +350,7 @@ export default function StudyPage() {
           const seen = new Set(prev.map((c) => c.id));
           const extra = fresh.filter((c) => !seen.has(c.id));
           if (extra.length === 0) return prev;
-          return separateReversedPairs([...prev, ...shuffleCards(extra)]);
+          return separateLinkedCards([...prev, ...shuffleCards(extra)]);
         });
       })
       .catch((err) => {
@@ -412,7 +414,7 @@ export default function StudyPage() {
       }
       reviewedCardIdsRef.current = [...reviewedCardIdsRef.current, card.id];
       setReviewedCount((n) => n + 1);
-      setQueue((prev) => separateReversedPairs(prev.slice(1)));
+      setQueue((prev) => separateLinkedCards(prev.slice(1)));
       setShowAnswer(false);
       setHadFailure(false);
     } catch {

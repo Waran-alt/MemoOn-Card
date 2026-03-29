@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="045-card-links-replace-reverse-card-id" author="memo">
+        <comment>Undirected card_links table; migrate from cards.reverse_card_id; drop reverse_card_id.</comment>
+
+        <createTable tableName="card_links">
+            <column name="id" type="uuid" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_links_user" references="users(id)" deleteCascade="true"/>
+            </column>
+            <column name="card_id_a" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_links_card_a" references="cards(id)" deleteCascade="true"/>
+            </column>
+            <column name="card_id_b" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_card_links_card_b" references="cards(id)" deleteCascade="true"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint tableName="card_links" columnNames="user_id, card_id_a, card_id_b" constraintName="uq_card_links_user_pair"/>
+
+        <sql>
+            ALTER TABLE card_links ADD CONSTRAINT ck_card_links_order CHECK (card_id_a::text &lt; card_id_b::text);
+        </sql>
+
+        <createIndex indexName="idx_card_links_user_card_a" tableName="card_links">
+            <column name="user_id"/>
+            <column name="card_id_a"/>
+        </createIndex>
+        <createIndex indexName="idx_card_links_user_card_b" tableName="card_links">
+            <column name="user_id"/>
+            <column name="card_id_b"/>
+        </createIndex>
+
+        <sql>
+            INSERT INTO card_links (user_id, card_id_a, card_id_b)
+            SELECT DISTINCT c.user_id,
+                CASE WHEN c.id::text &lt; c.reverse_card_id::text THEN c.id ELSE c.reverse_card_id END,
+                CASE WHEN c.id::text &lt; c.reverse_card_id::text THEN c.reverse_card_id ELSE c.id END
+            FROM cards c
+            WHERE c.reverse_card_id IS NOT NULL AND c.deleted_at IS NULL;
+        </sql>
+
+        <dropIndex indexName="idx_cards_reverse_card_id" tableName="cards"/>
+        <dropForeignKeyConstraint baseTableName="cards" constraintName="fk_cards_reverse_card"/>
+        <dropColumn tableName="cards" columnName="reverse_card_id"/>
+    </changeSet>
+</databaseChangeLog>

@@ -62,8 +62,8 @@ export interface Card {
   categories?: { id: string; name: string }[];
   /** Link to knowledge (learning unit); optional. */
   knowledge_id?: string | null;
-  /** Other card in the reverse pair (mutual self-reference). */
-  reverse_card_id?: string | null;
+  /** Neighbor card ids (undirected links in `card_links`). */
+  linked_card_ids?: string[];
 }
 
 /** User-scoped category for tagging cards (e.g. vocabulary, grammar). */
@@ -270,6 +270,10 @@ export interface ExportCardItem {
   verso_formula?: boolean;
   /** Same value for both cards in a reverse pair; omit for single cards. */
   pairId?: string | null;
+  /** Neighbor ids at export time (informational). */
+  linked_card_ids?: string[];
+  /** Shared id for a multi-card group: on import, every pair in the group gets a link. */
+  link_group_id?: string | null;
   /** Present when format=full */
   stability?: number | null;
   difficulty?: number | null;
@@ -286,8 +290,10 @@ export interface ImportCardItem {
   reverse?: boolean;
   recto_formula?: boolean;
   verso_formula?: boolean;
-  /** Two cards with the same pairId are imported as a reverse pair (linked via reverse_card_id). */
+  /** Two cards with the same pairId are imported and linked. */
   pairId?: string | null;
+  /** Cards sharing the same link_group_id are imported and linked pairwise (each to each). */
+  link_group_id?: string | null;
   stability?: number | null;
   difficulty?: number | null;
   next_review?: string | null;

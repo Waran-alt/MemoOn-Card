@@ -74,6 +74,19 @@ const ReversedCardContentSchema = z.object({
 
 export const CreateReversedCardSchema = z.object({
   card_b: ReversedCardContentSchema.optional(),
+  /** When true (default), copy category assignments from source after create. */
+  copy_categories: z.boolean().optional().default(true),
+  /** When true (default), set new card knowledge_id from source. Links remain independent; this only seeds the new card. */
+  copy_knowledge: z.boolean().optional().default(true),
+});
+
+export const LinkCardBodySchema = z.object({
+  otherCardId: z.string().uuid('Invalid card ID format'),
+});
+
+export const CardLinkParamsSchema = z.object({
+  id: z.string().uuid('Invalid card ID format'),
+  otherCardId: z.string().uuid('Invalid card ID format'),
 });
 
 export const ReviewCardSchema = z.object({
@@ -170,6 +183,7 @@ const ImportCardItemSchema = z.object({
   recto_formula: z.boolean().optional().default(false),
   verso_formula: z.boolean().optional().default(false),
   pairId: z.string().min(1).max(100).optional().nullable(),
+  link_group_id: z.string().min(1).max(200).optional().nullable(),
   stability: z.number().finite().optional().nullable(),
   difficulty: z.number().finite().optional().nullable(),
   next_review: z.string().optional().nullable(),

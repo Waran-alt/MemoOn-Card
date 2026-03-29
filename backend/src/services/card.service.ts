@@ -10,8 +10,103 @@ import { FSRSState } from '../services/fsrs.service';
 import { sanitizeHtml } from '../utils/sanitize';
 import { elapsedDaysAtRetrievability } from './fsrs-core.utils';
 import { addDays } from './fsrs-time.utils';
+import { NotFoundError, ValidationError } from '../utils/errors';
 
 export class CardService {
+  /** Attach neighbor ids from card_links (undirected). */
+  private async withLinkedCardIds(cards: Card[], userId: string): Promise<Card[]> {
+    if (cards.length === 0) return [];
+    const ids = cards.map((c) => c.id);
+    const result = await pool.query<{ card_id_a: string; card_id_b: string }>(
+      `SELECT card_id_a, card_id_b FROM card_links
+       WHERE user_id = $1 AND (card_id_a = ANY($2::uuid[]) OR card_id_b = ANY($2::uuid[]))`,
+      [userId, ids]
+    );
+    const map = new Map<string, string[]>();
+    for (const id of ids) map.set(id, []);
+    for (const row of result.rows ?? []) {
+      map.get(row.card_id_a)?.push(row.card_id_b);
+      map.get(row.card_id_b)?.push(row.card_id_a);
+    }
+    return cards.map((c) => ({ ...c, linked_card_ids: map.get(c.id) ?? [] }));
+  }
+
+  /** Single undirected edge between two cards (same user, not deleted). No deck constraint. */
+  async insertCardLink(userId: string, cardIdA: string, cardIdB: string): Promise<void> {
+    if (cardIdA === cardIdB) {
+      throw new ValidationError('Cannot link a card to itself');
+    }
+    const check = await pool.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM cards
+       WHERE user_id = $1 AND deleted_at IS NULL AND id IN ($2::uuid, $3::uuid)`,
+      [userId, cardIdA, cardIdB]
+    );
+    if (parseInt(check.rows[0]?.n ?? '0', 10) < 2) {
+      throw new NotFoundError('Card');
+    }
+    const small = cardIdA < cardIdB ? cardIdA : cardIdB;
+    const big = cardIdA < cardIdB ? cardIdB : cardIdA;
+    await pool.query(
+      `INSERT INTO card_links (user_id, card_id_a, card_id_b) VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [userId, small, big]
+    );
+  }
+
+  /** Remove one undirected link between two cards (same user). */
+  async removeCardLink(userId: string, cardIdA: string, cardIdB: string): Promise<boolean> {
+    if (cardIdA === cardIdB) return false;
+    const small = cardIdA < cardIdB ? cardIdA : cardIdB;
+    const big = cardIdA < cardIdB ? cardIdB : cardIdA;
+    const r = await pool.query(
+      `DELETE FROM card_links WHERE user_id = $1 AND card_id_a = $2 AND card_id_b = $3`,
+      [userId, small, big]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  /** Link each card in the set to every other (all pairs get an edge). */
+  async linkAllPairsInGroup(cardIds: string[], userId: string): Promise<void> {
+    const uniq = [...new Set(cardIds)];
+    for (let i = 0; i < uniq.length; i++) {
+      for (let j = i + 1; j < uniq.length; j++) {
+        await this.insertCardLink(userId, uniq[i], uniq[j]);
+      }
+    }
+  }
+
+  /** Connected components by edges to other cards in the same deck export set → min id per card. */
+  private computeLinkGroupMinByCardId(cards: Card[], idInDeck: Set<string>): Map<string, string> {
+    const adj = new Map<string, string[]>();
+    for (const c of cards) {
+      adj.set(
+        c.id,
+        (c.linked_card_ids ?? []).filter((x) => idInDeck.has(x))
+      );
+    }
+    const idToMin = new Map<string, string>();
+    const seen = new Set<string>();
+    for (const c of cards) {
+      if (seen.has(c.id)) continue;
+      const comp: string[] = [];
+      const queue = [c.id];
+      seen.add(c.id);
+      while (queue.length) {
+        const u = queue.shift()!;
+        comp.push(u);
+        for (const v of adj.get(u) ?? []) {
+          if (!seen.has(v)) {
+            seen.add(v);
+            queue.push(v);
+          }
+        }
+      }
+      const minId = comp.reduce((a, b) => (a < b ? a : b));
+      for (const id of comp) idToMin.set(id, minId);
+    }
+    return idToMin;
+  }
+
   /**
    * Get all cards in a deck
    */
@@ -23,7 +118,7 @@ export class CardService {
       'SELECT * FROM cards WHERE deck_id = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY created_at DESC',
       [deckId, userId]
     );
-    return result.rows;
+    return this.withLinkedCardIds(result.rows, userId);
   }
 
   /**
@@ -34,7 +129,10 @@ export class CardService {
       'SELECT * FROM cards WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [cardId, userId]
     );
-    return result.rows[0] || null;
+    const row = result.rows[0];
+    if (!row) return null;
+    const [c] = await this.withLinkedCardIds([row], userId);
+    return c;
   }
 
   /**
@@ -72,7 +170,8 @@ export class CardService {
         knowledgeId,
       ]
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    return { ...row, linked_card_ids: [] as string[] };
   }
 
   /**
@@ -150,12 +249,13 @@ export class CardService {
         isImportant,
       ]
     );
-    return result.rows[0];
+    const row = result.rows[0];
+    return { ...row, linked_card_ids: [] as string[] };
   }
 
   /**
    * Build export list for a deck (content-only or full with metadata).
-   * Cards in a reverse pair get the same pairId (min of the two card ids) so re-import links them.
+   * pairId when exactly one linked neighbor in-deck; link_group_id when 2+ cards share a group (import links every pair in that group).
    */
   async getCardsForExport(
     deckId: string,
@@ -163,7 +263,11 @@ export class CardService {
     format: 'content' | 'full'
   ): Promise<ExportCardItem[]> {
     const cards = await this.getCardsByDeckId(deckId, userId);
+    const idInDeck = new Set(cards.map((c) => c.id));
+    const compMin = this.computeLinkGroupMinByCardId(cards, idInDeck);
     return cards.map((c) => {
+      const neighbors = c.linked_card_ids ?? [];
+      const neighborsInDeck = neighbors.filter((x) => idInDeck.has(x));
       const item: ExportCardItem = {
         recto: c.recto,
         verso: c.verso,
@@ -172,8 +276,15 @@ export class CardService {
         recto_formula: c.recto_formula,
         verso_formula: c.verso_formula,
       };
-      if (c.reverse_card_id) {
-        item.pairId = c.id < c.reverse_card_id ? c.id : c.reverse_card_id;
+      if (neighbors.length > 0) {
+        item.linked_card_ids = [...neighbors].sort();
+      }
+      if (neighborsInDeck.length === 1) {
+        const o = neighborsInDeck[0]!;
+        item.pairId = c.id < o ? c.id : o;
+      }
+      if (neighborsInDeck.length > 1) {
+        item.link_group_id = compMin.get(c.id) ?? null;
       }
       if (format === 'full') {
         item.stability = c.stability ?? null;
@@ -187,8 +298,7 @@ export class CardService {
   }
 
   /**
-   * Import cards into a deck. When options.applyMetadata is true, uses metadata from payload when present.
-   * Two cards with the same pairId are created then linked as a reverse pair (reverse_card_id).
+   * Import cards into a deck. Rows sharing link_group_id (≥2) or pairId (≥2) are created then linked pairwise (each card linked to every other in that subset); otherwise one card per row.
    */
   async importCards(
     deckId: string,
@@ -200,111 +310,106 @@ export class CardService {
     const created: Card[] = [];
     const processed = new Set<number>();
 
-    const groupByPairId = new Map<string, number[]>();
-    cards.forEach((_, idx) => {
-      const key = (cards[idx].pairId && cards[idx].pairId!.trim()) ? cards[idx].pairId! : `__single_${idx}`;
-      if (!groupByPairId.has(key)) groupByPairId.set(key, []);
-      groupByPairId.get(key)!.push(idx);
-    });
+    const createOne = async (item: ImportCardItem): Promise<Card> => {
+      if (applyMetadata) {
+        return this.createCardWithOptionalMetadata(deckId, userId, {
+          recto: item.recto,
+          verso: item.verso,
+          comment: item.comment ?? null,
+          reverse: item.reverse,
+          recto_formula: item.recto_formula,
+          verso_formula: item.verso_formula,
+          stability: item.stability,
+          difficulty: item.difficulty,
+          next_review: item.next_review ?? null,
+          last_review: item.last_review ?? null,
+          is_important: item.is_important,
+        });
+      }
+      return this.createCard(deckId, userId, {
+        recto: item.recto,
+        verso: item.verso,
+        comment: item.comment ?? undefined,
+        reverse: item.reverse,
+        recto_formula: item.recto_formula,
+        verso_formula: item.verso_formula,
+      });
+    };
 
+    const linkGroupMap = new Map<string, number[]>();
     for (let idx = 0; idx < cards.length; idx++) {
-      if (processed.has(idx)) continue;
-      const item = cards[idx];
-      const key = (item.pairId && item.pairId.trim()) ? item.pairId : `__single_${idx}`;
-      const indices = groupByPairId.get(key)!;
-      if (indices.length === 2) {
-        const [i, j] = indices;
-        const a = cards[i];
-        const b = cards[j];
-        const cardA = applyMetadata
-          ? await this.createCardWithOptionalMetadata(deckId, userId, {
-              recto: a.recto,
-              verso: a.verso,
-              comment: a.comment ?? null,
-              reverse: a.reverse,
-              recto_formula: a.recto_formula,
-              verso_formula: a.verso_formula,
-              stability: a.stability,
-              difficulty: a.difficulty,
-              next_review: a.next_review ?? null,
-              last_review: a.last_review ?? null,
-              is_important: a.is_important,
-            })
-          : await this.createCard(deckId, userId, {
-              recto: a.recto,
-              verso: a.verso,
-              comment: a.comment ?? undefined,
-              reverse: a.reverse,
-              recto_formula: a.recto_formula,
-              verso_formula: a.verso_formula,
-            });
-        const cardB = applyMetadata
-          ? await this.createCardWithOptionalMetadata(deckId, userId, {
-              recto: b.recto,
-              verso: b.verso,
-              comment: b.comment ?? null,
-              reverse: b.reverse,
-              recto_formula: b.recto_formula,
-              verso_formula: b.verso_formula,
-              stability: b.stability,
-              difficulty: b.difficulty,
-              next_review: b.next_review ?? null,
-              last_review: b.last_review ?? null,
-              is_important: b.is_important,
-            })
-          : await this.createCard(deckId, userId, {
-              recto: b.recto,
-              verso: b.verso,
-              comment: b.comment ?? undefined,
-              reverse: b.reverse,
-              recto_formula: b.recto_formula,
-              verso_formula: b.verso_formula,
-            });
-        await this.linkAsReversePair(cardA.id, cardB.id, userId);
-        created.push(cardA, cardB);
-        processed.add(i);
-        processed.add(j);
-      } else {
-        const card = applyMetadata
-          ? await this.createCardWithOptionalMetadata(deckId, userId, {
-              recto: item.recto,
-              verso: item.verso,
-              comment: item.comment ?? null,
-              reverse: item.reverse,
-              recto_formula: item.recto_formula,
-              verso_formula: item.verso_formula,
-              stability: item.stability,
-              difficulty: item.difficulty,
-              next_review: item.next_review ?? null,
-              last_review: item.last_review ?? null,
-              is_important: item.is_important,
-            })
-          : await this.createCard(deckId, userId, {
-              recto: item.recto,
-              verso: item.verso,
-              comment: item.comment ?? undefined,
-              reverse: item.reverse,
-              recto_formula: item.recto_formula,
-              verso_formula: item.verso_formula,
-            });
-        created.push(card);
-        processed.add(idx);
+      const lg = cards[idx].link_group_id?.trim();
+      if (lg) {
+        if (!linkGroupMap.has(lg)) linkGroupMap.set(lg, []);
+        linkGroupMap.get(lg)!.push(idx);
       }
     }
-    return created;
+
+    for (const indices of linkGroupMap.values()) {
+      if (indices.length < 2) continue;
+      const ids: string[] = [];
+      for (const i of indices) {
+        if (processed.has(i)) continue;
+        const card = await createOne(cards[i]);
+        ids.push(card.id);
+        created.push(card);
+        processed.add(i);
+      }
+      if (ids.length >= 2) {
+        await this.linkAllPairsInGroup(ids, userId);
+      }
+    }
+
+    const groupByPairId = new Map<string, number[]>();
+    for (let idx = 0; idx < cards.length; idx++) {
+      if (processed.has(idx)) continue;
+      const key =
+        cards[idx].pairId && cards[idx].pairId!.trim() ? cards[idx].pairId! : `__single_${idx}`;
+      if (!groupByPairId.has(key)) groupByPairId.set(key, []);
+      groupByPairId.get(key)!.push(idx);
+    }
+
+    for (const indices of groupByPairId.values()) {
+      const pending = indices.filter((i) => !processed.has(i));
+      if (pending.length === 0) continue;
+      if (pending.length >= 2) {
+        const ids: string[] = [];
+        for (const i of pending) {
+          const card = await createOne(cards[i]);
+          ids.push(card.id);
+          created.push(card);
+          processed.add(i);
+        }
+        if (ids.length >= 2) {
+          await this.linkAllPairsInGroup(ids, userId);
+        }
+      } else {
+        const i = pending[0]!;
+        const card = await createOne(cards[i]);
+        created.push(card);
+        processed.add(i);
+      }
+    }
+
+    return this.withLinkedCardIds(created, userId);
   }
 
   /**
-   * Create a reversed card from an existing card, same deck and knowledge.
-   * Optionally pass newCardOverrides for the new card's content (e.g. from two-zone UI); otherwise uses swapped recto/verso from source.
-   * Sets both cards' reverse_card_id to form the pair.
+   * Create a reversed card from an existing card (same deck as source); adds one undirected link.
+   * `copyKnowledge`: when false, the new card has no knowledge_id (link is independent of knowledge).
    */
   async createReversedCard(
     sourceCardId: string,
     userId: string,
-    newCardOverrides?: { recto: string; verso: string; comment?: string | null }
+    newCardOverrides?: { recto: string; verso: string; comment?: string | null },
+    options?: { copyKnowledge?: boolean }
   ): Promise<Card | null> {
-    const source = await this.getCardById(sourceCardId, userId);
+    const copyKnowledge = options?.copyKnowledge !== false;
+    const sourceRow = await pool.query<Card>(
+      'SELECT * FROM cards WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      [sourceCardId, userId]
+    );
+    const source = sourceRow.rows[0];
     if (!source) return null;
     const reversed = await this.createCard(source.deck_id, userId, {
       recto: newCardOverrides?.recto ?? source.verso,
@@ -315,22 +420,14 @@ export class CardService {
       recto_formula: source.recto_formula,
       verso_formula: source.verso_formula,
       reverse: true,
-      knowledge_id: source.knowledge_id ?? undefined,
+      knowledge_id: copyKnowledge ? (source.knowledge_id ?? undefined) : undefined,
     });
-    await pool.query(
-      `UPDATE cards SET reverse_card_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
-      [reversed.id, source.id, userId]
-    );
-    await pool.query(
-      `UPDATE cards SET reverse_card_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
-      [source.id, reversed.id, userId]
-    );
+    await this.insertCardLink(userId, source.id, reversed.id);
     return this.getCardById(reversed.id, userId);
   }
 
   /**
-   * Create two cards as a reverse pair (same knowledge_id, mutual reverse_card_id).
-   * Returns [cardA, cardB] in order.
+   * Create two cards and link them (same knowledge_id).
    */
   async createCardPair(
     deckId: string,
@@ -341,24 +438,15 @@ export class CardService {
   ): Promise<[Card, Card]> {
     const a = await this.createCard(deckId, userId, { ...cardA, knowledge_id: knowledgeId ?? undefined });
     const b = await this.createCard(deckId, userId, { ...cardB, knowledge_id: knowledgeId ?? undefined });
-    await this.linkAsReversePair(a.id, b.id, userId);
+    await this.insertCardLink(userId, a.id, b.id);
     const aUpdated = await this.getCardById(a.id, userId);
     const bUpdated = await this.getCardById(b.id, userId);
     return [aUpdated!, bUpdated!];
   }
 
-  /**
-   * Link two existing cards as a reverse pair (mutual reverse_card_id).
-   */
+  /** Link two existing cards (undirected). */
   async linkAsReversePair(cardIdA: string, cardIdB: string, userId: string): Promise<void> {
-    await pool.query(
-      `UPDATE cards SET reverse_card_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
-      [cardIdB, cardIdA, userId]
-    );
-    await pool.query(
-      `UPDATE cards SET reverse_card_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3`,
-      [cardIdA, cardIdB, userId]
-    );
+    await this.insertCardLink(userId, cardIdA, cardIdB);
   }
 
   /**
@@ -420,7 +508,10 @@ export class CardService {
        RETURNING *`,
       values
     );
-    return result.rows[0] || null;
+    const row = result.rows[0];
+    if (!row) return null;
+    const [enriched] = await this.withLinkedCardIds([row], userId);
+    return enriched;
   }
 
   /**
@@ -538,7 +629,7 @@ export class CardService {
        ORDER BY next_review ASC`,
       [deckId, userId]
     );
-    return result.rows;
+    return this.withLinkedCardIds(result.rows, userId);
   }
 
   /**
@@ -553,7 +644,7 @@ export class CardService {
        ORDER BY critical_before ASC`,
       [deckId, userId]
     );
-    return result.rows;
+    return this.withLinkedCardIds(result.rows, userId);
   }
 
   /**
@@ -620,7 +711,7 @@ export class CardService {
        LIMIT $3`,
       [deckId, userId, limit]
     );
-    return result.rows;
+    return this.withLinkedCardIds(result.rows, userId);
   }
 
   /**
@@ -640,7 +731,10 @@ export class CardService {
        RETURNING *`,
       [cardId, userId]
     );
-    return result.rows[0] || null;
+    const row = result.rows[0];
+    if (!row) return null;
+    const [enriched] = await this.withLinkedCardIds([row], userId);
+    return enriched;
   }
 
   /**
@@ -660,6 +754,9 @@ export class CardService {
        RETURNING *`,
       [isImportant, cardId, userId]
     );
-    return result.rows[0] || null;
+    const row = result.rows[0];
+    if (!row) return null;
+    const [enriched] = await this.withLinkedCardIds([row], userId);
+    return enriched;
   }
 }
