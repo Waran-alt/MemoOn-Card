@@ -183,16 +183,13 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
         <ConnectionSyncBanner />
         <main className="flex-1 overflow-auto p-6">
           {(() => {
-            const deckStudyMatch = pathname.match(new RegExp(`^/${locale}/app/decks/([^/]+)/study$`));
             const deckOnlyMatch = pathname.match(new RegExp(`^/${locale}/app/decks/([^/]+)$`));
             const flaggedMatch = pathname === `/${locale}/app/flagged-cards`;
             const categoriesMatch = pathname === `/${locale}/app/categories`;
             let backHref: string | null = null;
             let backLabel: string | null = null;
-            if (deckStudyMatch) {
-              backHref = `/${locale}/app/decks/${deckStudyMatch[1]}`;
-              backLabel = ta('backToDeck');
-            } else if (deckOnlyMatch) {
+            // Study page provides its own exit control (clears saved session); avoid duplicate shell link.
+            if (deckOnlyMatch) {
               backHref = `/${locale}/app`;
               backLabel = ta('backToDecks');
             } else if (flaggedMatch || categoriesMatch) {
