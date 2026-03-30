@@ -196,6 +196,18 @@ describe('Optimization routes', () => {
       expect(res.body.success).toBe(false);
       expect(optimizationServiceMock.optimizeWeights).not.toHaveBeenCalled();
     });
+
+    it('rejects invalid IANA timezone', async () => {
+      optimizationServiceMock.checkOptimizerAvailable.mockResolvedValue({ available: true });
+
+      const res = await request(app)
+        .post('/api/optimization/optimize')
+        .send({ timezone: 'Not/A_Real_Zone' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(optimizationServiceMock.optimizeWeights).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET /api/optimization/export', () => {

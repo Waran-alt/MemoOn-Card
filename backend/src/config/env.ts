@@ -38,7 +38,9 @@ const EnvSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'), // Recommended: 15m-1h
   // JWT - Refresh Token (long-lived for token renewal)
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'), // Recommended: 7d-30d
-  
+  /** When user checks "trust this device", refresh JWT uses this longer TTL (claim `td` in token). */
+  JWT_REFRESH_TRUSTED_EXPIRES_IN: z.string().default('30d'),
+
   // CORS
   CORS_ORIGIN: z.string().url().or(z.string().regex(/^http:\/\/localhost:\d+$/)).default('http://localhost:3002'),
   CORS_ORIGINS: z.string().optional(), // Comma-separated list
@@ -49,6 +51,12 @@ const EnvSchema = z.object({
   /** Auth (login/register/refresh) rate limit – optional; defaults in http.constants.AUTH_RATE_LIMIT */
   AUTH_RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).optional(),
   AUTH_RATE_LIMIT_MAX: z.string().regex(/^\d+$/).transform(Number).optional(),
+  FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).optional(),
+  FORGOT_PASSWORD_RATE_LIMIT_MAX: z.string().regex(/^\d+$/).transform(Number).optional(),
+  RESET_PASSWORD_RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).optional(),
+  RESET_PASSWORD_RATE_LIMIT_MAX: z.string().regex(/^\d+$/).transform(Number).optional(),
+  FORGOT_PASSWORD_EMAIL_RATE_LIMIT_WINDOW_MS: z.string().regex(/^\d+$/).transform(Number).optional(),
+  FORGOT_PASSWORD_EMAIL_RATE_LIMIT_MAX: z.string().regex(/^\d+$/).transform(Number).optional(),
 
   // Request limits
   MAX_REQUEST_SIZE: z.string().default('10mb'),
@@ -111,12 +119,19 @@ export const {
   JWT_SECRET,
   JWT_ACCESS_EXPIRES_IN,
   JWT_REFRESH_EXPIRES_IN,
+  JWT_REFRESH_TRUSTED_EXPIRES_IN,
   CORS_ORIGIN,
   CORS_ORIGINS,
   RATE_LIMIT_WINDOW_MS,
   RATE_LIMIT_MAX,
   AUTH_RATE_LIMIT_WINDOW_MS,
   AUTH_RATE_LIMIT_MAX,
+  FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS,
+  FORGOT_PASSWORD_RATE_LIMIT_MAX,
+  RESET_PASSWORD_RATE_LIMIT_WINDOW_MS,
+  RESET_PASSWORD_RATE_LIMIT_MAX,
+  FORGOT_PASSWORD_EMAIL_RATE_LIMIT_WINDOW_MS,
+  FORGOT_PASSWORD_EMAIL_RATE_LIMIT_MAX,
   MAX_REQUEST_SIZE,
   FSRS_METRICS_JOB_ENABLED,
   FSRS_METRICS_JOB_INTERVAL_MINUTES,

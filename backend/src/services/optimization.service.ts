@@ -7,17 +7,19 @@
  * Uses the official FSRS Optimizer: https://github.com/open-spaced-repetition/fsrs-optimizer
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { resolve, basename } from 'path';
+import {
+  getFsrsOptimizerCheckCandidates,
+  getFsrsOptimizerRunCandidates,
+} from '@/constants/optimizer-spawn.constants';
 import { pool } from '../config/database';
 import { UserSettings, UserWeightSnapshot } from '../types/database';
 import { ValidationError } from '../utils/errors';
 import { OPTIMIZER_CONFIG } from '../constants/optimization.constants';
 import { logger, serializeError } from '@/utils/logger';
-
-const execAsync = promisify(exec);
+import { runSpawn } from '@/utils/run-spawn';
+import { pickValidTimezone } from '@/utils/iana-timezone';
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -155,7 +157,10 @@ export class OptimizationService {
 
       // Get user settings for timezone and day_start
       const userSettings = await this.getUserSettings(userId);
-      const timezone = config?.timezone || userSettings.timezone || OPTIMIZER_CONFIG.DEFAULT_TIMEZONE;
+      const timezone = pickValidTimezone(
+        config?.timezone ?? userSettings.timezone ?? undefined,
+        OPTIMIZER_CONFIG.DEFAULT_TIMEZONE
+      );
       const dayStart = config?.dayStart ?? userSettings.day_start ?? OPTIMIZER_CONFIG.DEFAULT_DAY_START;
 
       // Build optimizer command
@@ -166,53 +171,34 @@ export class OptimizationService {
         DAY_START: String(dayStart),
       };
 
-      // Run FSRS Optimizer
-      // Try multiple Python executables and virtual environment paths
-      const pythonCommands = [
-        'python3 -m fsrs_optimizer',
-        'python -m fsrs_optimizer',
-        // Try common virtual environment locations
-        `${process.cwd()}/venv/bin/python -m fsrs_optimizer`,
-        `${process.cwd()}/.venv/bin/python -m fsrs_optimizer`,
-        `${process.cwd()}/backend/venv/bin/python -m fsrs_optimizer`,
-        // Try pipx installation
-        'pipx run fsrs_optimizer',
-      ];
+      const spawnCandidates = getFsrsOptimizerRunCandidates(csvPath);
 
       let stdout = '';
       let stderr = '';
       let lastError: Error | null = null;
       let usedOptimizerMethod: string | undefined;
 
-      for (const pythonCmd of pythonCommands) {
+      for (const cand of spawnCandidates) {
         try {
-          // Use array format for exec to prevent command injection
-          // Split command and arguments safely
-          const [command, ...args] = pythonCmd.split(' ');
-          const fullArgs = [...args, csvPath];
-          
-          const result = await execAsync(
-            `${command} ${fullArgs.map(arg => `"${arg}"`).join(' ')}`,
-            { 
-              env,
-              maxBuffer: OPTIMIZER_CONFIG.MAX_BUFFER_BYTES,
-              timeout: OPTIMIZER_CONFIG.EXECUTION_TIMEOUT_MS,
-            }
-          );
+          const result = await runSpawn(cand.file, cand.args, {
+            env,
+            timeoutMs: OPTIMIZER_CONFIG.EXECUTION_TIMEOUT_MS,
+            maxBufferBytes: OPTIMIZER_CONFIG.MAX_BUFFER_BYTES,
+          });
           stdout = result.stdout;
           stderr = result.stderr;
-          usedOptimizerMethod = pythonCmd;
+          usedOptimizerMethod = cand.label;
           lastError = null;
-          break; // Success, exit loop
+          break;
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
-          // Continue to next command
         }
       }
 
       if (lastError) {
+        const tried = spawnCandidates.map((c) => c.label).join(', ');
         throw new Error(
-          `Failed to run FSRS Optimizer. Tried: ${pythonCommands.join(', ')}\n` +
+          `Failed to run FSRS Optimizer. Tried: ${tried}\n` +
           `Error: ${lastError.message}\n\n` +
           `Please install fsrs-optimizer using one of:\n` +
           `  - pipx install fsrs-optimizer (recommended)\n` +
@@ -665,18 +651,15 @@ export class OptimizationService {
    * Tries multiple Python executables and virtual environment paths
    */
   async checkOptimizerAvailable(): Promise<{ available: boolean; pythonPath?: string; method?: string }> {
-    const pythonCommands = [
-      { cmd: 'python3 -c "import fsrs_optimizer"', method: 'python3 (system)' },
-      { cmd: 'python -c "import fsrs_optimizer"', method: 'python (system)' },
-      { cmd: `${process.cwd()}/venv/bin/python -c "import fsrs_optimizer"`, method: 'venv (project root)' },
-      { cmd: `${process.cwd()}/.venv/bin/python -c "import fsrs_optimizer"`, method: '.venv (project root)' },
-      { cmd: `${process.cwd()}/backend/venv/bin/python -c "import fsrs_optimizer"`, method: 'venv (backend)' },
-      { cmd: 'pipx run fsrs_optimizer --help', method: 'pipx' },
-    ];
+    const checks = getFsrsOptimizerCheckCandidates();
 
-    for (const { cmd, method } of pythonCommands) {
+    for (const { file, args, method } of checks) {
       try {
-        await execAsync(cmd, { timeout: OPTIMIZER_CONFIG.CHECK_TIMEOUT_MS });
+        await runSpawn(file, args, {
+          env: { ...process.env },
+          timeoutMs: OPTIMIZER_CONFIG.CHECK_TIMEOUT_MS,
+          maxBufferBytes: OPTIMIZER_CONFIG.MAX_BUFFER_BYTES,
+        });
         return { available: true, method };
       } catch {
         // Continue to next

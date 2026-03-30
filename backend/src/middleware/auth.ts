@@ -7,15 +7,23 @@
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } from '../config/env';
+import {
+  JWT_SECRET,
+  JWT_ACCESS_EXPIRES_IN,
+  JWT_REFRESH_EXPIRES_IN,
+  JWT_REFRESH_TRUSTED_EXPIRES_IN,
+} from '../config/env';
 import { AuthenticationError, AuthorizationError } from '../utils/errors';
 import { HTTP_HEADERS } from '../constants/http.constants';
+import { JWT_SIGN_OPTIONS_BASE, JWT_VERIFY_OPTIONS } from '@/constants/security-jwt.constants';
 import { pool } from '@/config/database';
 
 export interface JWTPayload {
   userId: string;
   email?: string;
   jti?: string; // JWT ID – unique per refresh token to avoid duplicate hash when two refresh requests run in parallel
+  /** Trusted device: longer-lived refresh; preserved across token rotation. */
+  td?: boolean;
   iat?: number;
   exp?: number;
 }
@@ -38,7 +46,7 @@ export function authMiddleware(
   if (!token) return next(new AuthenticationError('Token is required'));
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    const decoded = jwt.verify(token, JWT_SECRET, JWT_VERIFY_OPTIONS) as unknown as JWTPayload;
     if (!decoded.userId) return next(new AuthenticationError('Invalid token payload'));
     req.userId = decoded.userId;
     next();
@@ -69,17 +77,21 @@ export function getUserId(req: Request): string {
  * Admin-only middleware (user management: block users, assign roles).
  * Requires authMiddleware to run first and populate req.userId.
  */
+async function getUserRole(userId: string): Promise<string | undefined> {
+  const result = await pool.query<{ role: string }>(
+    'SELECT role FROM users WHERE id = $1',
+    [userId]
+  );
+  return result.rows[0]?.role;
+}
+
 export async function requireAdmin(
   req: Request,
   _res: Response,
   next: NextFunction
 ): Promise<void> {
   const userId = getUserId(req);
-  const result = await pool.query<{ role: string }>(
-    'SELECT role FROM users WHERE id = $1',
-    [userId]
-  );
-  const role = result.rows[0]?.role;
+  const role = await getUserRole(userId);
   if (role !== 'admin') {
     return next(new AuthorizationError('Admin access required'));
   }
@@ -96,11 +108,7 @@ export async function requireDev(
   next: NextFunction
 ): Promise<void> {
   const userId = getUserId(req);
-  const result = await pool.query<{ role: string }>(
-    'SELECT role FROM users WHERE id = $1',
-    [userId]
-  );
-  const role = result.rows[0]?.role;
+  const role = await getUserRole(userId);
   if (role !== 'dev') {
     return next(new AuthorizationError('Dev access required'));
   }
@@ -119,6 +127,7 @@ export function generateAccessToken(userId: string, email?: string): string {
   const expiresIn = JWT_ACCESS_EXPIRES_IN;
   
   return jwt.sign(payload, JWT_SECRET, {
+    ...JWT_SIGN_OPTIONS_BASE,
     expiresIn,
   } as jwt.SignOptions);
 }
@@ -127,16 +136,20 @@ export function generateAccessToken(userId: string, email?: string): string {
  * Generate JWT refresh token for user (long-lived).
  * Includes jti so each token has a unique hash, avoiding duplicate key when two refresh requests run in parallel.
  */
-export function generateRefreshToken(userId: string): string {
+export function generateRefreshToken(
+  userId: string,
+  options?: { trustedDevice?: boolean }
+): string {
+  const trusted = options?.trustedDevice === true;
+  const expiresIn = trusted ? JWT_REFRESH_TRUSTED_EXPIRES_IN : JWT_REFRESH_EXPIRES_IN;
   const payload: JWTPayload = {
     userId,
     jti: crypto.randomUUID(),
+    ...(trusted ? { td: true } : {}),
   };
 
-  const expiresIn = JWT_REFRESH_EXPIRES_IN;
-
   return jwt.sign(payload, JWT_SECRET, {
+    ...JWT_SIGN_OPTIONS_BASE,
     expiresIn,
   } as jwt.SignOptions);
 }
-

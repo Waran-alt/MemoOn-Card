@@ -3,9 +3,15 @@
  */
 
 import { z } from 'zod';
+import { isValidIanaTimezone } from '@/utils/iana-timezone';
+
+const optionalIanaTimezone = z
+  .string()
+  .refine((tz) => isValidIanaTimezone(tz), { message: 'Invalid IANA timezone' })
+  .optional();
 
 export const OptimizeWeightsSchema = z.object({
-  timezone: z.string().optional(),
+  timezone: optionalIanaTimezone,
   dayStart: z.number().int().min(0).max(23).optional(),
   targetRetention: z.number().min(0.5).max(0.99).optional(),
 });

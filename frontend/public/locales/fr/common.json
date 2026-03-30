@@ -34,6 +34,8 @@
   "signOut": "Déconnexion",
   "stats": "Statistiques",
   "studyHealth": "Stats et révisions",
+  "trustThisDevice": "Faire confiance à cet appareil",
+  "trustThisDeviceHint": "Rester connecté plus longtemps sur ce navigateur (éviter sur un ordinateur partagé).",
   "usernameOptional": "Nom d'utilisateur (optionnel)",
   "navCloseMenuOverlay": "Fermer la superposition du menu",
   "navCloseMenu": "Fermer le menu",

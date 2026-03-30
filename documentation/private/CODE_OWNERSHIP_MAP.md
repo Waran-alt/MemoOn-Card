@@ -12,7 +12,7 @@ This map defines ownership for critical modules to speed up reviews and incident
 
 | Module / Path | Primary owner | Secondary owner | Domain oncall | Notes |
 | --- | --- | --- | --- | --- |
-| Auth routes and token lifecycle (`backend/src/routes/auth.routes.ts`, `backend/src/services/refresh-token.service.ts`) | Backend Security | Backend Platform | Auth oncall | Refresh rotation/reuse and cookie security |
+| Auth routes and token lifecycle (`backend/src/routes/auth/`, `backend/src/services/refresh-token.service.ts`) | Backend Security | Backend Platform | Auth oncall | Refresh rotation/reuse and cookie security |
 | Card journey and review alignment (`backend/src/services/card-journey.service.ts`, `backend/src/services/review.service.ts`) | Learning Platform | Backend Platform | Study oncall | Idempotent journey writes; `review_logs` is the scheduling source of truth |
 | Adaptive policy engines (`backend/src/services/adaptive-retention.service.ts`) | FSRS/Algorithm | Learning Platform | Study oncall | Rollout guarded by feature flags |
 | Feature flags and rollout infra (`backend/src/services/feature-flag.service.ts`, DB `feature_flags*`) | Backend Platform | Backend Security | Platform oncall | Controls adaptive exposure and rollback |

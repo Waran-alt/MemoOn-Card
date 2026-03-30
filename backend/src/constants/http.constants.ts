@@ -41,9 +41,27 @@ export const AUTH_RATE_LIMIT = {
   MAX: 30,
 } as const;
 
-/** Refresh token httpOnly cookie (SSR + XSS-safe) */
+/** Mitigate abuse / token stuffing on forgot-password (per IP). */
+export const FORGOT_PASSWORD_RATE_LIMIT = {
+  WINDOW_MS: 60 * 60 * 1000, // 1 hour
+  MAX: 5,
+} as const;
+
+/** Same window as forgot IP limit; caps requests per normalized email hash (many IPs → one mailbox). */
+export const FORGOT_PASSWORD_EMAIL_RATE_LIMIT = {
+  WINDOW_MS: 60 * 60 * 1000,
+  MAX: 3,
+} as const;
+
+/** Mitigate brute-force on reset token (per IP). */
+export const RESET_PASSWORD_RATE_LIMIT = {
+  WINDOW_MS: 60 * 60 * 1000,
+  MAX: 10,
+} as const;
+
+/** Refresh token httpOnly cookie (SSR + XSS-safe). `maxAge` on response uses JWT `exp` when set; this is the default (untrusted) TTL fallback. */
 export const REFRESH_COOKIE = {
   NAME: 'refresh_token',
-  MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000, // 7 days, match JWT_REFRESH_EXPIRES_IN
+  MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000, // default refresh; trusted sessions use longer JWT + cookie from decode
   SAME_SITE: 'lax' as const,
 } as const;

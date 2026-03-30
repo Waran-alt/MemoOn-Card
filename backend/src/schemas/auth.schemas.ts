@@ -20,6 +20,8 @@ export const RegisterSchema = z.object({
     .trim()
     .optional()
     .nullable(),
+  /** Longer refresh session on this browser (JWT claim `td` + extended expiry). */
+  trustDevice: z.boolean().optional().default(false),
 });
 
 export const LoginSchema = z.object({
@@ -27,6 +29,7 @@ export const LoginSchema = z.object({
     .email()
     .transform((val) => val.trim().toLowerCase()),
   password: z.string().min(1, 'Password is required'),
+  trustDevice: z.boolean().optional().default(false),
 });
 
 export const RefreshSchema = z.object({
@@ -50,6 +53,7 @@ export const ForgotPasswordSchema = z.object({
     .email('Invalid email')
     .max(VALIDATION_LIMITS.EMAIL_MAX_LENGTH)
     .transform((val) => val.trim().toLowerCase()),
+  /** Hint for multi-origin dev; must match a CORS-allowed origin or it is ignored. */
   resetLinkBaseUrl: z.string().url().optional(),
 });
 

@@ -10,6 +10,10 @@ describe('OptimizeWeightsSchema', () => {
     }
   });
 
+  it('accepts timezone UTC (common alias)', () => {
+    expect(OptimizeWeightsSchema.safeParse({ timezone: 'UTC' }).success).toBe(true);
+  });
+
   it('accepts valid optional fields', () => {
     const result = OptimizeWeightsSchema.safeParse({
       timezone: 'Europe/Paris',
@@ -24,6 +28,10 @@ describe('OptimizeWeightsSchema', () => {
         targetRetention: 0.9,
       });
     }
+  });
+
+  it('rejects invalid timezone string', () => {
+    expect(OptimizeWeightsSchema.safeParse({ timezone: 'Not/A_Real_Zone' }).success).toBe(false);
   });
 
   it('rejects dayStart out of range', () => {

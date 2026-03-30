@@ -108,11 +108,18 @@ app.use(morgan(':method :url :status :response-time ms req_id=:request-id'));
 app.use(express.json({ limit: MAX_REQUEST_SIZE }));
 app.use(express.urlencoded({ extended: true, limit: MAX_REQUEST_SIZE }));
 
-// Health check (no auth required)
-app.get('/health', asyncHandler(async (req: Request, res: Response) => {
+// Health check (no auth required). Production returns minimal JSON to reduce information disclosure.
+app.get('/health', asyncHandler(async (_req: Request, res: Response) => {
   const dbConnected = await testConnection();
   const isHealthy = dbConnected;
-  
+
+  if (NODE_ENV === 'production') {
+    return res.status(isHealthy ? HTTP_STATUS.OK : HTTP_STATUS.SERVICE_UNAVAILABLE).json({
+      status: isHealthy ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   return res.status(isHealthy ? HTTP_STATUS.OK : HTTP_STATUS.SERVICE_UNAVAILABLE).json({
     status: isHealthy ? 'healthy' : 'unhealthy',
     timestamp: new Date().toISOString(),

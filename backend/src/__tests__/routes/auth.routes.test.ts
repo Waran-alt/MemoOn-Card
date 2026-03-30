@@ -10,6 +10,7 @@ import authRoutes from '@/routes/auth.routes';
 import { errorHandler } from '@/middleware/errorHandler';
 import { userService } from '@/services/user.service';
 import { refreshTokenService } from '@/services/refresh-token.service';
+import { passwordResetService } from '@/services/password-reset.service';
 import { User } from '@/types/database';
 
 const recordAuthRefreshMetricMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -19,11 +20,18 @@ vi.mock('@/config/env', () => ({
   JWT_SECRET: 'test-secret-minimum-32-characters-long',
   JWT_ACCESS_EXPIRES_IN: '15m',
   JWT_REFRESH_EXPIRES_IN: '7d',
+  JWT_REFRESH_TRUSTED_EXPIRES_IN: '30d',
   CORS_ORIGIN: 'http://localhost:3002',
   CORS_ORIGINS: 'http://localhost:3002,https://memoon-card.localhost',
   getAllowedOrigins: () => ['http://localhost:3002', 'https://memoon-card.localhost'],
   AUTH_RATE_LIMIT_WINDOW_MS: undefined as number | undefined,
   AUTH_RATE_LIMIT_MAX: undefined as number | undefined,
+  FORGOT_PASSWORD_RATE_LIMIT_WINDOW_MS: undefined as number | undefined,
+  FORGOT_PASSWORD_RATE_LIMIT_MAX: undefined as number | undefined,
+  RESET_PASSWORD_RATE_LIMIT_WINDOW_MS: undefined as number | undefined,
+  RESET_PASSWORD_RATE_LIMIT_MAX: undefined as number | undefined,
+  FORGOT_PASSWORD_EMAIL_RATE_LIMIT_WINDOW_MS: undefined as number | undefined,
+  FORGOT_PASSWORD_EMAIL_RATE_LIMIT_MAX: undefined as number | undefined,
 }));
 
 vi.mock('@/config/database', () => ({
@@ -56,6 +64,13 @@ vi.mock('@/services/study-health-dashboard.service', () => ({
     recordStudyApiMetric: vi.fn().mockResolvedValue(undefined),
     getDashboard: vi.fn().mockResolvedValue(undefined),
   })),
+}));
+
+vi.mock('@/services/password-reset.service', () => ({
+  passwordResetService: {
+    createToken: vi.fn(),
+    sendResetEmail: vi.fn(),
+  },
 }));
 
 const mockUserId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
@@ -518,6 +533,69 @@ describe('Auth routes', () => {
       const setCookie = res.headers['set-cookie'];
       const cookieStr = Array.isArray(setCookie) ? setCookie.join(' ') : String(setCookie ?? '');
       expect(cookieStr).not.toMatch(/domain=evil\.example\.com/i);
+    });
+  });
+
+  describe('POST /api/auth/forgot-password', () => {
+    beforeEach(() => {
+      vi.mocked(passwordResetService.createToken).mockResolvedValue({
+        token: 'reset-token-plain',
+        expiresAt: new Date(),
+      });
+      vi.mocked(passwordResetService.sendResetEmail).mockImplementation(() => {});
+    });
+
+    it('should use CORS_ORIGIN for reset link when resetLinkBaseUrl is omitted', async () => {
+      vi.mocked(userService.getUserByEmail).mockResolvedValueOnce({
+        ...mockUser,
+        password_hash: 'hashed',
+      });
+
+      const res = await request(app).post('/api/auth/forgot-password').send({
+        email: 'user@example.com',
+      });
+
+      expect(res.status).toBe(200);
+      expect(passwordResetService.sendResetEmail).toHaveBeenCalledWith(
+        mockUser.email,
+        'http://localhost:3002/reset-password?token=reset-token-plain'
+      );
+    });
+
+    it('should use allowed origin when resetLinkBaseUrl matches CORS allowlist', async () => {
+      vi.mocked(userService.getUserByEmail).mockResolvedValueOnce({
+        ...mockUser,
+        password_hash: 'hashed',
+      });
+
+      const res = await request(app).post('/api/auth/forgot-password').send({
+        email: 'user@example.com',
+        resetLinkBaseUrl: 'https://memoon-card.localhost/fr',
+      });
+
+      expect(res.status).toBe(200);
+      expect(passwordResetService.sendResetEmail).toHaveBeenCalledWith(
+        mockUser.email,
+        'https://memoon-card.localhost/reset-password?token=reset-token-plain'
+      );
+    });
+
+    it('should ignore non-allowed resetLinkBaseUrl (password reset poisoning)', async () => {
+      vi.mocked(userService.getUserByEmail).mockResolvedValueOnce({
+        ...mockUser,
+        password_hash: 'hashed',
+      });
+
+      const res = await request(app).post('/api/auth/forgot-password').send({
+        email: 'user@example.com',
+        resetLinkBaseUrl: 'https://evil.example/phish',
+      });
+
+      expect(res.status).toBe(200);
+      expect(passwordResetService.sendResetEmail).toHaveBeenCalledWith(
+        mockUser.email,
+        'http://localhost:3002/reset-password?token=reset-token-plain'
+      );
     });
   });
 });

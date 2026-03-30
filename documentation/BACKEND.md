@@ -58,7 +58,7 @@ For full env reference, see `documentation/ENVIRONMENT_SETUP.md`.
 
 Mounted from `index.ts` under `/api` unless noted.
 
-- `auth.routes.ts` — `/auth` register, login, refresh cookie, logout, session
+- `routes/auth/` — `/auth` register, login, refresh cookie, logout, session (`auth.routes.ts` re-exports the router)
 - `users.routes.ts` / `user.routes.ts` — `/users`, `/user` profile and settings
 - `decks.routes.ts` — `/decks` CRUD, cards in deck, due/new queues
 - `cards.routes.ts` — `/cards` CRUD, single-card review, flags, journey summary

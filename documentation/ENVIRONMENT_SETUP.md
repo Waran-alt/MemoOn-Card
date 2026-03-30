@@ -47,7 +47,8 @@ cp backend/env.example backend/.env
 
 - **JWT_SECRET** – Secret for signing tokens (min 32 characters). **Change in production.**
 - **JWT_ACCESS_EXPIRES_IN** – Access token TTL (e.g. `15m`)
-- **JWT_REFRESH_EXPIRES_IN** – Refresh token TTL (e.g. `7d`); must match cookie `maxAge` used by the app.
+- **JWT_REFRESH_EXPIRES_IN** – Default refresh token TTL when the user does **not** check “trust this device” (e.g. `7d`). The cookie `maxAge` follows the JWT `exp` from the issued token.
+- **JWT_REFRESH_TRUSTED_EXPIRES_IN** – Refresh TTL when “trust this device” is checked (default `30d`). The refresh JWT includes claim `td`; rotation keeps the same trusted vs standard duration.
 
 ### CORS
 
@@ -61,6 +62,8 @@ Backend must allow the frontend origin you use (localhost or `https://memoon-car
 - **RATE_LIMIT_WINDOW_MS** – Window length (e.g. `900000` = 15 min)
 - **RATE_LIMIT_MAX** – Max requests per window per IP
 - **AUTH_RATE_LIMIT_*** – Optional overrides for **login and register only** (not refresh/session). Increase if legitimate users still hit 429 after typos.
+- **FORGOT_PASSWORD_RATE_LIMIT_*** / **RESET_PASSWORD_RATE_LIMIT_*** – Optional overrides for forgot-password and reset-password (per IP). Defaults: 5 and 10 requests per hour.
+- **FORGOT_PASSWORD_EMAIL_RATE_LIMIT_*** – Optional overrides for the second forgot-password bucket (per normalized email hash). Default: 3 per hour.
 
 ### Database
 

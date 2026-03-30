@@ -8,7 +8,7 @@ import { ValidationError } from '@/utils/errors';
 const mockWriteFile = vi.hoisted(() => vi.fn());
 const mockMkdir = vi.hoisted(() => vi.fn());
 const mockUnlink = vi.hoisted(() => vi.fn());
-const mockExecAsync = vi.hoisted(() => vi.fn());
+const mockRunSpawn = vi.hoisted(() => vi.fn());
 
 vi.mock('fs/promises', () => ({
   writeFile: (...args: unknown[]) => mockWriteFile(...args),
@@ -16,8 +16,8 @@ vi.mock('fs/promises', () => ({
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
-vi.mock('util', () => ({
-  promisify: () => mockExecAsync,
+vi.mock('@/utils/run-spawn', () => ({
+  runSpawn: (...args: unknown[]) => mockRunSpawn(...args),
 }));
 
 vi.mock('@/config/database', () => ({
@@ -188,14 +188,14 @@ describe('OptimizationService', () => {
 
   describe('checkOptimizerAvailable', () => {
     it('returns available when python3 command succeeds', async () => {
-      mockExecAsync.mockResolvedValueOnce({ stdout: '', stderr: '' });
+      mockRunSpawn.mockResolvedValueOnce({ stdout: '', stderr: '' });
       const result = await service.checkOptimizerAvailable();
       expect(result.available).toBe(true);
       expect(result.method).toBe('python3 (system)');
     });
 
     it('returns unavailable when all commands fail', async () => {
-      mockExecAsync.mockRejectedValue(new Error('Command failed'));
+      mockRunSpawn.mockRejectedValue(new Error('Command failed'));
       const result = await service.checkOptimizerAvailable();
       expect(result.available).toBe(false);
       expect(result.method).toBeUndefined();
@@ -441,7 +441,7 @@ describe('OptimizationService', () => {
 
     it('successfully optimizes weights and updates user settings', async () => {
       const weights = Array.from({ length: 21 }, (_, i) => 0.1 + i * 0.1);
-      mockExecAsync.mockResolvedValueOnce({
+      mockRunSpawn.mockResolvedValueOnce({
         stdout: JSON.stringify(weights),
         stderr: '',
       });
@@ -466,7 +466,7 @@ describe('OptimizationService', () => {
 
     it('uses config timezone and dayStart when provided', async () => {
       const weights = Array.from({ length: 21 }, (_, i) => 0.1 + i * 0.1);
-      mockExecAsync.mockResolvedValueOnce({
+      mockRunSpawn.mockResolvedValueOnce({
         stdout: JSON.stringify(weights),
         stderr: '',
       });
@@ -477,14 +477,14 @@ describe('OptimizationService', () => {
         dayStart: 6,
       });
 
-      expect(mockExecAsync).toHaveBeenCalled();
-      const execCall = mockExecAsync.mock.calls[0];
-      expect(execCall[1].env).toHaveProperty('TZ', 'America/New_York');
-      expect(execCall[1].env).toHaveProperty('DAY_START', '6');
+      expect(mockRunSpawn).toHaveBeenCalled();
+      const opts = mockRunSpawn.mock.calls[0][2] as { env: NodeJS.ProcessEnv };
+      expect(opts.env).toHaveProperty('TZ', 'America/New_York');
+      expect(opts.env).toHaveProperty('DAY_START', '6');
     });
 
     it('returns error when optimizer command fails', async () => {
-      mockExecAsync.mockRejectedValue(new Error('Command not found'));
+      mockRunSpawn.mockRejectedValue(new Error('Command not found'));
 
       const result = await service.optimizeWeights(userId);
 
@@ -494,7 +494,7 @@ describe('OptimizationService', () => {
     });
 
     it('returns error when optimizer output is invalid', async () => {
-      mockExecAsync.mockResolvedValueOnce({
+      mockRunSpawn.mockResolvedValueOnce({
         stdout: 'invalid output',
         stderr: '',
       });
@@ -508,7 +508,7 @@ describe('OptimizationService', () => {
 
     it('returns error when weights array length is not 21', async () => {
       const weights = [1, 2, 3]; // Wrong length
-      mockExecAsync.mockResolvedValueOnce({
+      mockRunSpawn.mockResolvedValueOnce({
         stdout: JSON.stringify(weights),
         stderr: '',
       });

@@ -23,6 +23,7 @@ export function ReauthModal({ locale }: ReauthModalProps) {
 
   const [email, setEmail] = useState(user?.email ?? '');
   const [password, setPassword] = useState('');
+  const [trustDevice, setTrustDevice] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
@@ -40,11 +41,12 @@ export function ReauthModal({ locale }: ReauthModalProps) {
     try {
       const { data } = await apiClient.post<AuthApiResponse | { success?: boolean; error?: string }>(
         '/api/auth/login',
-        { email: email.trim().toLowerCase(), password }
+        { email: email.trim().toLowerCase(), password, trustDevice }
       );
       if (data?.success && 'data' in data && data.data?.accessToken && data.data?.user) {
         setAuthSuccess({ accessToken: data.data.accessToken, user: data.data.user });
         setPassword('');
+        setTrustDevice(false);
         return;
       }
       setError('error' in data && typeof data.error === 'string' ? data.error : tc('loginFailed'));
@@ -108,6 +110,18 @@ export function ReauthModal({ locale }: ReauthModalProps) {
               className="w-full rounded border border-(--mc-border-subtle) bg-(--mc-bg-base) px-3 py-2 text-sm text-(--mc-text-primary)"
             />
           </div>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-(--mc-text-primary)">
+            <input
+              type="checkbox"
+              checked={trustDevice}
+              onChange={(e) => setTrustDevice(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-(--mc-border-subtle)"
+            />
+            <span>
+              <span className="font-medium">{tc('trustThisDevice')}</span>
+              <span className="mt-0.5 block text-xs text-(--mc-text-secondary)">{tc('trustThisDeviceHint')}</span>
+            </span>
+          </label>
           {error && (
             <p className="text-sm text-(--mc-accent-danger)" role="alert">
               {error}

@@ -17,6 +17,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [trustDevice, setTrustDevice] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -29,7 +30,7 @@ export default function LoginPage() {
     try {
       const { data } = await apiClient.post<AuthApiResponse | { success?: boolean; error?: string }>(
         '/api/auth/login',
-        { email: email.trim().toLowerCase(), password }
+        { email: email.trim().toLowerCase(), password, trustDevice }
       );
 
       if (data?.success && 'data' in data && data.data?.accessToken && data.data?.user) {
@@ -81,6 +82,18 @@ export default function LoginPage() {
               className="w-full rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-3 pt-1.5 pb-2 text-sm text-(--mc-text-primary)"
             />
           </div>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-(--mc-text-primary)">
+            <input
+              type="checkbox"
+              checked={trustDevice}
+              onChange={(e) => setTrustDevice(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-(--mc-border-subtle)"
+            />
+            <span>
+              <span className="font-medium">{tc('trustThisDevice')}</span>
+              <span className="mt-0.5 block text-xs text-(--mc-text-secondary)">{tc('trustThisDeviceHint')}</span>
+            </span>
+          </label>
           {error && (
             <p className="text-sm text-(--mc-accent-danger)" role="alert">
               {error}

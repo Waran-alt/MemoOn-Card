@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { authMiddleware, generateAccessToken, generateRefreshToken, getUserId, JWTPayload } from '@/middleware/auth';
+import { JWT_VERIFY_OPTIONS } from '@/constants/security-jwt.constants';
 import { AuthenticationError } from '@/utils/errors';
 
 // Mock JWT_SECRET
@@ -13,6 +14,7 @@ vi.mock('@/config/env', () => ({
   JWT_SECRET: 'test-secret-key-minimum-32-characters-long',
   JWT_ACCESS_EXPIRES_IN: '15m',
   JWT_REFRESH_EXPIRES_IN: '7d',
+  JWT_REFRESH_TRUSTED_EXPIRES_IN: '30d',
 }));
 
 vi.mock('@/config/database', () => ({
@@ -142,7 +144,11 @@ describe('generateAccessToken', () => {
     expect(token).toBeDefined();
     expect(typeof token).toBe('string');
 
-    const decoded = jwt.verify(token, 'test-secret-key-minimum-32-characters-long') as JWTPayload;
+    const decoded = jwt.verify(
+      token,
+      'test-secret-key-minimum-32-characters-long',
+      JWT_VERIFY_OPTIONS
+    ) as JWTPayload;
     expect(decoded.userId).toBe(userId);
   });
 
@@ -151,7 +157,11 @@ describe('generateAccessToken', () => {
     const email = 'test@example.com';
     const token = generateAccessToken(userId, email);
 
-    const decoded = jwt.verify(token, 'test-secret-key-minimum-32-characters-long') as JWTPayload;
+    const decoded = jwt.verify(
+      token,
+      'test-secret-key-minimum-32-characters-long',
+      JWT_VERIFY_OPTIONS
+    ) as JWTPayload;
     expect(decoded.email).toBe(email);
   });
 });
@@ -164,8 +174,23 @@ describe('generateRefreshToken', () => {
     expect(token).toBeDefined();
     expect(typeof token).toBe('string');
 
-    const decoded = jwt.verify(token, 'test-secret-key-minimum-32-characters-long') as JWTPayload;
+    const decoded = jwt.verify(
+      token,
+      'test-secret-key-minimum-32-characters-long',
+      JWT_VERIFY_OPTIONS
+    ) as JWTPayload;
     expect(decoded.userId).toBe(userId);
+    expect(decoded.td).toBeUndefined();
+  });
+
+  it('should set td claim and longer expiry when trustedDevice', () => {
+    const userId = 'user-123';
+    const shortTok = generateRefreshToken(userId);
+    const longTok = generateRefreshToken(userId, { trustedDevice: true });
+    const shortDecoded = jwt.decode(shortTok) as JWTPayload;
+    const longDecoded = jwt.decode(longTok) as JWTPayload;
+    expect(longDecoded.td).toBe(true);
+    expect(shortDecoded.exp && longDecoded.exp && longDecoded.exp > shortDecoded.exp).toBe(true);
   });
 });
 
