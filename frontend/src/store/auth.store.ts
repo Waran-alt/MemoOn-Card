@@ -22,6 +22,9 @@ function getAccessTokenExpiry(token: string): number | null {
 const PROACTIVE_REFRESH_BEFORE_MS = 2 * 60 * 1000; // Refresh 2 min before expiry
 let proactiveRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+/** Single in-flight refresh so Strict Mode double-mount + axios 401 retry cannot race two POST /refresh (rotating refresh cookie would fail the second). */
+let refreshAccessSingleFlight: Promise<string | null> | null = null;
+
 function clearProactiveRefresh(): void {
   if (proactiveRefreshTimeoutId != null) {
     clearTimeout(proactiveRefreshTimeoutId);
@@ -94,6 +97,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   refreshAccess: async (): Promise<string | null> => {
+    if (refreshAccessSingleFlight) {
+      return refreshAccessSingleFlight;
+    }
     const API_URL = getClientApiBaseUrl();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -102,26 +108,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (typeof window !== 'undefined') {
       headers['X-Forwarded-Host'] = window.location.host;
     }
-    try {
-      const res = await fetch(`${API_URL}/api/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success || !data?.data?.accessToken) {
+    refreshAccessSingleFlight = (async (): Promise<string | null> => {
+      try {
+        const res = await fetch(`${API_URL}/api/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.success || !data?.data?.accessToken) {
+          set({ reauthRequired: true, accessToken: null });
+          return null;
+        }
+        const { accessToken, user } = data.data;
+        set({ accessToken, user: user ?? get().user, reauthRequired: false });
+        if (typeof window !== 'undefined') scheduleProactiveRefresh(accessToken, get().refreshAccess);
+        return accessToken;
+      } catch {
         set({ reauthRequired: true, accessToken: null });
         return null;
       }
-      const { accessToken, user } = data.data;
-      set({ accessToken, user: user ?? get().user });
-      if (typeof window !== 'undefined') scheduleProactiveRefresh(accessToken, get().refreshAccess);
-      return accessToken;
-    } catch {
-      set({ reauthRequired: true, accessToken: null });
-      return null;
-    }
+    })().finally(() => {
+      refreshAccessSingleFlight = null;
+    });
+    return refreshAccessSingleFlight;
   },
 
   refreshIfStale: async (): Promise<void> => {

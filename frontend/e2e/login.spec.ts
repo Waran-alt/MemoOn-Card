@@ -4,7 +4,7 @@
 import { test, expect } from '@playwright/test';
 import { uniqueTestEmail, testPassword } from './config';
 import { c, E2E_LOCALE_PREFIX } from './i18n';
-import { expectMyDecksHeading } from './helpers';
+import { clickAppSignOut, expectMyDecksHeading } from './helpers';
 
 function createCredentials() {
   return {
@@ -38,8 +38,7 @@ test('register, sign out, then sign in', async ({ page }) => {
   }
   await expectMyDecksHeading(page);
 
-  await page.getByRole('button', { name: c('signOut') }).click();
-  await expect(page.getByRole('heading', { name: c('signIn') })).toBeVisible();
+  await clickAppSignOut(page);
 
   await page.getByLabel(/^Email/).fill(email);
   await page.getByLabel(/Password/).fill(password);

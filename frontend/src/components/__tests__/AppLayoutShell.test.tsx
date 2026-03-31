@@ -67,6 +67,12 @@ vi.mock('../ConnectionSyncBanner', () => ({
   ConnectionSyncBanner: () => null,
 }));
 
+vi.mock('../AuthHydrate', () => ({
+  AuthHydrate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+const shellServerUser = { id: 'u1', email: 'user@example.com', name: 'User Name', role: 'admin' as const };
+
 describe('AppLayoutShell', () => {
   beforeEach(() => {
     pathnameState.value = '/en/app';
@@ -82,7 +88,7 @@ describe('AppLayoutShell', () => {
   it('renders page title based on route', () => {
     pathnameState.value = '/en/app/optimizer';
     const { rerender } = render(
-      <AppLayoutShell>
+      <AppLayoutShell serverUser={shellServerUser}>
         <div>child</div>
       </AppLayoutShell>
     );
@@ -90,7 +96,7 @@ describe('AppLayoutShell', () => {
 
     pathnameState.value = '/en/app/decks/abc123';
     rerender(
-      <AppLayoutShell>
+      <AppLayoutShell serverUser={shellServerUser}>
         <div>child</div>
       </AppLayoutShell>
     );
@@ -98,7 +104,7 @@ describe('AppLayoutShell', () => {
 
     pathnameState.value = '/en/app/study-health';
     rerender(
-      <AppLayoutShell>
+      <AppLayoutShell serverUser={shellServerUser}>
         <div>child</div>
       </AppLayoutShell>
     );
@@ -108,7 +114,7 @@ describe('AppLayoutShell', () => {
   it('sets E2E readiness data attributes on document root', async () => {
     pathnameState.value = '/en/app';
     render(
-      <AppLayoutShell>
+      <AppLayoutShell serverUser={shellServerUser}>
         <div>child</div>
       </AppLayoutShell>
     );
@@ -122,7 +128,7 @@ describe('AppLayoutShell', () => {
 
   it('toggles mobile menu button state', async () => {
     render(
-      <AppLayoutShell>
+      <AppLayoutShell serverUser={shellServerUser}>
         <div>child</div>
       </AppLayoutShell>
     );
@@ -137,7 +143,7 @@ describe('AppLayoutShell', () => {
 
   it('shows app shell controls and user identity', () => {
     render(
-      <AppLayoutShell>
+      <AppLayoutShell serverUser={shellServerUser}>
         <div>child</div>
       </AppLayoutShell>
     );

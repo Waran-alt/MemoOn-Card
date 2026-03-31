@@ -4,7 +4,7 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { getSession } from '@/lib/auth';
-import { AuthHydrate } from '@/components/AuthHydrate';
+import { AppLayoutShell } from '@/components/AppLayoutShell';
 
 export default async function ProtectedLayout({
   children,
@@ -15,8 +15,8 @@ export default async function ProtectedLayout({
   const session = await getSession(cookieStore);
   if (!session) redirect('/login');
   return (
-    <AuthHydrate serverUser={session.user}>
+    <AppLayoutShell serverUser={session.user}>
       {children}
-    </AuthHydrate>
+    </AppLayoutShell>
   );
 }

@@ -49,6 +49,7 @@ Dans **Grafana** → **Explore** → datasource **Prometheus**, exemples de requ
 | Objectif | Exemple |
 |----------|---------|
 | Requêtes HTTP par seconde (backend) | `rate(memoon_http_requests_total[5m])` |
+| Latence liste cartes d’un deck (`GET /api/decks/:id/cards`) | `histogram_quantile(0.95, sum(rate(memoon_deck_cards_list_duration_seconds_bucket[5m])) by (le))` |
 | Mémoire conteneur (cAdvisor) | `container_memory_usage_bytes{name=~"memoon-card-.*"}` |
 
 **Production** : ne pas exposer `/metrics` sur Internet ; si le backend est derrière nginx, restreindre ou bloquer `/metrics` sauf pour Prometheus (IP interne / réseau Docker).

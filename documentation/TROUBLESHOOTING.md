@@ -33,4 +33,3 @@ curl -f http://localhost:3002/en
 - Recreate clean runtime state: `yarn docker:down:volumes && yarn docker:up`
 - Re-run migrations: `yarn migrate:docker`
 - Check environment docs: `documentation/ENVIRONMENT_SETUP.md`
-

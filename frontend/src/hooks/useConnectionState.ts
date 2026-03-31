@@ -1,30 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { useConnectionSyncStore } from '@/store/connectionSync.store';
+
+function subscribeOnline(onStoreChange: () => void) {
+  if (typeof window === 'undefined') {
+    return () => {};
+  }
+  window.addEventListener('online', onStoreChange);
+  window.addEventListener('offline', onStoreChange);
+  return () => {
+    window.removeEventListener('online', onStoreChange);
+    window.removeEventListener('offline', onStoreChange);
+  };
+}
+
+function getOnlineSnapshot() {
+  return navigator.onLine;
+}
+
+/** Matches SSR when `navigator` is unavailable (avoids hydration mismatch in `ConnectionSyncBanner`). */
+function getServerOnlineSnapshot() {
+  return true;
+}
 
 /** Tracks navigator.onLine and a shared "recent failure" flag (same across all callers / global banner). */
 export function useConnectionState(options?: { clearFailureOnOnline?: boolean }) {
   const clearFailureOnOnline = options?.clearFailureOnOnline ?? true;
   const hadFailure = useConnectionSyncStore((s) => s.hadFailure);
   const setHadFailure = useConnectionSyncStore((s) => s.setHadFailure);
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
+  const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getServerOnlineSnapshot);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onOnline = () => {
-      setIsOnline(true);
       if (clearFailureOnOnline) setHadFailure(false);
     };
-    const onOffline = () => setIsOnline(false);
     window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
+    return () => window.removeEventListener('online', onOnline);
   }, [clearFailureOnOnline, setHadFailure]);
 
   return {

@@ -1,14 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import { SignOutButton } from '../SignOutButton';
 
-const mockPush = vi.fn();
-const mockRefresh = vi.fn();
 const mockLogout = vi.fn();
 const mockPost = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush, refresh: mockRefresh }) }));
 vi.mock('@/store/auth.store', () => ({
   useAuthStore: (selector: (s: { logout: () => void }) => void) => selector({ logout: mockLogout }),
 }));
@@ -16,13 +13,27 @@ vi.mock('@/lib/api', () => ({ default: { post: mockPost } }));
 vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string) => (key === 'signOut' ? 'Sign out' : key),
-    locale: 'en',
   }),
 }));
 
 describe('SignOutButton', () => {
+  const originalLocation = window.location;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: { href: 'http://localhost/en/app' },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    });
   });
 
   it('renders "Sign out" text', () => {
@@ -30,15 +41,14 @@ describe('SignOutButton', () => {
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
   });
 
-  it('calls logout API, logout, router.push(/login), and router.refresh on click', async () => {
+  it('calls logout API with timeout, logout(), then sets window.location to login', async () => {
     const user = userEvent.setup();
     render(<SignOutButton />);
     await user.click(screen.getByRole('button', { name: /sign out/i }));
 
-    expect(mockPost).toHaveBeenCalledWith('/api/auth/logout');
+    expect(mockPost).toHaveBeenCalledWith('/api/auth/logout', {}, { timeout: 12_000 });
     expect(mockLogout).toHaveBeenCalledOnce();
-    expect(mockPush).toHaveBeenCalledWith('/en/login');
-    expect(mockRefresh).toHaveBeenCalledOnce();
+    expect(window.location.href).toBe('/en/login');
   });
 
   it('applies custom className when provided', () => {
@@ -53,9 +63,8 @@ describe('SignOutButton', () => {
     render(<SignOutButton />);
     await user.click(screen.getByRole('button', { name: /sign out/i }));
 
-    expect(mockPost).toHaveBeenCalledWith('/api/auth/logout');
+    expect(mockPost).toHaveBeenCalledWith('/api/auth/logout', {}, { timeout: 12_000 });
     expect(mockLogout).toHaveBeenCalledOnce();
-    expect(mockPush).toHaveBeenCalledWith('/en/login');
-    expect(mockRefresh).toHaveBeenCalledOnce();
+    expect(window.location.href).toBe('/en/login');
   });
 });

@@ -3,8 +3,8 @@
  */
 import { test, expect } from '@playwright/test';
 import { uniqueTestEmail, testPassword } from './config';
-import { c, E2E_LOCALE_PREFIX } from './i18n';
-import { expectMyDecksHeading } from './helpers';
+import { a, c, E2E_LOCALE_PREFIX } from './i18n';
+import { clickAppSignOut, expectMyDecksHeading } from './helpers';
 
 function createCredentials() {
   return {
@@ -51,14 +51,13 @@ test.describe('Landing and auth gates', () => {
     await page.getByRole('button', { name: c('createAccount') }).click();
     await expectMyDecksHeading(page);
 
-    await page.getByRole('button', { name: c('signOut') }).click();
-    await expect(page.getByRole('heading', { name: c('signIn') })).toBeVisible();
+    await clickAppSignOut(page);
 
     await page.getByLabel(/^Email/).fill(email);
     await page.getByLabel(/Password/).fill('WrongPassword1!');
     await page.getByRole('button', { name: c('signIn') }).click();
     await expect(page.getByRole('alert').filter({ hasText: /invalid|password|login failed/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: c('signIn') })).toBeVisible();
+    await expect(page.getByRole('heading', { name: a('signInTitle') })).toBeVisible();
   });
 
   test('logged-in user visiting / is redirected to My decks', async ({ page }) => {
@@ -70,14 +69,14 @@ test.describe('Landing and auth gates', () => {
     await expectMyDecksHeading(page);
 
     await page.goto(`${E2E_LOCALE_PREFIX}/`);
-    await expectMyDecksHeading(page);
-    await expect(page).toHaveURL(/\/app/);
+    await expect(page).toHaveURL(/\/app/, { timeout: 25_000 });
+    await expectMyDecksHeading(page, 20_000);
   });
 
   test('navigate between login and register', async ({ page }) => {
     await page.goto(`${E2E_LOCALE_PREFIX}/login`);
     await page.getByRole('link', { name: c('register') }).click();
-    await expect(page).toHaveURL(/\/register/);
+    await expect(page).toHaveURL(/\/register/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: c('createAccount') })).toBeVisible();
 
     await page.getByRole('link', { name: c('signIn') }).click();

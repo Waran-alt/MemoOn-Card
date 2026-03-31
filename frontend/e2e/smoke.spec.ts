@@ -4,7 +4,7 @@
 import { expect, test } from '@playwright/test';
 import { testPassword, uniqueTestEmail } from './config';
 import { c, a, E2E_LOCALE_PREFIX } from './i18n';
-import { expectMyDecksHeading, studyRevealQuestionAndAnswer } from './helpers';
+import { clickDeckStudyLink, expectMyDecksHeading, studyRevealQuestionAndAnswer } from './helpers';
 
 test('smoke: register, create deck/card, open study', async ({ page }) => {
   const email = uniqueTestEmail();
@@ -34,8 +34,7 @@ test('smoke: register, create deck/card, open study', async ({ page }) => {
   await page.getByRole('button', { name: c('create'), exact: true }).click();
   await expect(page.getByText('What is 2 + 2?')).toBeVisible();
 
-  await page.getByRole('link', { name: a('study'), exact: true }).click();
-  await expect(page).toHaveURL(/\/study$/);
+  await clickDeckStudyLink(page);
   await studyRevealQuestionAndAnswer(page);
   await expect(page.getByRole('button', { name: a('good') })).toBeVisible();
 });

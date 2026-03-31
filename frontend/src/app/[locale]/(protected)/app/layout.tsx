@@ -1,6 +1,4 @@
-/** Product shell (nav) for `/app/*`. Parent `(protected)/layout.tsx` already enforced session + login redirect. */
-import { AppLayoutShell } from '@/components/AppLayoutShell';
-
+/** Route group layout; shell + auth token gate live in `(protected)/layout.tsx`. */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return <AppLayoutShell>{children}</AppLayoutShell>;
+  return children;
 }

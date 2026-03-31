@@ -3,6 +3,9 @@ import { cookies } from 'next/headers';
 import { getSession } from '@/lib/auth';
 import { HomeContent } from './HomeContent';
 
+/** Session-aware; never serve a cached “logged-out” shell to an authenticated user (e.g. after /app → /en). */
+export const dynamic = 'force-dynamic';
+
 interface HomeProps {
   params: Promise<{ locale: string }>;
 }

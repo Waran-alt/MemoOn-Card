@@ -4,7 +4,12 @@
 import { test, expect } from '@playwright/test';
 import { uniqueTestEmail, testPassword } from './config';
 import { c, a, E2E_LOCALE_PREFIX, reviewedCountLine } from './i18n';
-import { expectMyDecksHeading, studyRevealQuestionAndAnswer } from './helpers';
+import {
+  clickDeckStudyLink,
+  expectMyDecksHeading,
+  studyRevealQuestionAndAnswer,
+  waitForDeckDetailPath,
+} from './helpers';
 
 function createCredentials() {
   return {
@@ -33,6 +38,7 @@ test.describe('Study flow', () => {
     await expect(page.getByRole('heading', { name: deckTitle })).toBeVisible();
 
     await page.getByRole('link', { name: deckTitle }).click();
+    await waitForDeckDetailPath(page);
     await expect(page.getByRole('heading', { name: deckTitle })).toBeVisible();
 
     await page.getByRole('button', { name: new RegExp(`^${a('newCard')}$`) }).first().click();
@@ -42,7 +48,7 @@ test.describe('Study flow', () => {
     await expect(page.getByText(recto)).toBeVisible();
     await expect(page.getByText(verso)).toBeVisible();
 
-    await page.getByRole('link', { name: a('study'), exact: true }).click();
+    await clickDeckStudyLink(page);
     await studyRevealQuestionAndAnswer(page);
     await expect(page.getByText(recto)).toBeVisible();
     await expect(page.getByText(verso)).toBeVisible();
@@ -66,7 +72,9 @@ test.describe('Study flow', () => {
     await expect(page.getByRole('heading', { name: deckTitle })).toBeVisible();
 
     await page.getByRole('link', { name: deckTitle }).click();
-    await page.getByRole('link', { name: a('study'), exact: true }).click();
+    await waitForDeckDetailPath(page);
+    await expect(page.getByRole('heading', { name: deckTitle })).toBeVisible();
+    await clickDeckStudyLink(page);
 
     await expect(page.getByText(a('noCardsToStudy'))).toBeVisible({ timeout: 15_000 });
     await expect(
@@ -92,6 +100,7 @@ test.describe('Study flow', () => {
     await page.getByLabel(a('title')).fill(deckTitle);
     await page.getByRole('button', { name: c('create'), exact: true }).click();
     await page.getByRole('link', { name: deckTitle }).click();
+    await waitForDeckDetailPath(page);
 
     await page.getByRole('button', { name: new RegExp(`^${a('newCard')}$`) }).first().click();
     await page.getByLabel(a('recto')).fill(front1);
@@ -102,7 +111,7 @@ test.describe('Study flow', () => {
     await page.getByLabel(a('verso')).fill(back2);
     await page.getByRole('button', { name: c('create'), exact: true }).click();
 
-    await page.getByRole('link', { name: a('study'), exact: true }).click();
+    await clickDeckStudyLink(page);
     await studyRevealQuestionAndAnswer(page);
     // Queue order is shuffled on the study page; accept either card first.
     const front1Loc = page.getByText(front1);
@@ -137,13 +146,14 @@ test.describe('Study flow', () => {
     await page.getByLabel(a('title')).fill(deckTitle);
     await page.getByRole('button', { name: c('create'), exact: true }).click();
     await page.getByRole('link', { name: deckTitle }).click();
+    await waitForDeckDetailPath(page);
 
     await page.getByRole('button', { name: new RegExp(`^${a('newCard')}$`) }).first().click();
     await page.getByLabel(a('recto')).fill('Q');
     await page.getByLabel(a('verso')).fill('A');
     await page.getByRole('button', { name: c('create'), exact: true }).click();
 
-    await page.getByRole('link', { name: a('study'), exact: true }).click();
+    await clickDeckStudyLink(page);
     await page.getByRole('button', { name: a('showQuestion') }).click();
     await expect(page.getByText('Q', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: new RegExp(a('exitStudy')) }).click();

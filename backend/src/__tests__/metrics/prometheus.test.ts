@@ -22,6 +22,7 @@ describe('Prometheus metrics', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text/);
     expect(res.text).toMatch(/memoon_/);
+    expect(res.text).toMatch(/memoon_deck_cards_list_duration_seconds/);
   });
 
   it('increments http counter after a request', async () => {

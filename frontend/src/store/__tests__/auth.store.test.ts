@@ -100,6 +100,29 @@ describe('auth.store', () => {
       expect(result).toBe('new-token');
       expect(useAuthStore.getState().accessToken).toBe('new-token');
       expect(useAuthStore.getState().user).toEqual(user);
+      expect(useAuthStore.getState().reauthRequired).toBe(false);
+    });
+
+    it('uses a single in-flight refresh when called concurrently (no parallel POST /refresh)', async () => {
+      const user = { id: '1', email: 'a@b.com', name: 'A' };
+      let resolveJson!: (v: unknown) => void;
+      const jsonPromise = new Promise<unknown>((r) => {
+        resolveJson = r;
+      });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => jsonPromise,
+      }) as typeof fetch;
+      const p1 = useAuthStore.getState().refreshAccess();
+      const p2 = useAuthStore.getState().refreshAccess();
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+      resolveJson({
+        success: true,
+        data: { accessToken: 'shared-token', user },
+      });
+      const [r1, r2] = await Promise.all([p1, p2]);
+      expect(r1).toBe('shared-token');
+      expect(r2).toBe('shared-token');
     });
   });
 });

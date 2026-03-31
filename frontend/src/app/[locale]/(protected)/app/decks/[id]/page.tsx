@@ -7,84 +7,28 @@ import { useLocale } from 'i18n';
 import apiClient, { getApiErrorMessage, isRequestCancelled } from '@/lib/api';
 import type { Deck, Card, Category } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useModalFocusTrap } from '@/hooks/useModalFocusTrap';
 import { VALIDATION_LIMITS } from '@memoon-card/shared';
 import { CardFormFields } from './CardFormFields';
+import { DeckCardRow } from './DeckCardRow';
+import { recordDeckCardsListClientTiming } from './deckCardsListRefetchMetrics';
+import {
+  LAST_STUDIED_KEY,
+  formatCardDate,
+  formatCardDateOrTime,
+  formatCardNumber,
+  formatEventTime,
+  eventTimeToMs,
+  getTimingEventColor,
+  cardMatchesSearch,
+  previewCardRecto,
+} from './deckDetailHelpers';
+import { useCreateCardForm } from './useCreateCardForm';
 
 const { DECK_TITLE_MAX, DECK_DESCRIPTION_MAX } = VALIDATION_LIMITS;
 
-const LAST_STUDIED_KEY = (deckId: string) => `memoon_last_studied_${deckId}`;
-
-function formatCardDate(isoDate: string, locale: string): string {
-  return new Date(isoDate).toLocaleDateString(locale, { dateStyle: 'short' });
-}
-
-/** Next/Last review: show time if same calendar day as now, otherwise show date. */
-function formatCardDateOrTime(isoDate: string, locale: string, nowMs: number = Date.now()): string {
-  const d = new Date(isoDate);
-  const now = new Date(nowMs);
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  if (sameDay) {
-    return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-  }
-  return d.toLocaleDateString(locale, { dateStyle: 'short' });
-}
-
-/** Format a numeric card field (stability, difficulty); show — when null/undefined/NaN. */
-function formatCardNumber(value: unknown): string {
-  const n = Number(value);
-  if (value == null || !Number.isFinite(n)) return '—';
-  return n.toFixed(2);
-}
-
-/**
- * Format event/review timestamp for display. Accepts ms or seconds (if < 1e12).
- * Handles string from API (pg bigint) and invalid values.
- */
-function formatEventTime(ts: unknown, locale: string): string {
-  const n = Number(ts);
-  if (!Number.isFinite(n)) return '—';
-  const ms = n < 1e12 ? n * 1000 : n;
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(locale);
-}
-
-/** Normalize event_time to milliseconds for timeline positioning. */
-function eventTimeToMs(ts: unknown): number | null {
-  const n = Number(ts);
-  if (!Number.isFinite(n)) return null;
-  return n < 1e12 ? n * 1000 : n;
-}
-
-const TIMING_GRAPH_EVENT_COLORS: Record<string, string> = {
-  card_shown: 'var(--mc-accent-primary)',
-  answer_revealed: 'var(--mc-accent-warning)',
-  rating_submitted: 'var(--mc-accent-success)',
-  card_created: 'var(--mc-text-muted)',
-};
-function getTimingEventColor(eventType: string): string {
-  return TIMING_GRAPH_EVENT_COLORS[eventType] ?? 'var(--mc-accent-primary)';
-}
-
-function cardMatchesSearch(card: Card, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    card.recto.toLowerCase().includes(q) ||
-    card.verso.toLowerCase().includes(q) ||
-    (card.comment?.toLowerCase().includes(q) ?? false)
-  );
-}
-
-/** Plain-text preview of card front for link lists. */
-function previewCardRecto(html: string, maxLen = 52): string {
-  const t = html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-  if (t.length <= maxLen) return t || '—';
-  return `${t.slice(0, maxLen)}…`;
-}
+/** Above this count, the deck card list is paginated to limit DOM size. */
+const CARD_LIST_PAGE_SIZE = 50;
 
 type ConfirmType = 'delete' | 'treatAsNew';
 type ConfirmDialogState =
@@ -110,20 +54,37 @@ export default function DeckDetailPage() {
   cardsRef.current = cards;
   const [cardsLoading, setCardsLoading] = useState(false);
   const [cardsError, setCardsError] = useState('');
-  const [showCreateCard, setShowCreateCard] = useState(false);
-  const [createRecto, setCreateRecto] = useState('');
-  const [createVerso, setCreateVerso] = useState('');
-  const [createComment, setCreateComment] = useState('');
-  const [createKnowledgeContent, setCreateKnowledgeContent] = useState('');
-  const [showReversedZone, setShowReversedZone] = useState(false);
-  const [createRectoB, setCreateRectoB] = useState('');
-  const [createVersoB, setCreateVersoB] = useState('');
-  const [createCommentB, setCreateCommentB] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [creatingA, setCreatingA] = useState(false);
-  const [creatingB, setCreatingB] = useState(false);
-  const [createError, setCreateError] = useState('');
-  const [createErrorB, setCreateErrorB] = useState('');
+  const {
+    showCreateCard,
+    createRecto,
+    createVerso,
+    createComment,
+    createKnowledgeContent,
+    showReversedZone,
+    createRectoB,
+    createVersoB,
+    createCommentB,
+    creating,
+    creatingA,
+    creatingB,
+    createError,
+    createErrorB,
+    openCreateModal,
+    closeCreateModal,
+    addReversedZone,
+    setCreateRecto,
+    setCreateVerso,
+    setCreateComment,
+    setCreateKnowledgeContent,
+    setCreateRectoB,
+    setCreateVersoB,
+    setCreateCommentB,
+    setCreateError,
+    setCreateErrorB,
+    setCreating,
+    setCreatingA,
+    setCreatingB,
+  } = useCreateCardForm();
   const [userSettings, setUserSettings] = useState<{ knowledge_enabled?: boolean } | null>(null);
   const [revealedCardIds, setRevealedCardIds] = useState<Set<string>>(new Set());
   const [hiddenCardIds, setHiddenCardIds] = useState<Set<string>>(new Set());
@@ -140,15 +101,12 @@ export default function DeckDetailPage() {
   const [reverseCardError, setReverseCardError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [appliedSearchQuery, setAppliedSearchQuery] = useState('');
+  const [cardListPage, setCardListPage] = useState(0);
   const [lastStudiedIds, setLastStudiedIds] = useState<Set<string>>(new Set());
   const [showOnlyReviewed, setShowOnlyReviewed] = useState(false);
   const [reviewedBannerDismissed, setReviewedBannerDismissed] = useState(false);
   type StudyStats = { dueCount: number; newCount: number; flaggedCount: number; criticalCount: number; highRiskCount: number };
   const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
-  const [cardCategoriesModalCard, setCardCategoriesModalCard] = useState<Card | null>(null);
-  const [allCategories, setAllCategories] = useState<Category[]>([]);
-  const [categoryModalSelectedIds, setCategoryModalSelectedIds] = useState<Set<string>>(new Set());
-  const [categoryModalSaving, setCategoryModalSaving] = useState(false);
   const [editModalCategories, setEditModalCategories] = useState<Category[]>([]);
   const [editModalSelectedIds, setEditModalSelectedIds] = useState<Set<string>>(new Set());
   const [showEditDeck, setShowEditDeck] = useState(false);
@@ -176,6 +134,8 @@ export default function DeckDetailPage() {
   const [generateReversedCopyCategories, setGenerateReversedCopyCategories] = useState(true);
   const [generateReversedCopyKnowledge, setGenerateReversedCopyKnowledge] = useState(true);
   const [linkedCardCache, setLinkedCardCache] = useState<Record<string, Card>>({});
+  const linkedCardCacheRef = useRef(linkedCardCache);
+  linkedCardCacheRef.current = linkedCardCache;
   const [linkModalCard, setLinkModalCard] = useState<Card | null>(null);
   const [linkModalSelectedId, setLinkModalSelectedId] = useState('');
   const [linkModalSaving, setLinkModalSaving] = useState(false);
@@ -257,25 +217,17 @@ export default function DeckDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (!cardCategoriesModalCard) return;
-    setCategoryModalSelectedIds(new Set(cardCategoriesModalCard.category_ids ?? []));
-    apiClient
-      .get<{ success: boolean; data?: Category[] }>('/api/users/me/categories')
-      .then((res) => {
-        if (res.data?.success && Array.isArray(res.data.data)) setAllCategories(res.data.data);
-      })
-      .catch(() => setAllCategories([]));
-  }, [cardCategoriesModalCard]);
-
-  useEffect(() => {
     if (!id || !deck) return;
     const ac = new AbortController();
     setCardsLoading(true);
     setCardsError('');
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
     apiClient
       .get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`, { signal: ac.signal })
       .then((res) => {
+        const elapsed = typeof performance !== 'undefined' ? performance.now() - t0 : 0;
         if (res.data?.success && Array.isArray(res.data.data)) {
+          recordDeckCardsListClientTiming('initial_load', elapsed, true);
           setCards(res.data.data);
           try {
             const raw = typeof window !== 'undefined' ? window.sessionStorage.getItem(LAST_STUDIED_KEY(id)) : null;
@@ -308,7 +260,11 @@ export default function DeckDetailPage() {
         }
       })
       .catch((err) => {
-        if (!isRequestCancelled(err)) setCardsError(getApiErrorMessage(err, ta('failedLoadCards')));
+        if (!isRequestCancelled(err)) {
+          const elapsed = typeof performance !== 'undefined' ? performance.now() - t0 : 0;
+          recordDeckCardsListClientTiming('initial_load', elapsed, false);
+          setCardsError(getApiErrorMessage(err, ta('failedLoadCards')));
+        }
       })
       .finally(() => setCardsLoading(false));
     return () => ac.abort();
@@ -338,6 +294,60 @@ export default function DeckDetailPage() {
     },
     [appliedSearchQuery, revealedCardIds]
   );
+
+  const listViewResetKey = useMemo(
+    () =>
+      `${appliedSearchQuery.trim()}|${showOnlyReviewed}|${[...lastStudiedIds].sort().join(',')}`,
+    [appliedSearchQuery, showOnlyReviewed, lastStudiedIds]
+  );
+
+  useEffect(() => {
+    setCardListPage(0);
+  }, [listViewResetKey]);
+
+  const cardListTotalPages = Math.max(1, Math.ceil(displayCards.length / CARD_LIST_PAGE_SIZE));
+
+  useEffect(() => {
+    setCardListPage((p) => Math.min(p, cardListTotalPages - 1));
+  }, [cardListTotalPages]);
+
+  const needsCardListPagination = displayCards.length > CARD_LIST_PAGE_SIZE;
+  const cardListEffectivePage = Math.min(cardListPage, cardListTotalPages - 1);
+
+  const visibleDisplayCards = useMemo(() => {
+    if (!needsCardListPagination) return displayCards;
+    const start = cardListEffectivePage * CARD_LIST_PAGE_SIZE;
+    return displayCards.slice(start, start + CARD_LIST_PAGE_SIZE);
+  }, [displayCards, needsCardListPagination, cardListEffectivePage]);
+
+  const cardGlobalIndexById = useMemo(() => {
+    const m = new Map<string, number>();
+    cards.forEach((c, i) => m.set(c.id, i + 1));
+    return m;
+  }, [cards]);
+
+  /** Reload deck cards from API after mutations (strategy A). */
+  const refetchDeckCardsList = useCallback(async (reason: string): Promise<boolean> => {
+    if (!id) return false;
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+    try {
+      const res = await apiClient.get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`);
+      const elapsed = typeof performance !== 'undefined' ? performance.now() - t0 : 0;
+      const ok = res.data?.success === true && Array.isArray(res.data.data);
+      recordDeckCardsListClientTiming(reason, elapsed, ok);
+      if (ok) {
+        setCards(res.data!.data!);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      const elapsed = typeof performance !== 'undefined' ? performance.now() - t0 : 0;
+      if (!isRequestCancelled(err)) {
+        recordDeckCardsListClientTiming(reason, elapsed, false);
+      }
+      return false;
+    }
+  }, [id]);
 
   function handleApplySearch() {
     setAppliedSearchQuery(searchQuery.trim());
@@ -381,6 +391,27 @@ export default function DeckDetailPage() {
   const manageCardId = searchParams.get('manageCard');
   const hasOpenedManageCardRef = useRef(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+  const editFormBaselineRef = useRef<{
+    recto: string;
+    verso: string;
+    comment: string;
+    categoryIdsKey: string;
+  } | null>(null);
+  const createModalPanelRef = useRef<HTMLDivElement>(null);
+  const editModalPanelRef = useRef<HTMLDivElement>(null);
+  const generateReversedModalPanelRef = useRef<HTMLDivElement>(null);
+  const linkModalPanelRef = useRef<HTMLDivElement>(null);
+  const editDeckModalPanelRef = useRef<HTMLDivElement>(null);
+  const cardDetailsModalPanelRef = useRef<HTMLDivElement>(null);
+  const confirmDialogPanelRef = useRef<HTMLDivElement>(null);
+
+  useModalFocusTrap(showCreateCard, createModalPanelRef);
+  useModalFocusTrap(!!editingCard, editModalPanelRef);
+  useModalFocusTrap(!!generateReversedSourceCard, generateReversedModalPanelRef);
+  useModalFocusTrap(!!linkModalCard, linkModalPanelRef);
+  useModalFocusTrap(showEditDeck && !!deck, editDeckModalPanelRef);
+  useModalFocusTrap(!!cardDetailsCard, cardDetailsModalPanelRef);
+  useModalFocusTrap(!!confirmDialog, confirmDialogPanelRef);
 
   const allDisplayedSelected =
     displayCards.length > 0 && displayCards.every((c) => selectedCardIds.has(c.id));
@@ -409,19 +440,51 @@ export default function DeckDetailPage() {
     setEditModalSelectedIds(new Set());
   }, []);
 
-  const closeCreateModal = useCallback(() => {
-    setShowCreateCard(false);
-    setCreateRecto('');
-    setCreateVerso('');
-    setCreateComment('');
-    setCreateKnowledgeContent('');
-    setShowReversedZone(false);
-    setCreateRectoB('');
-    setCreateVersoB('');
-    setCreateCommentB('');
-    setCreateError('');
-    setCreateErrorB('');
-  }, []);
+  useEffect(() => {
+    if (!editingCard) {
+      editFormBaselineRef.current = null;
+      return;
+    }
+    editFormBaselineRef.current = {
+      recto: editingCard.recto,
+      verso: editingCard.verso,
+      comment: editingCard.comment ?? '',
+      categoryIdsKey: JSON.stringify([...(editingCard.category_ids ?? [])].sort()),
+    };
+  }, [editingCard]);
+
+  const isEditFormDirty = useCallback(() => {
+    const b = editFormBaselineRef.current;
+    if (!b || !editingCard) return false;
+    const key = JSON.stringify([...editModalSelectedIds].sort());
+    return (
+      editRecto !== b.recto ||
+      editVerso !== b.verso ||
+      editComment !== b.comment ||
+      key !== b.categoryIdsKey
+    );
+  }, [editingCard, editRecto, editVerso, editComment, editModalSelectedIds]);
+
+  const requestCloseEditModal = useCallback(() => {
+    if (isEditFormDirty()) {
+      const msg =
+        ta('discardEditChanges') !== 'discardEditChanges'
+          ? ta('discardEditChanges')
+          : 'Discard unsaved changes?';
+      if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    }
+    closeEditModal();
+  }, [closeEditModal, isEditFormDirty, ta]);
+
+  const confirmDiscardEditIfDirty = useCallback(() => {
+    if (!isEditFormDirty()) return true;
+    const msg =
+      ta('discardEditChanges') !== 'discardEditChanges'
+        ? ta('discardEditChanges')
+        : 'Discard unsaved changes?';
+    if (typeof window === 'undefined') return true;
+    return window.confirm(msg);
+  }, [isEditFormDirty, ta]);
 
   function openEditDeckModal() {
     if (deck) {
@@ -443,7 +506,7 @@ export default function DeckDetailPage() {
     setEditDeckError('');
   }, []);
 
-  function openCardDetailsModal(card: Card) {
+  const openCardDetailsModal = useCallback((card: Card) => {
     setCardDetailsCard(card);
     setCardDetailsHistory([]);
     setCardDetailsSummary(null);
@@ -464,7 +527,7 @@ export default function DeckDetailPage() {
       })
       .catch(() => setCardDetailsError(ta('cardDetailsLoadError')))
       .finally(() => setCardDetailsLoading(false));
-  }
+  }, [ta]);
 
   const closeCardDetailsModal = useCallback(() => {
     setCardDetailsCard(null);
@@ -526,12 +589,8 @@ export default function DeckDetailPage() {
           await apiClient.put(`/api/cards/${editingCard.id}/categories`, {
             categoryIds: Array.from(editModalSelectedIds),
           });
-          const cardsRes = await apiClient.get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`);
-          if (cardsRes.data?.success && Array.isArray(cardsRes.data.data)) {
-            setCards(cardsRes.data.data);
-          } else {
-            setCards((prev) => prev.map((c) => (c.id === editingCard.id ? res.data!.data! : c)));
-          }
+          const ok = await refetchDeckCardsList('edit_card');
+          if (!ok) setCardsError(ta('failedLoadCards'));
           closeEditModal();
         } else {
           setEditError(tc('invalidResponse'));
@@ -559,16 +618,17 @@ export default function DeckDetailPage() {
       const ids = confirmDialog.cardIds;
       setActionLoading(true);
       Promise.all(ids.map((cardId) => apiClient.delete(`/api/cards/${cardId}`)))
-        .then(() => {
-          setCards((prev) => prev.filter((c) => !ids.includes(c.id)));
+        .then(async () => {
+          const ok = await refetchDeckCardsList('bulk_delete');
+          if (!ok) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => {
             const next = new Set(prev);
-            ids.forEach((id) => next.delete(id));
+            ids.forEach((delId) => next.delete(delId));
             return next;
           });
           setSelectedCardIds((prev) => {
             const next = new Set(prev);
-            ids.forEach((id) => next.delete(id));
+            ids.forEach((delId) => next.delete(delId));
             return next;
           });
         })
@@ -584,21 +644,10 @@ export default function DeckDetailPage() {
       setActionLoading(true);
       apiClient
         .delete<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/links/${otherCardId}`)
-        .then((res) => {
+        .then(async (res) => {
           if (res.data?.success && res.data.data) {
-            const updated = res.data.data;
-            setCards((prev) =>
-              prev.map((c) => {
-                if (c.id === cardId) return updated;
-                if (c.id === otherCardId) {
-                  return {
-                    ...c,
-                    linked_card_ids: (c.linked_card_ids ?? []).filter((x) => x !== cardId),
-                  };
-                }
-                return c;
-              })
-            );
+            const ok = await refetchDeckCardsList('unlink');
+            if (!ok) setCardsError(ta('failedLoadCards'));
           }
         })
         .catch(() => {})
@@ -618,8 +667,9 @@ export default function DeckDetailPage() {
     if (confirmDialog.type === 'delete') {
       apiClient
         .delete(`/api/cards/${cardId}`)
-        .then(() => {
-          setCards((prev) => prev.filter((c) => c.id !== cardId));
+        .then(async () => {
+          const ok = await refetchDeckCardsList('delete_card');
+          if (!ok) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => {
             const next = new Set(prev);
             next.delete(cardId);
@@ -638,11 +688,10 @@ export default function DeckDetailPage() {
     if (confirmDialog.type === 'treatAsNew') {
       apiClient
         .post<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/reset-stability`)
-        .then((res) => {
+        .then(async (res) => {
           if (res.data?.success && res.data.data) {
-            setCards((prev) =>
-              prev.map((c) => (c.id === cardId ? res.data!.data! : c))
-            );
+            const ok = await refetchDeckCardsList('treat_as_new');
+            if (!ok) setCardsError(ta('failedLoadCards'));
           }
         })
         .catch(() => {})
@@ -660,38 +709,30 @@ export default function DeckDetailPage() {
     });
   }
 
-  function toggleCategoryInModal(categoryId: string) {
-    setCategoryModalSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(categoryId)) next.delete(categoryId);
-      else next.add(categoryId);
-      return next;
-    });
-  }
-
-  async function saveCardCategories() {
-    if (!cardCategoriesModalCard || categoryModalSaving) return;
-    setCategoryModalSaving(true);
-    try {
-      await apiClient.put(`/api/cards/${cardCategoriesModalCard.id}/categories`, {
-        categoryIds: Array.from(categoryModalSelectedIds),
-      });
-      const res = await apiClient.get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`);
-      if (res.data?.success && Array.isArray(res.data.data)) setCards(res.data.data);
-      setCardCategoriesModalCard(null);
-    } finally {
-      setCategoryModalSaving(false);
-    }
-  }
-
-  function toggleCardSelection(cardId: string) {
+  const toggleCardSelection = useCallback((cardId: string) => {
     setSelectedCardIds((prev) => {
       const next = new Set(prev);
       if (next.has(cardId)) next.delete(cardId);
       else next.add(cardId);
       return next;
     });
-  }
+  }, []);
+
+  const getNeighborCard = useCallback((neighborId: string) => {
+    return cardsRef.current.find((c) => c.id === neighborId) ?? linkedCardCacheRef.current[neighborId];
+  }, []);
+
+  const hideCardFromList = useCallback((cardId: string) => {
+    setHiddenCardIds((prev) => new Set(prev).add(cardId));
+  }, []);
+
+  const requestDeleteCard = useCallback((cardId: string) => {
+    setConfirmDialog({ type: 'delete', cardId });
+  }, []);
+
+  const requestUnlinkCards = useCallback((cardId: string, otherCardId: string) => {
+    setConfirmDialog({ type: 'unlink', cardId, otherCardId });
+  }, []);
 
   function selectAllDisplayed() {
     setSelectedCardIds(new Set(displayCards.map((c) => c.id)));
@@ -715,17 +756,11 @@ export default function DeckDetailPage() {
         apiClient.post<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/reset-stability`)
       )
     )
-      .then((results) => {
-        const updates = new Map<string, Card>();
-        results.forEach((res, i) => {
-          if (res.data?.success && res.data.data && ids[i]) {
-            updates.set(ids[i], res.data.data);
-          }
-        });
-        if (updates.size > 0) {
-          setCards((prev) =>
-            prev.map((c) => updates.get(c.id) ?? c)
-          );
+      .then(async (results) => {
+        const anyOk = results.some((r) => r.data?.success && r.data.data);
+        if (anyOk) {
+          const ok = await refetchDeckCardsList('bulk_treat_as_new');
+          if (!ok) setCardsError(ta('failedLoadCards'));
         }
         setSelectedCardIds(new Set());
       })
@@ -770,11 +805,12 @@ export default function DeckDetailPage() {
           knowledge: { content: createKnowledgeContent.trim() || null },
           cards: cardsPayload,
         })
-        .then((res) => {
+        .then(async (res) => {
           if (res.data?.success && res.data.data) {
             const data = res.data.data;
             const newCards = Array.isArray(data) ? data : [data];
-            setCards((prev) => [...newCards, ...prev]);
+            const ok = await refetchDeckCardsList('create_bulk');
+            if (!ok) setCardsError(ta('failedLoadCards'));
             setRevealedCardIds((prev) => new Set([...prev, ...newCards.map((c) => c.id)]));
             closeCreateModal();
           } else {
@@ -802,8 +838,10 @@ export default function DeckDetailPage() {
                 // Card was created; category assignment is best-effort
               }
             }
-            setCards((prev) => [res.data!.data!, ...prev]);
-            setRevealedCardIds((prev) => new Set(prev).add(res.data!.data!.id));
+            const newId = res.data!.data!.id;
+            const ok = await refetchDeckCardsList('create_card');
+            if (!ok) setCardsError(ta('failedLoadCards'));
+            setRevealedCardIds((prev) => new Set(prev).add(newId));
             closeCreateModal();
           } else {
             setCreateError(tc('invalidResponse'));
@@ -838,7 +876,8 @@ export default function DeckDetailPage() {
         if (res.data?.success && res.data.data) {
           const data = res.data.data;
           const newCards = Array.isArray(data) ? data : [data];
-          setCards((prev) => [...newCards, ...prev]);
+          const ok = await refetchDeckCardsList('create_bulk_auto_reverse');
+          if (!ok) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => new Set([...prev, ...newCards.map((c) => c.id)]));
           closeCreateModal();
         } else {
@@ -872,7 +911,8 @@ export default function DeckDetailPage() {
       });
       if (r.data?.success && r.data.data) {
         const cardB = r.data.data;
-        setCards((prev) => [cardA, cardB, ...prev]);
+        const ok = await refetchDeckCardsList('create_with_reversed_pair');
+        if (!ok) setCardsError(ta('failedLoadCards'));
         setRevealedCardIds((prev) => new Set([...prev, cardA.id, cardB.id]));
         closeCreateModal();
       } else {
@@ -883,13 +923,6 @@ export default function DeckDetailPage() {
     } finally {
       setCreating(false);
     }
-  }
-
-  function handleAddReversedZone() {
-    setCreateRectoB(createVerso);
-    setCreateVersoB(createRecto);
-    setCreateCommentB(createComment);
-    setShowReversedZone(true);
   }
 
   function handleCreateCardAOnly(e: React.FormEvent) {
@@ -920,7 +953,8 @@ export default function DeckDetailPage() {
               // best-effort
             }
           }
-          setCards((prev) => [newCard, ...prev]);
+          const ok = await refetchDeckCardsList('create_card_a_only');
+          if (!ok) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => new Set(prev).add(newCard.id));
           closeCreateModal();
         } else {
@@ -975,11 +1009,12 @@ export default function DeckDetailPage() {
             copy_categories: true,
             copy_knowledge: true,
           })
-          .then((r) => {
+          .then(async (r) => {
             if (r.data?.success && r.data.data) {
-              const newCards = [cardA, r.data.data];
-              setCards((prev) => [...newCards, ...prev]);
-              setRevealedCardIds((prev) => new Set([...prev, cardA.id, r.data.data!.id]));
+              const newBId = r.data.data.id;
+              const ok = await refetchDeckCardsList('create_card_then_reversed_b');
+              if (!ok) setCardsError(ta('failedLoadCards'));
+              setRevealedCardIds((prev) => new Set([...prev, cardA.id, newBId]));
               closeCreateModal();
             } else {
               setCreateErrorB(tc('invalidResponse'));
@@ -991,43 +1026,61 @@ export default function DeckDetailPage() {
       .finally(() => setCreatingB(false));
   }
 
-  async function handleOpenLinkedCard(sourceCard: Card, neighborId: string) {
+  const openReversePairModal = useCallback((sourceCard: Card, reverseCard: Card) => {
     setReverseCardError(null);
-    setOpeningReverseCardId(neighborId);
-    setEditingCard(null);
-    try {
-      const fromList = cardsRef.current.find((c) => c.id === neighborId);
-      const cached = linkedCardCache[neighborId];
-      let neighbor = fromList ?? cached ?? null;
-      if (!neighbor) {
-        const res = await apiClient.get<{ success: boolean; data?: Card }>(`/api/cards/${neighborId}`);
-        if (res.data?.success && res.data.data) {
-          neighbor = res.data.data;
-          setLinkedCardCache((p) => ({ ...p, [neighborId]: neighbor! }));
+    setReverseSubmitError('');
+    setReverseSaveAError('');
+    setReverseSaveBError('');
+    setGenerateReversedExistingCard(reverseCard);
+    setGenerateReversedSourceCard(sourceCard);
+    setReverseRectoA(sourceCard.recto);
+    setReverseVersoA(sourceCard.verso);
+    setReverseCommentA(sourceCard.comment ?? '');
+    setReverseRectoB(reverseCard.recto);
+    setReverseVersoB(reverseCard.verso);
+    setReverseCommentB(reverseCard.comment ?? '');
+  }, []);
+
+  const handleOpenLinkedCard = useCallback(
+    async (sourceCard: Card, neighborId: string) => {
+      setReverseCardError(null);
+      setOpeningReverseCardId(neighborId);
+      setEditingCard(null);
+      try {
+        const fromList = cardsRef.current.find((c) => c.id === neighborId);
+        const cached = linkedCardCacheRef.current[neighborId];
+        let neighbor = fromList ?? cached ?? null;
+        if (!neighbor) {
+          const res = await apiClient.get<{ success: boolean; data?: Card }>(`/api/cards/${neighborId}`);
+          if (res.data?.success && res.data.data) {
+            neighbor = res.data.data;
+            setLinkedCardCache((p) => ({ ...p, [neighborId]: neighbor! }));
+          }
         }
-      }
-      if (neighbor) {
-        openReversePairModal(sourceCard, neighbor);
-      } else {
+        if (neighbor) {
+          openReversePairModal(sourceCard, neighbor);
+        } else {
+          setReverseCardError(
+            ta('failedLoadReverseCard') !== 'failedLoadReverseCard'
+              ? ta('failedLoadReverseCard')
+              : 'Could not load linked card.'
+          );
+        }
+      } catch (err) {
         setReverseCardError(
-          ta('failedLoadReverseCard') !== 'failedLoadReverseCard'
-            ? ta('failedLoadReverseCard')
-            : 'Could not load linked card.'
+          getApiErrorMessage(
+            err,
+            ta('failedLoadReverseCard') !== 'failedLoadReverseCard'
+              ? ta('failedLoadReverseCard')
+              : 'Could not load linked card.'
+          )
         );
+      } finally {
+        setOpeningReverseCardId(null);
       }
-    } catch (err) {
-      setReverseCardError(
-        getApiErrorMessage(
-          err,
-          ta('failedLoadReverseCard') !== 'failedLoadReverseCard'
-            ? ta('failedLoadReverseCard')
-            : 'Could not load linked card.'
-        )
-      );
-    } finally {
-      setOpeningReverseCardId(null);
-    }
-  }
+    },
+    [openReversePairModal, ta]
+  );
 
   function openGenerateReversedModal(card: Card) {
     setEditingCard(null);
@@ -1050,21 +1103,6 @@ export default function DeckDetailPage() {
     setGenerateReversedExistingCard(null);
   }
 
-  function openReversePairModal(sourceCard: Card, reverseCard: Card) {
-    setReverseCardError(null);
-    setReverseSubmitError('');
-    setReverseSaveAError('');
-    setReverseSaveBError('');
-    setGenerateReversedExistingCard(reverseCard);
-    setGenerateReversedSourceCard(sourceCard);
-    setReverseRectoA(sourceCard.recto);
-    setReverseVersoA(sourceCard.verso);
-    setReverseCommentA(sourceCard.comment ?? '');
-    setReverseRectoB(reverseCard.recto);
-    setReverseVersoB(reverseCard.verso);
-    setReverseCommentB(reverseCard.comment ?? '');
-  }
-
   async function handleSaveReverseCardA(e: React.FormEvent) {
     e.preventDefault();
     const source = generateReversedSourceCard;
@@ -1085,7 +1123,8 @@ export default function DeckDetailPage() {
       });
       if (res.data?.success && res.data.data) {
         const updated = res.data.data;
-        setCards((prev) => prev.map((c) => (c.id === source.id ? updated : c)));
+        const ok = await refetchDeckCardsList('reverse_modal_save_a');
+        if (!ok) setCardsError(ta('failedLoadCards'));
         setGenerateReversedSourceCard(updated);
         setReverseRectoA(updated.recto);
         setReverseVersoA(updated.verso);
@@ -1120,7 +1159,8 @@ export default function DeckDetailPage() {
       });
       if (res.data?.success && res.data.data) {
         const updated = res.data.data;
-        setCards((prev) => prev.map((c) => (c.id === existingB.id ? updated : c)));
+        const ok = await refetchDeckCardsList('reverse_modal_save_b');
+        if (!ok) setCardsError(ta('failedLoadCards'));
         setGenerateReversedExistingCard(updated);
         setReverseRectoB(updated.recto);
         setReverseVersoB(updated.verso);
@@ -1155,14 +1195,8 @@ export default function DeckDetailPage() {
       });
       if (res.data?.success && res.data.data) {
         const newCard = res.data.data;
-        setCards((prev) => [
-          newCard,
-          ...prev.map((c) =>
-            c.id === source.id
-              ? { ...c, linked_card_ids: [...(c.linked_card_ids ?? []), newCard.id] }
-              : c
-          ),
-        ]);
+        const ok = await refetchDeckCardsList('reverse_modal_create_b');
+        if (!ok) setCardsError(ta('failedLoadCards'));
         setRevealedCardIds((prev) => new Set(prev).add(newCard.id));
         closeGenerateReversedModal();
       } else {
@@ -1191,20 +1225,8 @@ export default function DeckDetailPage() {
         otherCardId: linkModalSelectedId,
       });
       if (res.data?.success && res.data.data) {
-        const updated = res.data.data;
-        const sourceId = linkModalCard.id;
-        const otherId = linkModalSelectedId;
-        setCards((prev) =>
-          prev.map((c) => {
-            if (c.id === sourceId) return updated;
-            if (c.id === otherId) {
-              const next = [...(c.linked_card_ids ?? [])];
-              if (!next.includes(sourceId)) next.push(sourceId);
-              return { ...c, linked_card_ids: next };
-            }
-            return c;
-          })
-        );
+        const ok = await refetchDeckCardsList('link_cards');
+        if (!ok) setCardsError(ta('failedLoadCards'));
         setLinkModalCard(null);
       } else {
         setLinkModalError(tc('invalidResponse'));
@@ -1230,7 +1252,7 @@ export default function DeckDetailPage() {
   if (error || !deck) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-(--mc-accent-danger)" role="alert">
+        <p className="text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
           {error || ta('deckNotFound')}
         </p>
         <Link
@@ -1304,10 +1326,7 @@ export default function DeckDetailPage() {
           )}
           <button
             type="button"
-            onClick={() => {
-              setShowCreateCard(true);
-              setCreateError('');
-            }}
+            onClick={openCreateModal}
             className="rounded-lg bg-(--mc-accent-success) px-4 pt-1.5 pb-2 text-sm font-medium text-white shadow-sm transition-colors duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--mc-accent-success) focus-visible:ring-offset-2 focus-visible:ring-offset-(--mc-bg-base)"
           >
             {ta('newCard')}
@@ -1334,7 +1353,7 @@ export default function DeckDetailPage() {
       </div>
 
       {cardsError && (
-        <p className="text-sm text-(--mc-accent-danger)" role="alert">
+        <p className="text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
           {cardsError}
         </p>
       )}
@@ -1349,6 +1368,7 @@ export default function DeckDetailPage() {
           onClick={closeCreateModal}
         >
           <div
+            ref={createModalPanelRef}
             className={`mx-4 w-full max-h-[85vh] overflow-y-auto rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl ${showReversedZone ? 'max-w-4xl' : 'max-w-2xl'}`}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1399,7 +1419,7 @@ export default function DeckDetailPage() {
                       t={ta}
                     />
                     {createError && (
-                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert">
+                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                         {createError}
                       </p>
                     )}
@@ -1430,7 +1450,7 @@ export default function DeckDetailPage() {
                       t={ta}
                     />
                     {createErrorB && (
-                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert">
+                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                         {createErrorB}
                       </p>
                     )}
@@ -1479,14 +1499,14 @@ export default function DeckDetailPage() {
                 {userSettings?.knowledge_enabled && deck?.show_knowledge_on_card_creation && (
                   <button
                     type="button"
-                    onClick={handleAddReversedZone}
+                    onClick={addReversedZone}
                     className="rounded border border-(--mc-accent-primary) bg-transparent px-3 py-1.5 text-sm font-medium text-(--mc-accent-primary) hover:bg-(--mc-accent-primary)/10"
                   >
                     {ta('addReversedCard') !== 'addReversedCard' ? ta('addReversedCard') : 'Add reversed card'}
                   </button>
                 )}
                 {createError && (
-                  <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert">
+                  <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                     {createError}
                   </p>
                 )}
@@ -1540,7 +1560,7 @@ export default function DeckDetailPage() {
           </p>
           <button
             type="button"
-            onClick={() => setShowCreateCard(true)}
+            onClick={openCreateModal}
             className="mt-3 text-sm font-medium text-(--mc-text-secondary) underline hover:no-underline"
           >
             {ta('newCard')}
@@ -1550,7 +1570,7 @@ export default function DeckDetailPage() {
         <>
           {reverseCardError && (
             <div className="mb-4 flex items-center justify-between gap-2 rounded-lg border border-(--mc-accent-danger)/50 bg-(--mc-accent-danger)/5 p-3">
-              <p className="text-sm text-(--mc-accent-danger)" role="alert">
+              <p className="text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                 {reverseCardError}
               </p>
               <button
@@ -1682,7 +1702,7 @@ export default function DeckDetailPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowCreateCard(true)}
+                      onClick={openCreateModal}
                       className="rounded bg-(--mc-accent-success) px-3 pt-1 pb-1.5 text-sm font-medium text-white hover:opacity-90"
                     >
                       {ta('newCard')}
@@ -1691,216 +1711,74 @@ export default function DeckDetailPage() {
                 ) : null}
               </li>
             ) : (
-              displayCards.map((card) => {
-                const revealed = isRevealed(card.id);
-                const globalIndex = cards.findIndex((c) => c.id === card.id) + 1;
-                return (
-                  <li
-                    key={card.id}
-                    className="mc-study-surface relative rounded-xl border border-(--mc-border-subtle) p-4 shadow-sm transition-colors duration-150 hover:bg-(--mc-bg-card-back)/40"
-                  >
-                    {!revealed ? (
-                      <div className="flex items-center gap-3">
-                        <label className="flex shrink-0 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCardIds.has(card.id)}
-                            onChange={() => toggleCardSelection(card.id)}
-                            aria-label={ta('cardLabel', { vars: { n: String(globalIndex) } })}
-                            className="h-5 w-5 rounded border-(--mc-border-subtle)"
-                          />
-                          <span className="sr-only">{ta('cards')}</span>
-                        </label>
-                        <span className="min-w-0 flex-1 font-medium text-(--mc-text-primary)">
-                          {ta('cardLabel', { vars: { n: String(globalIndex) } })}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => revealOne(card.id)}
-                          className="shrink-0 rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                        >
-                          {ta('revealCard')}
-                        </button>
-                      </div>
-                    ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setHiddenCardIds((prev) => new Set(prev).add(card.id))}
-                        title={ta('hideCardTitle') !== 'hideCardTitle' ? ta('hideCardTitle') : undefined}
-                        className="absolute right-2 top-2 z-10 rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-xs font-medium text-(--mc-text-secondary) shadow-sm transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                        aria-label={ta('hideCard')}
-                      >
-                        {ta('hideCard')}
-                      </button>
-                      <div className="flex items-start gap-3">
-                        <label className="flex shrink-0 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedCardIds.has(card.id)}
-                            onChange={() => toggleCardSelection(card.id)}
-                            aria-label={ta('cards')}
-                            className="h-5 w-5 rounded border-(--mc-border-subtle)"
-                          />
-                          <span className="sr-only">{ta('cards')}</span>
-                        </label>
-                        <div className="space-y-2 min-w-0 flex-1">
-                        <p className="text-sm font-medium text-(--mc-text-primary)">
-                          {ta('recto')}: {card.recto}
-                        </p>
-                        <p className="text-sm text-(--mc-text-secondary)">
-                          {ta('verso')}: {card.verso}
-                        </p>
-                        {card.comment && (
-                          <p className="text-xs text-(--mc-text-muted)">
-                            {ta('commentOptional')}: {card.comment}
-                          </p>
-                        )}
-                        </div>
-                      </div>
-                      <p className="mt-2 text-xs text-(--mc-text-secondary)">
-                        {!card.last_review
-                          ? ta('cardStatusNew')
-                          : [
-                              ta('cardLastReview', { vars: { date: formatCardDateOrTime(card.last_review, locale) } }),
-                              ta('cardNextReview', { vars: { date: formatCardDateOrTime(card.next_review, locale) } }),
-                            ].join(' · ')}
-                      </p>
-                      {(card.categories?.length ?? 0) > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {card.categories!.map((c) => (
-                            <span
-                              key={c.id}
-                              className="rounded bg-(--mc-bg-card-back) px-1.5 py-0.5 text-xs text-(--mc-text-secondary)"
-                            >
-                              {c.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {(card.linked_card_ids?.length ?? 0) > 0 && (
-                        <div className="mt-2 rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page)/60 p-2.5">
-                          <p className="text-xs font-medium text-(--mc-text-secondary) mb-2">
-                            {ta('linkedCardsDirect') !== 'linkedCardsDirect' ? ta('linkedCardsDirect') : 'Direct links'}
-                          </p>
-                          <ul className="space-y-2">
-                            {card.linked_card_ids!.map((nid) => {
-                              const nb = cards.find((c) => c.id === nid) ?? linkedCardCache[nid];
-                              return (
-                                <li
-                                  key={nid}
-                                  className="flex flex-wrap items-center gap-2 border-b border-(--mc-border-subtle)/60 pb-2 text-sm last:border-0 last:pb-0"
-                                >
-                                  <span
-                                    className="min-w-0 flex-1 truncate text-(--mc-text-primary)"
-                                    title={nb ? previewCardRecto(nb.recto, 200) : undefined}
-                                  >
-                                    {nb
-                                      ? previewCardRecto(nb.recto)
-                                      : ta('linkedCardOtherDeck') !== 'linkedCardOtherDeck'
-                                        ? ta('linkedCardOtherDeck')
-                                        : 'Another deck (not in this list)'}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenLinkedCard(card, nid)}
-                                    disabled={openingReverseCardId === nid}
-                                    className="shrink-0 rounded border border-(--mc-accent-primary) px-2 py-1 text-xs font-medium text-(--mc-accent-primary) transition-colors hover:bg-(--mc-accent-primary)/10 disabled:opacity-50"
-                                  >
-                                    {openingReverseCardId === nid
-                                      ? tc('loading')
-                                      : ta('openLinkedCard') !== 'openLinkedCard'
-                                        ? ta('openLinkedCard')
-                                        : 'Open'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setConfirmDialog({
-                                        type: 'unlink',
-                                        cardId: card.id,
-                                        otherCardId: nid,
-                                      })
-                                    }
-                                    className="shrink-0 rounded border border-(--mc-border-subtle) px-2 py-1 text-xs font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
-                                  >
-                                    {ta('unlinkCard') !== 'unlinkCard' ? ta('unlinkCard') : 'Unlink'}
-                                  </button>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      )}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setCardCategoriesModalCard(card)}
-                          className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                        >
-                          {ta('editCardCategories')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openCardDetailsModal(card)}
-                          className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                        >
-                          {ta('cardDetailsButton')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(card)}
-                          className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                        >
-                          {ta('editCard')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openLinkModalForCard(card)}
-                          className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                        >
-                          {ta('linkExistingCard') !== 'linkExistingCard' ? ta('linkExistingCard') : 'Link existing card'}
-                        </button>
-                        {userSettings?.knowledge_enabled && (
-                          <button
-                            type="button"
-                            onClick={() => openGenerateReversedModal(card)}
-                            className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                          >
-                            {ta('generateReversedCard') !== 'generateReversedCard' ? ta('generateReversedCard') : 'Generate reversed card'}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setConfirmDialog({ type: 'delete', cardId: card.id })
-                          }
-                          className="rounded-lg border border-(--mc-accent-danger) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-accent-danger) transition-colors hover:bg-(--mc-accent-danger)/10"
-                        >
-                          {ta('deleteCard')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setConfirmDialog({
-                              type: 'treatAsNew',
-                              cardId: card.id,
-                            })
-                          }
-                          disabled={!card.last_review}
-                          title={!card.last_review ? ta('cardStatusNew') : undefined}
-                          className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary) disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {ta('treatAsNew')}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </li>
-              );
-            })
+              visibleDisplayCards.map((card) => (
+                <DeckCardRow
+                  key={card.id}
+                  card={card}
+                  globalIndex={cardGlobalIndexById.get(card.id) ?? 0}
+                  revealed={isRevealed(card.id)}
+                  selected={selectedCardIds.has(card.id)}
+                  locale={locale}
+                  ta={ta}
+                  tc={tc}
+                  getNeighborCard={getNeighborCard}
+                  openingReverseCardId={openingReverseCardId}
+                  onToggleSelect={toggleCardSelection}
+                  onReveal={revealOne}
+                  onHideCard={hideCardFromList}
+                  onEdit={openEditModal}
+                  onInspect={openCardDetailsModal}
+                  onDelete={requestDeleteCard}
+                  onOpenLinked={handleOpenLinkedCard}
+                  onUnlink={requestUnlinkCards}
+                />
+              ))
             )}
           </ul>
+          {needsCardListPagination && displayCards.length > 0 && (
+            <nav
+              className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-(--mc-border-subtle) pt-4 pl-4"
+              aria-label={ta('cardListPaginationNav')}
+            >
+              <p className="text-sm text-(--mc-text-secondary)">
+                {ta('cardListPaginationRange', {
+                  vars: {
+                    from: String(cardListEffectivePage * CARD_LIST_PAGE_SIZE + 1),
+                    to: String(
+                      Math.min((cardListEffectivePage + 1) * CARD_LIST_PAGE_SIZE, displayCards.length)
+                    ),
+                    total: String(displayCards.length),
+                  },
+                })}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={cardListEffectivePage <= 0}
+                  onClick={() => setCardListPage((p) => Math.max(0, p - 1))}
+                  className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  {ta('cardListPrevPage')}
+                </button>
+                <span className="text-sm text-(--mc-text-secondary)" aria-live="polite">
+                  {ta('cardListPageOf', {
+                    vars: {
+                      current: String(cardListEffectivePage + 1),
+                      total: String(cardListTotalPages),
+                    },
+                  })}
+                </span>
+                <button
+                  type="button"
+                  disabled={cardListEffectivePage >= cardListTotalPages - 1}
+                  onClick={() => setCardListPage((p) => p + 1)}
+                  className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  {ta('cardListNextPage')}
+                </button>
+              </div>
+            </nav>
+          )}
         </>
       )}
 
@@ -1911,9 +1789,10 @@ export default function DeckDetailPage() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-card-title"
-          onClick={closeEditModal}
+          onClick={requestCloseEditModal}
         >
           <div
+            ref={editModalPanelRef}
             className="mx-4 w-full max-w-2xl rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1953,7 +1832,7 @@ export default function DeckDetailPage() {
                 </div>
               )}
               {editError && (
-                <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert">
+                <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                   {editError}
                 </p>
               )}
@@ -1965,37 +1844,41 @@ export default function DeckDetailPage() {
                 >
                   {editSaving ? tc('saving') : tc('save')}
                 </button>
-                {editingCard && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      openLinkModalForCard(editingCard);
-                      closeEditModal();
-                    }}
-                    className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                  >
-                    {ta('linkExistingCard') !== 'linkExistingCard' ? ta('linkExistingCard') : 'Link existing card'}
-                  </button>
-                )}
-                {userSettings?.knowledge_enabled && editingCard && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      openGenerateReversedModal(editingCard);
-                      closeEditModal();
-                    }}
-                    className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                  >
-                    {ta('generateReversedCard') !== 'generateReversedCard' ? ta('generateReversedCard') : 'Generate reversed card'}
-                  </button>
-                )}
                 <button
                   type="button"
-                  onClick={closeEditModal}
+                  onClick={requestCloseEditModal}
                   className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
                 >
                   {tc('cancel')}
                 </button>
+                {editingCard && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!confirmDiscardEditIfDirty()) return;
+                        openLinkModalForCard(editingCard);
+                        closeEditModal();
+                      }}
+                      className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
+                    >
+                      {ta('linkExistingCard') !== 'linkExistingCard' ? ta('linkExistingCard') : 'Link existing card'}
+                    </button>
+                    {userSettings?.knowledge_enabled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!confirmDiscardEditIfDirty()) return;
+                          openGenerateReversedModal(editingCard);
+                          closeEditModal();
+                        }}
+                        className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
+                      >
+                        {ta('generateReversedCard') !== 'generateReversedCard' ? ta('generateReversedCard') : 'Generate reversed card'}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </form>
           </div>
@@ -2012,6 +1895,7 @@ export default function DeckDetailPage() {
           onClick={closeGenerateReversedModal}
         >
           <div
+            ref={generateReversedModalPanelRef}
             className="mx-4 w-full max-w-4xl rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2042,7 +1926,7 @@ export default function DeckDetailPage() {
                     t={ta}
                   />
                   {reverseSaveAError && (
-                    <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert">
+                    <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                       {reverseSaveAError}
                     </p>
                   )}
@@ -2098,13 +1982,13 @@ export default function DeckDetailPage() {
                   )}
                   {generateReversedExistingCard ? (
                     reverseSaveBError && (
-                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert">
+                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                         {reverseSaveBError}
                       </p>
                     )
                   ) : (
                     reverseSubmitError && (
-                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert">
+                      <p className="mt-3 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                         {reverseSubmitError}
                       </p>
                     )
@@ -2153,6 +2037,7 @@ export default function DeckDetailPage() {
           onClick={() => setLinkModalCard(null)}
         >
           <div
+            ref={linkModalPanelRef}
             className="mx-4 w-full max-w-md rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2195,7 +2080,7 @@ export default function DeckDetailPage() {
                 </p>
               )}
               {linkModalError && (
-                <p className="mt-2 text-sm text-(--mc-accent-danger)" role="alert">
+                <p className="mt-2 text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                   {linkModalError}
                 </p>
               )}
@@ -2231,6 +2116,7 @@ export default function DeckDetailPage() {
           onClick={closeEditDeckModal}
         >
           <div
+            ref={editDeckModalPanelRef}
             className="mx-4 w-full max-w-lg rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2318,7 +2204,7 @@ export default function DeckDetailPage() {
                 <p className="mt-1 text-xs text-(--mc-text-secondary)">{ta('editDeckCategoriesHint')}</p>
               </div>
               {editDeckError && (
-                <p className="text-sm text-(--mc-accent-danger)" role="alert">
+                <p className="text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">
                   {editDeckError}
                 </p>
               )}
@@ -2352,6 +2238,7 @@ export default function DeckDetailPage() {
           onClick={closeCardDetailsModal}
         >
           <div
+            ref={cardDetailsModalPanelRef}
             className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2372,7 +2259,7 @@ export default function DeckDetailPage() {
               {cardDetailsLoading ? (
                 <p className="text-sm text-(--mc-text-secondary)">{ta('loadingCards')}</p>
               ) : cardDetailsError ? (
-                <p className="text-sm text-(--mc-accent-danger)" role="alert">{cardDetailsError}</p>
+                <p className="text-sm text-(--mc-accent-danger)" role="alert" aria-live="polite">{cardDetailsError}</p>
               ) : (
                 <>
                   <section className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3">
@@ -2589,67 +2476,23 @@ export default function DeckDetailPage() {
                 </>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {cardCategoriesModalCard && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-(--mc-overlay)"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="edit-categories-title"
-          onClick={() => setCardCategoriesModalCard(null)}
-        >
-          <div
-            className="mx-4 max-w-md rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="edit-categories-title" className="text-lg font-semibold text-(--mc-text-primary)">
-              {ta('editCardCategories')}
-            </h3>
-            <p className="mt-1 text-sm text-(--mc-text-secondary)">
-              {ta('cardCategories')}: {allCategories.length === 0 ? ta('noCategoriesYet') : null}
-            </p>
-            {allCategories.length > 0 ? (
-              <ul className="mt-3 max-h-48 overflow-y-auto space-y-2">
-                {allCategories.map((cat) => (
-                  <li key={cat.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`cat-${cat.id}`}
-                      checked={categoryModalSelectedIds.has(cat.id)}
-                      onChange={() => toggleCategoryInModal(cat.id)}
-                      className="h-4 w-4 rounded border-(--mc-border-subtle)"
-                    />
-                    <label htmlFor={`cat-${cat.id}`} className="text-sm text-(--mc-text-primary) cursor-pointer">
-                      {cat.name}
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-sm text-(--mc-text-muted)">
-                {ta('createFirstCategory')} <Link href={`/${locale}/app/categories`} className="text-(--mc-accent-primary) underline">{ta('categoriesTitle')}</Link>
-              </p>
+            {!cardDetailsLoading && !cardDetailsError && cardDetailsCard && (
+              <div className="shrink-0 border-t border-(--mc-border-subtle) px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cid = cardDetailsCard.id;
+                    closeCardDetailsModal();
+                    setConfirmDialog({ type: 'treatAsNew', cardId: cid });
+                  }}
+                  disabled={!cardDetailsCard.last_review || actionLoading}
+                  title={!cardDetailsCard.last_review ? ta('cardStatusNew') : undefined}
+                  className="rounded-lg border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary) disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {ta('treatAsNew')}
+                </button>
+              </div>
             )}
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={saveCardCategories}
-                disabled={categoryModalSaving}
-                className="rounded bg-(--mc-accent-primary) px-3 pt-1 pb-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {categoryModalSaving ? tc('saving') : ta('saveCategories')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setCardCategoriesModalCard(null)}
-                className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
-              >
-                {tc('cancel')}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -2663,6 +2506,7 @@ export default function DeckDetailPage() {
           onClick={() => setConfirmDialog(null)}
         >
           <div
+            ref={confirmDialogPanelRef}
             className="mx-4 max-w-md rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-4 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >

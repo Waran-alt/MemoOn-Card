@@ -9,6 +9,8 @@ import { usePathname } from 'next/navigation';
 import { useLocale } from 'i18n';
 import { useAuthStore } from '@/store/auth.store';
 import { useTranslation } from '@/hooks/useTranslation';
+import type { AuthUser } from '@/types';
+import { AuthHydrate } from './AuthHydrate';
 import { SignOutButton } from './SignOutButton';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ConnectionSyncBanner } from './ConnectionSyncBanner';
@@ -30,7 +32,13 @@ const adminNavItem = { path: '/app/admin', labelKey: 'admin' as const };
 /** Dev nav item: only shown when user.role === 'dev' (technical panels, feature flags). */
 const devNavItem = { path: '/app/dev', labelKey: 'dev' as const };
 
-export function AppLayoutShell({ children }: { children: React.ReactNode }) {
+export function AppLayoutShell({
+  children,
+  serverUser,
+}: {
+  children: React.ReactNode;
+  serverUser: AuthUser;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const { locale } = useLocale();
@@ -207,7 +215,9 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
                     </Link>
                   </div>
                 )}
-                <div className="mx-auto w-full max-w-6xl">{children}</div>
+                <div className="mx-auto w-full max-w-6xl">
+                  <AuthHydrate serverUser={serverUser}>{children}</AuthHydrate>
+                </div>
               </>
             );
           })()}

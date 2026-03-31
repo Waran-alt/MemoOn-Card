@@ -34,7 +34,7 @@ test.describe('Deck detail: card list and card details modal', () => {
     await page.getByRole('button', { name: c('create'), exact: true }).click();
     await expect(page.getByText(recto)).toBeVisible();
 
-    await page.getByRole('button', { name: a('cardDetailsButton') }).first().click();
+    await page.getByRole('button', { name: a('inspectCard') }).first().click();
     await expect(page.getByRole('dialog').getByText(a('cardDetailsTitle'))).toBeVisible();
     await expect(
       page.getByRole('dialog').getByRole('heading', { name: a('cardDetailsLongFsrs') })

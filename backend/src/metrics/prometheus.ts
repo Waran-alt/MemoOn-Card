@@ -19,6 +19,14 @@ const httpRequestsTotal = new client.Counter({
   registers: [register],
 });
 
+/** Wall time for GET /api/decks/:id/cards (list + category enrichment). */
+export const deckCardsListDurationSeconds = new client.Histogram({
+  name: 'memoon_deck_cards_list_duration_seconds',
+  help: 'Duration in seconds of GET /api/decks/:id/cards handler',
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+  registers: [register],
+});
+
 /** Count responses; skip /metrics to avoid scrape noise. */
 export function httpMetricsMiddleware(req: Request, res: Response, next: NextFunction): void {
   if (req.path === '/metrics') {

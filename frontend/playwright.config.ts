@@ -34,6 +34,8 @@ export default defineConfig({
   testDir: './e2e',
   globalTeardown: './e2e/global-teardown.ts',
   fullyParallel: true,
+  /** Cold Next dev compile + AuthHydrate refresh can exceed 30s under parallel workers. */
+  timeout: 60_000,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {

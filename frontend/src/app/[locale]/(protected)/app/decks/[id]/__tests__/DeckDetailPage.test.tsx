@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import DeckDetailPage from '../page';
-import type { Deck, Card } from '@/types';
+import type { Deck, Card, Category } from '@/types';
 
 const mockGet = vi.hoisted(() => vi.fn());
 const mockPost = vi.hoisted(() => vi.fn());
+const mockPut = vi.hoisted(() => vi.fn());
 const mockReplace = vi.fn();
 
 const mockSearchParamsGet = vi.fn();
@@ -16,7 +17,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  default: { get: mockGet, post: mockPost },
+  default: { get: mockGet, post: mockPost, put: mockPut },
   getApiErrorMessage: (_err: unknown, fallback: string) => fallback,
   isRequestCancelled: () => false,
 }));
@@ -119,6 +120,15 @@ describe('DeckDetailPage', () => {
 
   it('opens create card form and submits, then shows card in list', async () => {
     mockPost.mockResolvedValue({ data: { success: true, data: mockCard } });
+    let deckCardsListFetches = 0;
+    wrapDeckPageMockGet((url: string) => {
+      if (url === '/api/decks/deck-123/cards') {
+        deckCardsListFetches += 1;
+        const data = deckCardsListFetches >= 2 ? [mockCard] : [];
+        return Promise.resolve({ data: { success: true, data } });
+      }
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
     render(<DeckDetailPage />);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'My Deck' })).toBeInTheDocument();
@@ -141,7 +151,7 @@ describe('DeckDetailPage', () => {
     });
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: 'Create card' })).not.toBeInTheDocument();
-      const row = screen.getByRole('button', { name: 'View details' }).closest('li');
+      const row = screen.getByRole('button', { name: 'Inspect' }).closest('li');
       expect(row).toBeTruthy();
       expect(row).toHaveTextContent('Front text');
       expect(row).toHaveTextContent('Back text');
@@ -278,6 +288,34 @@ describe('DeckDetailPage', () => {
     expect(screen.getByText(/Fruit/)).toBeInTheDocument();
     expect(screen.queryByText(/Banana/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Yellow/)).not.toBeInTheDocument();
+  });
+
+  it('paginates card list when there are more than 50 cards', async () => {
+    const manyCards: Card[] = Array.from({ length: 55 }, (_, i) => ({
+      ...mockCard,
+      id: `c-${i}`,
+      recto: `Recto-${i}`,
+      verso: 'Back',
+      comment: null,
+    }));
+    wrapDeckPageMockGet((url: string) => {
+      if (url.includes('/cards')) return Promise.resolve({ data: { success: true, data: manyCards } });
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Card 1')).toBeInTheDocument();
+      expect(screen.getByText('Card 50')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Card 51')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('navigation', { name: /Card list pagination/i })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => {
+      expect(screen.getByText('Card 51')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Card 1')).not.toBeInTheDocument();
   });
 
   it('shows no match message when search matches no cards after applying search', async () => {
@@ -472,6 +510,51 @@ describe('DeckDetailPage', () => {
     expect(screen.getByRole('button', { name: 'Show only reviewed' })).toBeInTheDocument();
   });
 
+  it('saves category selection from edit modal', async () => {
+    const catId = 'cat-1';
+    const mockCategory: Category = {
+      id: catId,
+      user_id: 'user-1',
+      name: 'TagA',
+      created_at: '2025-01-01T00:00:00Z',
+    };
+    const card: Card = { ...mockCard, id: 'c1', recto: 'Q', verso: 'A', category_ids: [] };
+    wrapDeckPageMockGet((url: string) => {
+      if (url.includes('/users/me/categories')) {
+        return Promise.resolve({ data: { success: true, data: [mockCategory] } });
+      }
+      if (url.includes('/decks/') && url.endsWith('/cards')) {
+        return Promise.resolve({ data: { success: true, data: [card] } });
+      }
+      return Promise.resolve({ data: { success: true, data: mockDeck } });
+    });
+    mockPut.mockImplementation((url: string) => {
+      if (url.includes('/categories')) {
+        return Promise.resolve({ data: { success: true } });
+      }
+      return Promise.resolve({
+        data: { success: true, data: { ...card, category_ids: [catId] } },
+      });
+    });
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem('memoon_last_studied_deck-123', JSON.stringify(['c1']));
+    }
+    render(<DeckDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const checkbox = await screen.findByRole('checkbox', { name: 'TagA' });
+    await userEvent.click(checkbox);
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(mockPut).toHaveBeenCalledWith(
+        '/api/cards/c1/categories',
+        expect.objectContaining({ categoryIds: [catId] })
+      );
+    });
+  });
+
   it('opens card details modal and shows FSRS section', async () => {
     const cards: Card[] = [
       { ...mockCard, id: 'c1', recto: 'Q', verso: 'A', stability: 1.5, difficulty: 5, comment: null },
@@ -501,9 +584,9 @@ describe('DeckDetailPage', () => {
       expect(screen.getByRole('heading', { name: 'My Deck' })).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'View details' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Inspect' })).toBeInTheDocument();
     });
-    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect' }));
     const detailsDialog = await screen.findByRole('dialog', { name: 'Card data & prediction' });
     await waitFor(() => {
       expect(detailsDialog).toHaveTextContent(/FSRS/);

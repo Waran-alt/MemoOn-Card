@@ -19,6 +19,7 @@ import { createFSRS } from '@/services/fsrs.service';
 import { getElapsedDays } from '@/services/fsrs-time.utils';
 import { KnowledgeService } from '@/services/knowledge.service';
 import type { Card, ImportCardItem } from '@/types/database';
+import { deckCardsListDurationSeconds } from '@/metrics/prometheus';
 
 const router = Router();
 const knowledgeService = new KnowledgeService();
@@ -364,16 +365,21 @@ router.post('/:id/cards/import', validateParams(DeckIdSchema), validateRequest(I
  * Get all cards in a deck
  */
 router.get('/:id/cards', validateParams(DeckIdSchema), asyncHandler(async (req, res) => {
-  const userId = getUserId(req);
-  const deckId = String(req.params.id);
-  const cards = await cardService.getCardsByDeckId(deckId, userId);
-  const categoryMap = await categoryService.getCategoriesByCardIds(cards.map((c) => c.id), userId);
-  const data = cards.map((c) => ({
-    ...c,
-    category_ids: (categoryMap.get(c.id) ?? []).map((cat) => cat.id),
-    categories: categoryMap.get(c.id) ?? [],
-  }));
-  return res.json({ success: true, data });
+  const endTimer = deckCardsListDurationSeconds.startTimer();
+  try {
+    const userId = getUserId(req);
+    const deckId = String(req.params.id);
+    const cards = await cardService.getCardsByDeckId(deckId, userId);
+    const categoryMap = await categoryService.getCategoriesByCardIds(cards.map((c) => c.id), userId);
+    const data = cards.map((c) => ({
+      ...c,
+      category_ids: (categoryMap.get(c.id) ?? []).map((cat) => cat.id),
+      categories: categoryMap.get(c.id) ?? [],
+    }));
+    return res.json({ success: true, data });
+  } finally {
+    endTimer();
+  }
 }));
 
 /**
