@@ -2,12 +2,12 @@
 
 > Revue secrets / HTTPS / deploiement : croiser avec `documentation/private/CODEBASE_AUDIT_GRID.md` (sections 7 et 1).
 
-Mise en place : **push sur `main` ou `master`** → GitHub Actions déclenche le déploiement sur le VPS Hostinger via l’API Hostinger. Le fichier **`docker-compose.deploy.yml`** regroupe l’app prod (**Postgres, backend, frontend**) et la stack **observabilité** (Loki, Promtail, Grafana, Prometheus, cAdvisor) via `include`. Les conteneurs sont construits et relancés automatiquement.
+Mise en place : **push sur `main` ou `master`** → GitHub Actions déclenche le déploiement sur le VPS Hostinger via l’API Hostinger. Le fichier **`docker-compose.deploy.yml`** est une **copie fusionnée** (une seule section `services`) de l’app prod et de l’observabilité : Hostinger exige une section `services` à la racine et n’accepte pas un fichier qui ne contient que `include`. À **maintenir aligné** avec `docker-compose.prod.yml` et `docker-compose.monitoring.yml` si vous modifiez ces fichiers.
 
 ## Prérequis
 
-- Un **VPS Hostinger** avec Docker (template Docker disponible dans le panel) et **Docker Compose plugin ≥ 2.20** (nécessaire pour la directive `include` dans `docker-compose.deploy.yml` ; vérifier avec `docker compose version`).
-- **RAM** : l’observabilité ajoute plusieurs conteneurs ; un VPS très petit peut saturer (surveiller avec `docker stats`).
+- Un **VPS Hostinger** avec Docker (template Docker disponible dans le panel).
+- **RAM** : l’observabilité ajoute plusieurs conteneurs ; un VPS très petit peut saturer (surveiller avec `docker stats`). Le compose impose des **plafonds CPU/mémoire** sur les services de monitoring (`deploy.resources`) et une rétention courte par défaut (Prometheus **7j** via `PROMETHEUS_RETENTION`, Loki **7j** dans `monitoring/loki-config.yaml`). Détail et pistes d’allègement : `monitoring/README.md` section « Ressources (VPS) ».
 - Un dépôt GitHub (public ou privé) avec le code MemoOn-Card.
 
 ## Configuration une fois
@@ -153,7 +153,7 @@ Ou en combinant avec l’app : `yarn docker:prod:monitoring:up` (fusionne `.env`
 
 **Sécurité** : Grafana et Loki sont publiés sur **127.0.0.1** uniquement ; accès via **tunnel SSH** (ex. `ssh -L 3333:127.0.0.1:3333 user@vps`). Définir `GRAFANA_ADMIN_PASSWORD` dans `.env` (voir `env.example`). Ne pas exposer Grafana sur Internet sans protection supplémentaire.
 
-**CI/CD** : le workflow `.github/workflows/deploy-hostinger.yml` utilise **`docker-compose.deploy.yml`**, qui inclut déjà ce monitoring à chaque push (avec les mêmes prérequis Compose ≥ 2.20).
+**CI/CD** : le workflow `.github/workflows/deploy-hostinger.yml` utilise **`docker-compose.deploy.yml`**, qui déploie aussi ce monitoring à chaque push.
 
 ## Réinitialiser la base Postgres et libérer l’espace disque (SSH)
 
@@ -381,7 +381,7 @@ Cela assure que le frontend et le backend utilisent bien l’URL HTTPS en produc
 1. **Workflow** : `.github/workflows/deploy-hostinger.yml`
    - Déclenché sur **push** vers `main` ou `master` (ou manuellement via *workflow_dispatch*).
    - Utilise l’action officielle `hostinger/deploy-on-vps@v2`.
-   - Envoie le repo sur le VPS et exécute **`docker compose -f docker-compose.deploy.yml`** (build + up), fichier qui **inclut** `docker-compose.prod.yml` et `docker-compose.monitoring.yml`.
+   - Envoie le repo sur le VPS et exécute **`docker compose -f docker-compose.deploy.yml`** (build + up), fichier unique fusionnant app et observabilité.
 
 2. **Compose déployé** : `docker-compose.deploy.yml` → app (`postgres`, `backend`, `frontend`) + observabilité (Loki, Promtail, Grafana, Prometheus, cAdvisor).
    - Les variables d’environnement (dont `POSTGRES_PASSWORD`, `JWT_SECRET`, `NEXT_PUBLIC_API_URL`, `CORS_ORIGIN`, `GRAFANA_ADMIN_PASSWORD`) sont fournies par le workflow.
@@ -412,7 +412,7 @@ Si MemoOn-Card est **déjà déployé** sur ce VPS : **rien à adapter**. Chaque
 | Fichier | Rôle |
 |---------|------|
 | `.github/workflows/deploy-hostinger.yml` | Déploiement automatique sur push |
-| `docker-compose.deploy.yml` | Point d’entrée Hostinger : `include` prod + monitoring (Compose ≥ 2.20) |
+| `docker-compose.deploy.yml` | Point d’entrée Hostinger : prod + monitoring fusionnés (aligner avec prod + monitoring si vous les modifiez) |
 | `docker-compose.prod.yml` | Stack prod (Postgres, backend, frontend) |
 | `docker-compose.monitoring.yml` | Loki, Promtail, Grafana, Prometheus, cAdvisor |
 | `backend/Dockerfile` | Image backend (target `runner`) |

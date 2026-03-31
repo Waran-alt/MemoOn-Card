@@ -1,8 +1,9 @@
 # Prometheus scrape config (Docker). Backend target resolves when monitoring compose is merged with app compose (same project network).
 
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  # 30s reduces CPU/disk vs 15s on small VPS; tighten in prometheus.yml if needed.
+  scrape_interval: 30s
+  evaluation_interval: 30s
 
 scrape_configs:
   - job_name: prometheus

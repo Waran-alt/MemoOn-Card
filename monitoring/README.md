@@ -1,11 +1,19 @@
 # Self-hosted observability (Loki + Prometheus + Grafana)
 
-Stack option **1** from the monitoring discussion: centralize **stdout/stderr** (Loki + Promtail) and optional **metrics** (Prometheus scrapes the backend `/metrics` and cAdvisor for container CPU/memory). On Hostinger, **`docker-compose.deploy.yml`** includes this file with the prod stack (same as `yarn docker:deploy:up` locally).
+Stack option **1** from the monitoring discussion: centralize **stdout/stderr** (Loki + Promtail) and optional **metrics** (Prometheus scrapes the backend `/metrics` and cAdvisor for container CPU/memory). On Hostinger, **`docker-compose.deploy.yml`** duplicates this stack alongside prod (keep both YAMLs in sync when you change monitoring). Locally, `yarn docker:deploy:up` uses that file.
 
 ## Prerequisites
 
 - **Linux** Docker host (VPS) or **WSL2** with Docker: Promtail needs `/var/run/docker.sock`.
 - Container names must match `memoon-card-backend`, `memoon-card-frontend`, `memoon-card-postgres` (optional `-prod` suffix). Adjust `monitoring/promtail-config.yaml` if you rename services.
+
+## Ressources (VPS)
+
+Pour limiter CPU/RAM sur un petit serveur, le compose applique **`deploy.resources`** sur cAdvisor, Prometheus, Loki, Promtail et Grafana (Docker Compose v2, mode non-Swarm). Mêmes valeurs dans `docker-compose.monitoring.yml` et `docker-compose.deploy.yml` — à garder alignées.
+
+Limite mémoire indicative par service : cAdvisor 256M, Prometheus 512M, Loki 768M, Promtail 192M, Grafana 256M (CPU plafonné en parallèle, voir les fichiers compose).
+
+**Réduction supplémentaire** : variable **`PROMETHEUS_RETENTION`** (défaut `7d`, ex. `3d`). Loki : **`monitoring/loki-config.yaml`** (`retention_period` 168h par défaut, ingestion limitée). Scrape Prometheus global **30s** dans `monitoring/prometheus.yml`. En cas d’**OOM**, augmenter la limite du service ou réduire la rétention. **cAdvisor** est souvent lourd : sur un VPS minimal, vous pouvez retirer ce service et le job `cadvisor` dans `prometheus.yml` (adapter `depends_on` de Prometheus).
 
 ## Run
 

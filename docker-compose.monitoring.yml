@@ -12,27 +12,9 @@
 # cAdvisor: http://127.0.0.1:${CADVISOR_PORT:-8088}
 # When merged with docker-compose.prod.yml (e.g. docker-compose.deploy.yml), Prometheus
 # also joins `memoon-card-prod` so it can scrape `backend:4002`.
+# deploy.resources: keep in sync with docker-compose.deploy.yml (VPS caps).
 
 services:
-  prometheus:
-    image: prom/prometheus:v3.1.0
-    container_name: memoon-card-prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.enable-lifecycle'
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
-    networks:
-      - memoon-monitoring
-      - memoon-card-prod
-    depends_on:
-      - cadvisor
-    restart: unless-stopped
-
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: memoon-card-cadvisor
@@ -47,6 +29,40 @@ services:
     networks:
       - memoon-monitoring
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: memoon-card-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-7d}'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - memoon-monitoring
+      - memoon-card-prod
+    depends_on:
+      - cadvisor
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          memory: 256M
 
   loki:
     image: grafana/loki:3.3.2
@@ -60,6 +76,13 @@ services:
     networks:
       - memoon-monitoring
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 768M
+        reservations:
+          memory: 384M
 
   promtail:
     image: grafana/promtail:3.3.2
@@ -75,6 +98,13 @@ services:
     networks:
       - memoon-monitoring
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          memory: 96M
 
   grafana:
     image: grafana/grafana:11.4.0
@@ -85,6 +115,8 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_HTTP_PORT: 3000
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:3333}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
@@ -96,6 +128,13 @@ services:
     networks:
       - memoon-monitoring
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          memory: 128M
 
 volumes:
   prometheus_data:

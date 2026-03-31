@@ -1,5 +1,5 @@
 # Production stack for MemoOn-Card (e.g. Hostinger VPS).
-# Standalone: yarn docker:prod:up. Hostinger: included by docker-compose.deploy.yml with monitoring.
+# Standalone: yarn docker:prod:up. Hostinger: same services are copied into docker-compose.deploy.yml (keep in sync).
 #
 # Migrations: run by the backend at startup (Liquibase in backend image), no separate migrate container.
 #

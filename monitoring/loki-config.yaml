@@ -1,4 +1,4 @@
-# Single-node Loki (filesystem). Tune limits_config.retention_period as needed.
+# Single-node Loki (filesystem). retention_period caps disk; raise (e.g. 336h) for longer history.
 # delete_request_store must be a storage client name (e.g. named filesystem store), not a path.
 
 auth_enabled: false
@@ -42,8 +42,8 @@ compactor:
   delete_request_store: delete_requests
 
 limits_config:
-  retention_period: 336h
+  retention_period: 168h
   reject_old_samples: true
   reject_old_samples_max_age: 168h
-  ingestion_rate_mb: 16
-  ingestion_burst_size_mb: 32
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
