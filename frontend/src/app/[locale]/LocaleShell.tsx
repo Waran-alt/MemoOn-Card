@@ -1,11 +1,17 @@
 'use client';
 
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { initClientErrorReporting } from '@/lib/clientErrorReporter';
 
 export function LocaleShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isProtectedAppRoute = pathname?.includes('/app');
+
+  useEffect(() => {
+    initClientErrorReporting();
+  }, []);
 
   return (
     <>

@@ -4,7 +4,8 @@
  * Middleware order (do not reorder lightly):
  * security headers → request id → CORS → **global** `/api/` rate limit → cookies → body parser →
  * public routes (`/health`, `/api/auth`, `/api/version`) → **then** `csrfProtection` on `/api` →
- * authenticated routers. Auth and version are registered **before** CSRF so login/refresh/session stay exempt.
+ * public `POST /api/client-errors` (browser reports, no auth) → authenticated routers.
+ * Auth routes are registered **before** CSRF so login/refresh/session stay exempt.
  *
  * Business logic: `services/`. Request validation: `schemas/` (Zod). DB pool: `config/database.ts`.
  *
@@ -34,6 +35,7 @@ import reviewsRoutes from './routes/reviews.routes';
 import optimizationRoutes from './routes/optimization.routes';
 import fsrsMetricsRoutes from './routes/fsrs-metrics.routes';
 import studyRoutes from './routes/study.routes';
+import clientErrorsRoutes from './routes/client-errors.routes';
 import adminRoutes from './routes/admin.routes';
 import devRoutes from './routes/dev.routes';
 import { FsrsMetricsJobService } from './services/fsrs-metrics-job.service';
@@ -170,6 +172,7 @@ app.get('/api/version', (_req: Request, res: Response) => {
 // API Routes (require authentication + CSRF protection)
 // CSRF protection applies to state-changing methods (POST, PUT, DELETE, PATCH)
 app.use('/api', csrfProtection);
+app.use('/api/client-errors', clientErrorsRoutes);
 app.use('/api/users', authMiddleware, usersRoutes);
 app.use('/api/user', authMiddleware, userRoutes);
 app.use('/api/decks', authMiddleware, decksRoutes);

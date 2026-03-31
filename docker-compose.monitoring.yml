@@ -1,0 +1,69 @@
+# Self-hosted logs: Loki + Promtail + Grafana.
+# Run on the Docker host (same machine as app containers). Promtail reads the Docker socket.
+#
+# Start (prod VPS, after app stack):
+#   docker compose -f docker-compose.monitoring.yml --env-file .env up -d
+#
+# Or combine with app compose:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml --env-file .env up -d
+#
+# Grafana: http://127.0.0.1:${GRAFANA_PORT:-3333} (SSH tunnel or VPN only in production).
+# Explore -> Loki -> e.g. {container=~"memoon-card-backend.*"} |= "error"
+
+services:
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: memoon-card-loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./monitoring/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    networks:
+      - memoon-monitoring
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: memoon-card-promtail
+    user: root
+    volumes:
+      - ./monitoring/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/tmp
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
+    networks:
+      - memoon-monitoring
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: memoon-card-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_PORT: 3000
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:3333}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3333}:3000"
+    depends_on:
+      - loki
+    networks:
+      - memoon-monitoring
+    restart: unless-stopped
+
+volumes:
+  loki_data:
+  promtail_positions:
+  grafana_data:
+
+networks:
+  memoon-monitoring:
+    driver: bridge
