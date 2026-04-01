@@ -544,8 +544,8 @@ describe('DeckDetailPage', () => {
       expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     });
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    const checkbox = await screen.findByRole('checkbox', { name: 'TagA' });
-    await userEvent.click(checkbox);
+    const addTagA = await screen.findByRole('button', { name: 'Add TagA' });
+    await userEvent.click(addTagA);
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => {
       expect(mockPut).toHaveBeenCalledWith(

@@ -3,6 +3,7 @@
 import { memo } from 'react';
 import type { Card } from '@/types';
 import type { TranslationOptions } from '@/hooks/useTranslation';
+import { CategoryBadgePill } from './CategoryBadgePill';
 import { formatCardDateOrTime, previewCardRecto } from './deckDetailHelpers';
 
 export type DeckCardRowT = (key: string, options?: TranslationOptions) => string;
@@ -116,12 +117,7 @@ export const DeckCardRow = memo(function DeckCardRow({
           {(card.categories?.length ?? 0) > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
               {card.categories!.map((c) => (
-                <span
-                  key={c.id}
-                  className="rounded bg-(--mc-bg-card-back) px-1.5 py-0.5 text-xs text-(--mc-text-secondary)"
-                >
-                  {c.name}
-                </span>
+                <CategoryBadgePill key={c.id}>{c.name}</CategoryBadgePill>
               ))}
             </div>
           )}

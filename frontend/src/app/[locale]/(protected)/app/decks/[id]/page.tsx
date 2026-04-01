@@ -22,7 +22,10 @@ import {
   getTimingEventColor,
   cardMatchesSearch,
 } from './deckDetailHelpers';
+import { CategoryBadgePill } from './CategoryBadgePill';
 import { CardLinkCombobox } from './CardLinkCombobox';
+import { EditCardCategoryPicker } from './EditCardCategoryPicker';
+import { IconXMark } from './DeckUiIcons';
 import { useCreateCardForm } from './useCreateCardForm';
 
 const { DECK_TITLE_MAX, DECK_DESCRIPTION_MAX } = VALIDATION_LIMITS;
@@ -1639,10 +1642,10 @@ export default function DeckDetailPage() {
               <button
                 type="button"
                 onClick={() => setReverseCardError(null)}
-                className="shrink-0 text-sm font-medium text-(--mc-text-secondary) hover:text-(--mc-text-primary)"
+                className="shrink-0 rounded p-0.5 text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
                 aria-label={tc('dismiss') !== 'dismiss' ? tc('dismiss') : 'Dismiss'}
               >
-                ×
+                <IconXMark className="h-5 w-5" />
               </button>
             </div>
           )}
@@ -1873,26 +1876,50 @@ export default function DeckDetailPage() {
                   onCommentChange={setEditComment}
                   t={ta}
                 />
-                {editModalCategories.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-sm font-medium text-(--mc-text-primary) mb-2">{ta('cardCategories')}</p>
-                    <ul className="space-y-1.5 max-h-32 overflow-y-auto">
-                      {editModalCategories.map((cat) => (
-                        <li key={cat.id} className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`edit-cat-${cat.id}`}
-                            checked={editModalSelectedIds.has(cat.id)}
-                            onChange={() => toggleEditModalCategory(cat.id)}
-                            className="h-4 w-4 rounded border-(--mc-border-subtle)"
-                          />
-                          <label htmlFor={`edit-cat-${cat.id}`} className="text-sm text-(--mc-text-primary) cursor-pointer">
-                            {cat.name}
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                {editingCard && (
+                  <EditCardCategoryPicker
+                    key={editingCard.id}
+                    idPrefix="edit"
+                    categories={editModalCategories}
+                    selectedIds={editModalSelectedIds}
+                    onToggle={toggleEditModalCategory}
+                    sectionLabel={ta('cardCategories')}
+                    addSectionLabel={
+                      ta('editCategoryAddSection') !== 'editCategoryAddSection'
+                        ? ta('editCategoryAddSection')
+                        : 'Add categories'
+                    }
+                    searchPlaceholder={
+                      ta('editCategorySearchPlaceholder') !== 'editCategorySearchPlaceholder'
+                        ? ta('editCategorySearchPlaceholder')
+                        : 'Search categories to add…'
+                    }
+                    noMatchMessage={
+                      ta('editCategoryNoMatch') !== 'editCategoryNoMatch'
+                        ? ta('editCategoryNoMatch')
+                        : 'No category matches your search.'
+                    }
+                    noCategoriesMessage={
+                      ta('editCategoryNoCategoriesInDeck') !== 'editCategoryNoCategoriesInDeck'
+                        ? ta('editCategoryNoCategoriesInDeck')
+                        : 'This deck has no categories yet.'
+                    }
+                    noneSelectedHint={
+                      ta('editCategoryNoneSelected') !== 'editCategoryNoneSelected'
+                        ? ta('editCategoryNoneSelected')
+                        : 'No categories on this card. Search below to add some.'
+                    }
+                    getRemoveAriaLabel={(name) =>
+                      ta('editCategoryRemoveAria') !== 'editCategoryRemoveAria'
+                        ? ta('editCategoryRemoveAria', { vars: { name } })
+                        : `Remove ${name}`
+                    }
+                    getAddAriaLabel={(name) =>
+                      ta('editCategoryAddAria') !== 'editCategoryAddAria'
+                        ? ta('editCategoryAddAria', { vars: { name } })
+                        : `Add ${name}`
+                    }
+                  />
                 )}
                 {(editSaveSuccessMessage || editError) && (
                   <div className="mt-3 space-y-2">
@@ -2084,19 +2111,14 @@ export default function DeckDetailPage() {
                                       <div className="flex flex-wrap gap-1">
                                         {(nb.categories?.length ?? 0) > 0
                                           ? nb.categories!.map((c) => (
-                                              <span
-                                                key={c.id}
-                                                className="rounded bg-(--mc-bg-card-back) px-1.5 py-0.5 text-xs text-(--mc-text-secondary)"
-                                              >
-                                                {c.name}
-                                              </span>
+                                              <CategoryBadgePill key={c.id}>{c.name}</CategoryBadgePill>
                                             ))
                                           : (
-                                              <span className="rounded bg-(--mc-bg-card-back) px-1.5 py-0.5 text-xs text-(--mc-text-secondary)">
+                                              <CategoryBadgePill>
                                                 {ta('linkedCardNoCategories') !== 'linkedCardNoCategories'
                                                   ? ta('linkedCardNoCategories')
                                                   : 'No category'}
-                                              </span>
+                                              </CategoryBadgePill>
                                             )}
                                       </div>
                                     </div>
@@ -2433,7 +2455,7 @@ export default function DeckDetailPage() {
                 className="rounded p-1 text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
                 aria-label={tc('close')}
               >
-                ×
+                <IconXMark className="h-5 w-5" />
               </button>
             </div>
             <div className="min-h-0 overflow-y-auto p-4 space-y-4">

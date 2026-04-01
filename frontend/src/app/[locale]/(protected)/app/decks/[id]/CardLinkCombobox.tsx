@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Card } from '@/types';
 import { previewCardRecto } from './deckDetailHelpers';
+import { IconXMark } from './DeckUiIcons';
 
 function cardFilterBlob(card: Card): string {
   const r = card.recto.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -179,10 +180,10 @@ export function CardLinkCombobox({
           <button
             type="button"
             onClick={clearSelection}
-            className="shrink-0 self-start rounded border border-(--mc-border-subtle) px-2 py-1 text-xs font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
+            className="shrink-0 self-start rounded border border-(--mc-border-subtle) px-1 py-1 text-xs font-medium text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back)"
             aria-label={clearSelectionLabel}
           >
-            ×
+            <IconXMark className="h-4 w-4" />
           </button>
         </div>
       )}
