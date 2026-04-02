@@ -327,9 +327,9 @@ export default function DeckDetailPage() {
     return m;
   }, [cards]);
 
-  /** Reload deck cards from API after mutations (strategy A). */
-  const refetchDeckCardsList = useCallback(async (reason: string): Promise<boolean> => {
-    if (!id) return false;
+  /** Reload deck cards from API after mutations (strategy A). Returns the fresh list, or null on failure. */
+  const refetchDeckCardsList = useCallback(async (reason: string): Promise<Card[] | null> => {
+    if (!id) return null;
     const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
     try {
       const res = await apiClient.get<{ success: boolean; data?: Card[] }>(`/api/decks/${id}/cards`);
@@ -337,16 +337,17 @@ export default function DeckDetailPage() {
       const ok = res.data?.success === true && Array.isArray(res.data.data);
       recordDeckCardsListClientTiming(reason, elapsed, ok);
       if (ok) {
-        setCards(res.data!.data!);
-        return true;
+        const list = res.data!.data!;
+        setCards(list);
+        return list;
       }
-      return false;
+      return null;
     } catch (err) {
       const elapsed = typeof performance !== 'undefined' ? performance.now() - t0 : 0;
       if (!isRequestCancelled(err)) {
         recordDeckCardsListClientTiming(reason, elapsed, false);
       }
-      return false;
+      return null;
     }
   }, [id]);
 
@@ -651,8 +652,8 @@ export default function DeckDetailPage() {
           await apiClient.put(`/api/cards/${editingCard.id}/categories`, {
             categoryIds: Array.from(editModalSelectedIds),
           });
-          const ok = await refetchDeckCardsList('edit_card');
-          if (!ok) setCardsError(ta('failedLoadCards'));
+          const refetchedList = await refetchDeckCardsList('edit_card');
+          if (refetchedList === null) setCardsError(ta('failedLoadCards'));
           const catIds = Array.from(editModalSelectedIds);
           const merged: Card = {
             ...updated,
@@ -693,8 +694,8 @@ export default function DeckDetailPage() {
       setActionLoading(true);
       Promise.all(ids.map((cardId) => apiClient.delete(`/api/cards/${cardId}`)))
         .then(async () => {
-          const ok = await refetchDeckCardsList('bulk_delete');
-          if (!ok) setCardsError(ta('failedLoadCards'));
+          const refetchedList = await refetchDeckCardsList('bulk_delete');
+          if (refetchedList === null) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => {
             const next = new Set(prev);
             ids.forEach((delId) => next.delete(delId));
@@ -721,8 +722,8 @@ export default function DeckDetailPage() {
         .delete<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/links/${otherCardId}`)
         .then(async (res) => {
           if (res.data?.success && res.data.data) {
-            const ok = await refetchDeckCardsList('unlink');
-            if (!ok) setCardsError(ta('failedLoadCards'));
+            const refetchedList = await refetchDeckCardsList('unlink');
+            if (refetchedList === null) setCardsError(ta('failedLoadCards'));
           }
         })
         .catch(() => {})
@@ -743,8 +744,8 @@ export default function DeckDetailPage() {
       apiClient
         .delete(`/api/cards/${cardId}`)
         .then(async () => {
-          const ok = await refetchDeckCardsList('delete_card');
-          if (!ok) setCardsError(ta('failedLoadCards'));
+          const refetchedList = await refetchDeckCardsList('delete_card');
+          if (refetchedList === null) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => {
             const next = new Set(prev);
             next.delete(cardId);
@@ -766,8 +767,8 @@ export default function DeckDetailPage() {
         .post<{ success: boolean; data?: Card }>(`/api/cards/${cardId}/reset-stability`)
         .then(async (res) => {
           if (res.data?.success && res.data.data) {
-            const ok = await refetchDeckCardsList('treat_as_new');
-            if (!ok) setCardsError(ta('failedLoadCards'));
+            const refetchedList = await refetchDeckCardsList('treat_as_new');
+            if (refetchedList === null) setCardsError(ta('failedLoadCards'));
           }
         })
         .catch(() => {})
@@ -831,8 +832,8 @@ export default function DeckDetailPage() {
       .then(async (results) => {
         const anyOk = results.some((r) => r.data?.success && r.data.data);
         if (anyOk) {
-          const ok = await refetchDeckCardsList('bulk_treat_as_new');
-          if (!ok) setCardsError(ta('failedLoadCards'));
+          const refetchedList = await refetchDeckCardsList('bulk_treat_as_new');
+          if (refetchedList === null) setCardsError(ta('failedLoadCards'));
         }
         setSelectedCardIds(new Set());
       })
@@ -881,8 +882,8 @@ export default function DeckDetailPage() {
           if (res.data?.success && res.data.data) {
             const data = res.data.data;
             const newCards = Array.isArray(data) ? data : [data];
-            const ok = await refetchDeckCardsList('create_bulk');
-            if (!ok) setCardsError(ta('failedLoadCards'));
+            const refetchedList = await refetchDeckCardsList('create_bulk');
+            if (refetchedList === null) setCardsError(ta('failedLoadCards'));
             setRevealedCardIds((prev) => new Set([...prev, ...newCards.map((c) => c.id)]));
             closeCreateModal();
           } else {
@@ -911,10 +912,12 @@ export default function DeckDetailPage() {
               }
             }
             const newId = res.data!.data!.id;
-            const ok = await refetchDeckCardsList('create_card');
-            if (!ok) setCardsError(ta('failedLoadCards'));
+            const refetchedList = await refetchDeckCardsList('create_card');
+            if (refetchedList === null) setCardsError(ta('failedLoadCards'));
             setRevealedCardIds((prev) => new Set(prev).add(newId));
+            const cardToEdit = refetchedList?.find((c) => c.id === newId) ?? newCard;
             closeCreateModal();
+            openEditModal(cardToEdit);
           } else {
             setCreateError(tc('invalidResponse'));
           }
@@ -948,8 +951,8 @@ export default function DeckDetailPage() {
         if (res.data?.success && res.data.data) {
           const data = res.data.data;
           const newCards = Array.isArray(data) ? data : [data];
-          const ok = await refetchDeckCardsList('create_bulk_auto_reverse');
-          if (!ok) setCardsError(ta('failedLoadCards'));
+          const refetchedList = await refetchDeckCardsList('create_bulk_auto_reverse');
+          if (refetchedList === null) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => new Set([...prev, ...newCards.map((c) => c.id)]));
           closeCreateModal();
         } else {
@@ -983,8 +986,8 @@ export default function DeckDetailPage() {
       });
       if (r.data?.success && r.data.data) {
         const cardB = r.data.data;
-        const ok = await refetchDeckCardsList('create_with_reversed_pair');
-        if (!ok) setCardsError(ta('failedLoadCards'));
+        const refetchedList = await refetchDeckCardsList('create_with_reversed_pair');
+        if (refetchedList === null) setCardsError(ta('failedLoadCards'));
         setRevealedCardIds((prev) => new Set([...prev, cardA.id, cardB.id]));
         closeCreateModal();
       } else {
@@ -1025,10 +1028,12 @@ export default function DeckDetailPage() {
               // best-effort
             }
           }
-          const ok = await refetchDeckCardsList('create_card_a_only');
-          if (!ok) setCardsError(ta('failedLoadCards'));
+          const refetchedList = await refetchDeckCardsList('create_card_a_only');
+          if (refetchedList === null) setCardsError(ta('failedLoadCards'));
           setRevealedCardIds((prev) => new Set(prev).add(newCard.id));
+          const cardToEdit = refetchedList?.find((c) => c.id === newCard.id) ?? newCard;
           closeCreateModal();
+          openEditModal(cardToEdit);
         } else {
           setCreateError(tc('invalidResponse'));
         }
@@ -1084,8 +1089,8 @@ export default function DeckDetailPage() {
           .then(async (r) => {
             if (r.data?.success && r.data.data) {
               const newBId = r.data.data.id;
-              const ok = await refetchDeckCardsList('create_card_then_reversed_b');
-              if (!ok) setCardsError(ta('failedLoadCards'));
+              const refetchedList = await refetchDeckCardsList('create_card_then_reversed_b');
+              if (refetchedList === null) setCardsError(ta('failedLoadCards'));
               setRevealedCardIds((prev) => new Set([...prev, cardA.id, newBId]));
               closeCreateModal();
             } else {
@@ -1138,8 +1143,8 @@ export default function DeckDetailPage() {
       });
       if (res.data?.success && res.data.data) {
         const updated = res.data.data;
-        const ok = await refetchDeckCardsList('reverse_modal_save_a');
-        if (!ok) setCardsError(ta('failedLoadCards'));
+        const refetchedList = await refetchDeckCardsList('reverse_modal_save_a');
+        if (refetchedList === null) setCardsError(ta('failedLoadCards'));
         setGenerateReversedSourceCard(updated);
         setReverseRectoA(updated.recto);
         setReverseVersoA(updated.verso);
@@ -1174,8 +1179,8 @@ export default function DeckDetailPage() {
       });
       if (res.data?.success && res.data.data) {
         const updated = res.data.data;
-        const ok = await refetchDeckCardsList('reverse_modal_save_b');
-        if (!ok) setCardsError(ta('failedLoadCards'));
+        const refetchedList = await refetchDeckCardsList('reverse_modal_save_b');
+        if (refetchedList === null) setCardsError(ta('failedLoadCards'));
         setGenerateReversedExistingCard(updated);
         setReverseRectoB(updated.recto);
         setReverseVersoB(updated.verso);
@@ -1210,10 +1215,12 @@ export default function DeckDetailPage() {
       });
       if (res.data?.success && res.data.data) {
         const newCard = res.data.data;
-        const ok = await refetchDeckCardsList('reverse_modal_create_b');
-        if (!ok) setCardsError(ta('failedLoadCards'));
+        const refetchedList = await refetchDeckCardsList('reverse_modal_create_b');
+        if (refetchedList === null) setCardsError(ta('failedLoadCards'));
         setRevealedCardIds((prev) => new Set(prev).add(newCard.id));
+        const cardToEdit = refetchedList?.find((c) => c.id === newCard.id) ?? newCard;
         closeGenerateReversedModal();
+        openEditModal(cardToEdit);
       } else {
         setReverseSubmitError(ta('failedGenerateReversedCard') !== 'failedGenerateReversedCard' ? ta('failedGenerateReversedCard') : 'Could not create reversed card.');
       }
@@ -1234,8 +1241,8 @@ export default function DeckDetailPage() {
         otherCardId: editLinkSelectedId,
       });
       if (res.data?.success && res.data.data) {
-        const ok = await refetchDeckCardsList('link_cards');
-        if (!ok) setCardsError(ta('failedLoadCards'));
+        const refetchedList = await refetchDeckCardsList('link_cards');
+        if (refetchedList === null) setCardsError(ta('failedLoadCards'));
         setEditLinkSelectedId('');
       } else {
         setEditLinkError(tc('invalidResponse'));
@@ -1862,29 +1869,14 @@ export default function DeckDetailPage() {
                     {tc('cancel')}
                   </button>
                   {editingCard && (
-                    <>
-                      {userSettings?.knowledge_enabled && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!confirmDiscardEditIfDirty()) return;
-                            openGenerateReversedModal(editingCard);
-                            closeEditModal();
-                          }}
-                          className="rounded border border-(--mc-border-subtle) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-                        >
-                          {ta('generateReversedCard') !== 'generateReversedCard' ? ta('generateReversedCard') : 'Generate reversed card'}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={editSaving}
-                        onClick={() => requestDeleteCard(editingCard.id)}
-                        className="rounded border border-(--mc-accent-danger) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-accent-danger) transition-colors hover:bg-(--mc-accent-danger)/10 disabled:opacity-50"
-                      >
-                        {ta('deleteCard')}
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      disabled={editSaving}
+                      onClick={() => requestDeleteCard(editingCard.id)}
+                      className="rounded border border-(--mc-accent-danger) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-accent-danger) transition-colors hover:bg-(--mc-accent-danger)/10 disabled:opacity-50"
+                    >
+                      {ta('deleteCard')}
+                    </button>
                   )}
                 </div>
               </form>
@@ -1894,6 +1886,26 @@ export default function DeckDetailPage() {
               className="pointer-events-auto flex w-full max-w-xl flex-col gap-3 lg:w-88 lg:max-w-88 lg:shrink-0"
               onClick={(e) => e.stopPropagation()}
             >
+              {editingCard && (
+                <div className="w-full rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-4 shadow-xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!confirmDiscardEditIfDirty()) return;
+                      openGenerateReversedModal(editingCard);
+                      closeEditModal();
+                    }}
+                    className="w-full rounded-lg border border-(--mc-accent-primary) bg-transparent px-4 py-2.5 text-sm font-medium text-(--mc-accent-primary) transition-colors hover:bg-(--mc-accent-primary)/10"
+                  >
+                    {ta('createLinkedCard') !== 'createLinkedCard' ? ta('createLinkedCard') : 'Create a linked card'}
+                  </button>
+                  <p className="mt-2 text-xs text-(--mc-text-secondary) leading-snug">
+                    {ta('createLinkedCardHint') !== 'createLinkedCardHint'
+                      ? ta('createLinkedCardHint')
+                      : 'Opens the editor to add a new card linked to this one (e.g. reversed faces).'}
+                  </p>
+                </div>
+              )}
               <div className="w-full rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-4 shadow-xl">
                 <h4 className="text-sm font-semibold text-(--mc-text-primary)">
                   {ta('linkExistingCard') !== 'linkExistingCard' ? ta('linkExistingCard') : 'Link existing card'}

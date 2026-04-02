@@ -138,19 +138,22 @@ describe('DeckDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Create card' })).toBeInTheDocument();
     });
-    await userEvent.type(screen.getByLabelText(/Front \(recto\)/), 'Front text');
-    await userEvent.type(screen.getByLabelText(/Back \(verso\)/), 'Back text');
+    await userEvent.type(screen.getByLabelText(/Front \(recto\)/), 'Q');
+    await userEvent.type(screen.getByLabelText(/Back \(verso\)/), 'A');
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith('/api/decks/deck-123/cards', {
-        recto: 'Front text',
-        verso: 'Back text',
+        recto: 'Q',
+        verso: 'A',
         comment: undefined,
       });
     });
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: 'Create card' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Edit card' })).toBeInTheDocument();
+      expect(screen.getByLabelText(/Front \(recto\)/)).toHaveValue('Front text');
+      expect(screen.getByLabelText(/Back \(verso\)/)).toHaveValue('Back text');
       const row = screen.getByRole('button', { name: 'Inspect' }).closest('li');
       expect(row).toBeTruthy();
       expect(row).toHaveTextContent('Front text');
