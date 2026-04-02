@@ -1767,10 +1767,12 @@ export default function DeckDetailPage() {
         >
           <div
             ref={editModalShellRef}
-            className="pointer-events-auto flex max-h-[90vh] w-full max-w-6xl flex-col items-center gap-3 overflow-y-auto lg:flex-row lg:items-start lg:justify-center lg:gap-4 lg:overflow-visible"
-            onClick={(e) => e.stopPropagation()}
+            className="pointer-events-none flex max-h-[90vh] w-full max-w-6xl flex-col items-center gap-3 overflow-y-auto lg:flex-row lg:items-start lg:justify-center lg:gap-4 lg:overflow-visible"
           >
-            <div className="w-full max-w-xl shrink-0 rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl">
+            <div
+              className="pointer-events-auto w-full max-w-xl shrink-0 rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <h3 id="edit-card-title" className="text-lg font-semibold text-(--mc-text-primary)">
                 {ta('editCardTitle')}
               </h3>
@@ -1888,7 +1890,10 @@ export default function DeckDetailPage() {
               </form>
             </div>
 
-            <div className="flex w-full max-w-xl flex-col gap-3 lg:w-88 lg:max-w-88 lg:shrink-0">
+            <div
+              className="pointer-events-auto flex w-full max-w-xl flex-col gap-3 lg:w-88 lg:max-w-88 lg:shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="w-full rounded-xl border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-4 shadow-xl">
                 <h4 className="text-sm font-semibold text-(--mc-text-primary)">
                   {ta('linkExistingCard') !== 'linkExistingCard' ? ta('linkExistingCard') : 'Link existing card'}
