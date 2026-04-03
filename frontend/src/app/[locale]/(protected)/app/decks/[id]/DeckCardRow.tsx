@@ -60,7 +60,7 @@ export const DeckCardRow = memo(function DeckCardRow({
   /** Top-left inside the card; stays above the masked overlay (z-20). */
   const checkboxInCard = (
     <label
-      className="absolute left-2.5 top-2.5 z-20 flex cursor-pointer rounded-md bg-(--mc-bg-surface)/95 p-0.5 shadow-sm ring-1 ring-(--mc-border-subtle)/80 backdrop-blur-sm"
+      className="absolute left-2.5 top-2.5 z-20 flex cursor-pointer rounded-md bg-(--mc-bg-surface)/95 p-0.5 shadow-sm backdrop-blur-sm"
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
