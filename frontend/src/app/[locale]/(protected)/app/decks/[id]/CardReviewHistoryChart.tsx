@@ -73,13 +73,47 @@ type Props = {
   formatLogGap: (deltaMs: number | null) => string;
 };
 
-const M = { top: 26, right: 46, bottom: 54, left: 50 };
+/** Top margin reduced: S/D/R legends live below the SVG. */
+const M = { top: 14, right: 46, bottom: 54, left: 50 };
 /** Bottom band: x-axis ticks, gaps between logs, review-order caption. */
 const R_BAND = 64;
+/** Height of the day damier strip (top of the x-axis band, under plot edge; ticks draw on top). */
+const DAY_BAND_H = 10;
 const CHART_MIN_WIDTH = 280;
 const CHART_HEIGHT = 280;
 /** Minimum horizontal distance between two consecutive logs (index axis mode). */
 const MIN_LOG_GAP_PX = 35;
+
+/** Strong enough contrast vs card background; CSS vars alone were often too subtle. */
+const DAY_BAND_FILL_A = 'color-mix(in oklab, var(--mc-bg-page) 100%, transparent)';
+const DAY_BAND_FILL_B = 'color-mix(in oklab, var(--mc-text-primary) 10%, var(--mc-bg-page))';
+
+function startOfLocalDay(d: Date): Date {
+  const x = new Date(d.getTime());
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function addLocalDays(d: Date, n: number): Date {
+  const x = new Date(d.getTime());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+/** Stable local-calendar key for grouping logs by day. */
+function dayKeyLocal(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Consistent 0/1 stripe for a calendar day (alternates by day). */
+function stripeFromDayKey(key: string): number {
+  const parts = key.split('-').map(Number);
+  const y = parts[0]!;
+  const mo = parts[1]!;
+  const d = parts[2]!;
+  return Math.floor(Date.UTC(y, mo - 1, d) / 86_400_000) % 2;
+}
 
 export function CardReviewHistoryChart({
   logs,
@@ -223,14 +257,114 @@ export function CardReviewHistoryChart({
 
     const g = svg.append('g').attr('transform', `translate(${M.left},${M.top})`);
 
+    /** Area below the damier: gaps, axis caption (damier sits under ticks at lineH). */
     g.append('rect')
       .attr('x', 0)
-      .attr('y', lineH)
+      .attr('y', lineH + DAY_BAND_H)
       .attr('width', innerW)
-      .attr('height', R_BAND)
-      .attr('rx', 4)
-      // CSS variables in SVG presentation attributes often fail to resolve (fallback #000)
+      .attr('height', R_BAND - DAY_BAND_H)
       .style('fill', 'var(--mc-bg-page)');
+
+    const dayBandsG = g
+      .append('g')
+      .attr('class', 'chart-x-day-bands')
+      .attr('transform', `translate(0,${lineH})`);
+
+    const pushDayBand = (x1: number, x2: number, stripe: number) => {
+      const left = Math.max(0, Math.min(innerW, x1));
+      const right = Math.max(0, Math.min(innerW, x2));
+      if (right <= left) return;
+      dayBandsG
+        .append('rect')
+        .attr('x', left)
+        .attr('y', 0)
+        .attr('width', right - left)
+        .attr('height', DAY_BAND_H)
+        .style('fill', stripe % 2 === 0 ? DAY_BAND_FILL_A : DAY_BAND_FILL_B)
+        .style('stroke', 'var(--mc-border-subtle)')
+        .style('stroke-width', 0.5)
+        .style('stroke-opacity', 0.45)
+        .style('pointer-events', 'none');
+    };
+
+    if (useTimeX) {
+      const domainStart = new Date(tMin - padT);
+      const domainEnd = new Date(tMax + padT);
+      let cur = startOfLocalDay(domainStart);
+      let stripe = 0;
+      while (cur.getTime() < domainEnd.getTime()) {
+        const next = addLocalDays(cur, 1);
+        const x1 = xTime(cur);
+        const x2 = xTime(next);
+        pushDayBand(x1, x2, stripe);
+        stripe += 1;
+        cur = next;
+      }
+    } else {
+      /**
+       * Full calendar strip in index mode: within each horizontal segment (margin or
+       * between consecutive logs), map time linearly to x and fill with one rect per
+       * local calendar day (empty days appear as stripes in long gaps).
+       */
+      const appendCalendarStripesForTimeSegment = (
+        t0: number,
+        t1: number,
+        xLeft: number,
+        xRight: number
+      ) => {
+        if (t1 <= t0) return;
+        const dur = t1 - t0;
+        let cur = startOfLocalDay(new Date(t0));
+        while (cur.getTime() < t1) {
+          const next = addLocalDays(cur, 1);
+          const segT0 = Math.max(t0, cur.getTime());
+          const segT1 = Math.min(t1, next.getTime());
+          if (segT0 < segT1) {
+            const xl = xLeft + ((segT0 - t0) / dur) * (xRight - xLeft);
+            const xr = xLeft + ((segT1 - t0) / dur) * (xRight - xLeft);
+            const stripe = stripeFromDayKey(dayKeyLocal(segT0));
+            pushDayBand(xl, xr, stripe);
+          }
+          cur = next;
+        }
+      };
+
+      if (n === 1) {
+        const t0 = augmented[0]!.tMs;
+        const d0 = startOfLocalDay(new Date(t0));
+        const d1 = addLocalDays(d0, 1);
+        appendCalendarStripesForTimeSegment(d0.getTime(), d1.getTime(), xIndex(-0.5), xIndex(0.5));
+      } else {
+        const tFirst = augmented[0]!.tMs;
+        const dayStartFirst = startOfLocalDay(new Date(tFirst)).getTime();
+        if (tFirst > dayStartFirst) {
+          appendCalendarStripesForTimeSegment(
+            dayStartFirst,
+            tFirst,
+            xIndex(-0.5),
+            xIndex(0)
+          );
+        }
+        for (let i = 1; i < n; i++) {
+          appendCalendarStripesForTimeSegment(
+            augmented[i - 1]!.tMs,
+            augmented[i]!.tMs,
+            xIndex(i - 1),
+            xIndex(i)
+          );
+        }
+        const tLast = augmented[n - 1]!.tMs;
+        const dayEndLast = addLocalDays(startOfLocalDay(new Date(tLast)), 1).getTime();
+        if (dayEndLast > tLast) {
+          appendCalendarStripesForTimeSegment(
+            tLast,
+            dayEndLast,
+            xIndex(n - 1),
+            xIndex(n - 0.5)
+          );
+        }
+      }
+    }
 
     const rBarsBack = g.append('g').attr('class', 'chart-r-bars-back');
     const rBarW = 5;
@@ -259,7 +393,8 @@ export function CardReviewHistoryChart({
         .tickFormat((d) => tickFormatTime(d as Date));
       xAxisG.call(xAxis);
       xAxisG.call((sel) => {
-        sel.selectAll('path,line').style('stroke', 'var(--mc-border-subtle)');
+        sel.select('.domain').remove();
+        sel.selectAll('.tick line').style('stroke', 'var(--mc-border-subtle)');
         sel
           .selectAll('text')
           .style('fill', 'var(--mc-text-secondary)')
@@ -277,7 +412,8 @@ export function CardReviewHistoryChart({
         });
       xAxisG.call(xAxis);
       xAxisG.call((sel) => {
-        sel.selectAll('path,line').style('stroke', 'var(--mc-border-subtle)');
+        sel.select('.domain').remove();
+        sel.selectAll('.tick line').style('stroke', 'var(--mc-border-subtle)');
         sel
           .selectAll('text')
           .style('fill', 'var(--mc-text-secondary)')
@@ -484,29 +620,17 @@ export function CardReviewHistoryChart({
       }
     });
 
-    g.append('text')
-      .attr('x', innerW / 2)
-      .attr('y', -16)
-      .attr('text-anchor', 'middle')
-      .style('fill', 'var(--mc-text-muted)')
-      .attr('font-size', 9)
-      .text(labels.axisRetrievability);
-    g.append('text')
-      .attr('x', 0)
-      .attr('y', -2)
-      .style('fill', COLOR_S_LINE)
-      .attr('font-size', 10)
-      .text(`— ${labels.axisStability}`);
-    g.append('text')
-      .attr('x', innerW)
-      .attr('y', -2)
-      .attr('text-anchor', 'end')
-      .style('fill', COLOR_D_LINE)
-      .attr('font-size', 10)
-      .text(`— ${labels.axisDifficulty}`);
-
     return () => setTip(null);
-  }, [augmented, chartTotalWidth, formatLogGap, locale, labels, plotInnerW, ratingLabel, xAxisByTime]);
+  }, [
+    augmented,
+    chartTotalWidth,
+    formatLogGap,
+    locale,
+    labels,
+    plotInnerW,
+    ratingLabel,
+    xAxisByTime,
+  ]);
 
   const srLines = useMemo(() => {
     return augmented.map((a, i) => {
@@ -566,6 +690,11 @@ export function CardReviewHistoryChart({
             </div>
           )}
         </div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 px-1 text-center text-[11px] text-(--mc-text-muted)">
+        <span className="text-(--mc-accent-primary)">{labels.axisRetrievability}</span>
+        <span className="text-(--mc-accent-success)">— {labels.axisStability}</span>
+        <span className="text-(--mc-accent-primary)">— {labels.axisDifficulty}</span>
       </div>
       <p className="sr-only">{labels.srCaption}</p>
       <ul className="sr-only">
