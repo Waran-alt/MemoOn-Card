@@ -1,6 +1,7 @@
 /**
  * Rewrites proxy /api/* to the backend (same-origin cookies). CSP/security headers: reverse proxy or next headers() when policy is fixed (private/CODEBASE_AUDIT_GRID 4.6).
  */
+const fs = require('fs');
 const path = require('path');
 const { DEFAULT_BACKEND_URL, getServerBackendUrl } = require('./env-defaults.cjs');
 // Root .env first (shared), then frontend/.env so frontend overrides (e.g. NEXT_PUBLIC_API_URL)
@@ -41,6 +42,20 @@ const nextConfig = {
     const existing = config.resolve.modules;
     const rest = Array.isArray(existing) ? existing.filter(Boolean) : ['node_modules'];
     config.resolve.modules = [localNodeModules, rootNodeModules, ...rest];
+
+    // lucide-react is usually hoisted to repo root node_modules; it may also live under frontend/
+    // only. Pin resolution so Webpack always finds the package (avoids "Can't resolve lucide-react").
+    const lucideCandidates = [
+      path.join(localNodeModules, 'lucide-react'),
+      path.join(rootNodeModules, 'lucide-react'),
+    ];
+    const lucidePath = lucideCandidates.find((p) => fs.existsSync(p));
+    if (lucidePath) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'lucide-react': lucidePath,
+      };
+    }
 
     if (dev) {
       config.watchOptions = {

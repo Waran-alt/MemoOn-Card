@@ -14,7 +14,7 @@ import { useConnectionSyncStore } from '@/store/connectionSync.store';
 import { parseSessionSize, getSessionLimit, type SessionSizeKey } from '@/lib/sessionSize';
 import { useUserStudySettings } from '@/hooks/useUserStudySettings';
 import { STUDY_INTERVAL } from '@memoon-card/shared';
-import { Check, Hourglass, Rocket, Wind, X } from 'lucide-react';
+import { Check, Hourglass, Rocket, X } from 'lucide-react';
 import { CardFormFields } from '../CardFormFields';
 
 /** When remaining queue size is at or below this, fetch more due cards (up to session ceiling). */
@@ -43,11 +43,6 @@ function StudyRatingGlyph({ rating }: { rating: Rating }) {
           className={`relative inline-flex ${RATING_ICON_CLASS} items-center justify-center`}
           aria-hidden
         >
-          <Wind
-            className="absolute -left-0.5 bottom-0 h-3.5 w-3.5 opacity-75"
-            strokeWidth={1.5}
-            aria-hidden
-          />
           <Rocket className="relative h-5 w-5" strokeWidth={stroke} aria-hidden />
         </span>
       );
