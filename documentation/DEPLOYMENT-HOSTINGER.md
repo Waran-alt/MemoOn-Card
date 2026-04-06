@@ -172,6 +172,16 @@ Vous pouvez servir Grafana sur une URL publique du type `https://grafana.votredo
 
 **Renforcement** : optionnellement **auth HTTP** Nginx (`auth_basic`) en plus du login Grafana, **liste d’IPs**, **Cloudflare Access**, ou VPN. Le fichier d’exemple contient un bloc commenté pour `auth_basic`.
 
+**Connexion impossible après passage en HTTPS** : le compose définit `GF_SECURITY_COOKIE_SECURE=true` (variable optionnelle `GRAFANA_COOKIE_SECURE`) pour que le navigateur envoie le cookie de session sur `https://…`. Sans cela, le formulaire peut sembler « ne rien faire » après soumission. Redéployez Grafana après mise à jour du compose.
+
+**Mot de passe admin refusé** : `GRAFANA_ADMIN_PASSWORD` (secret GitHub) n’est appliqué qu’à la **première** création de la base Grafana (`grafana_data`). Si le volume existait déjà (ancien mot de passe, `changeme`, etc.), il faut **réinitialiser** le compte admin sur le VPS :
+
+```bash
+docker exec -it memoon-card-grafana grafana-cli admin reset-admin-password 'VotreNouveauMotDePasseFort'
+```
+
+Ensuite connectez-vous avec `GRAFANA_ADMIN_USER` (défaut `admin`) et ce mot de passe. Vous pouvez aligner le secret GitHub pour les prochains déploiements (le volume conserve le mot de passe jusqu’à un nouveau reset).
+
 **Panneau dev (frontend)** : pour que le lien « Grafana » dans `/app/dev` pointe vers la même URL, définissez au **build** du frontend `NEXT_PUBLIC_DEV_GRAFANA_URL=https://grafana.votredomaine.com` (variable GitHub Actions ou `.env` frontend), puis redéployez le frontend.
 
 #### Checklist hPanel Hostinger (ordre pratique)
