@@ -81,6 +81,12 @@ services:
     networks:
       - memoon-monitoring
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 45s
     deploy:
       resources:
         limits:
@@ -101,7 +107,8 @@ services:
       - promtail_positions:/tmp
     command: -config.file=/etc/promtail/config.yaml
     depends_on:
-      - loki
+      loki:
+        condition: service_healthy
     networks:
       - memoon-monitoring
     restart: unless-stopped

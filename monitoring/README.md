@@ -100,13 +100,16 @@ Les lignes ont des **labels** ajoutés par Promtail, notamment `container` (nom 
 ### 6. Dépannage
 
 - **Aucun log** : vérifier que Promtail et Loki sont `Up` (`docker compose ps`), que les conteneurs app ont des noms reconnus par `promtail-config.yaml`, et élargir la plage horaire.
+- **HTTP 400 « timestamp too old » / `reject_old_samples`** : Docker conserve parfois des lignes plus anciennes que la fenêtre d’ingestion Loki. `limits_config.reject_old_samples_max_age` (défaut repo **720h**) doit couvrir l’âge du backlog (sinon augmenter ou raccourcir l’historique des fichiers log Docker). La **rétention** stockée (`retention_period`, ex. 168h) peut rester plus courte.
+- **`service_name="unknown_service"`** : les relabels Promtail définissent `service_name` et `job` à partir du conteneur ; rebuilder l’image Promtail après mise à jour de `promtail-config.yaml`.
+- **`connection refused` / `context deadline exceeded` vers `loki:3100`** : Loki redémarre ou est saturé ; Promtail retente. Le compose attend désormais **Loki healthy** avant de promouvoir Promtail ; vérifiez `docker logs memoon-card-loki` (OOM, disque plein).
 - **Datasource Loki erreur** : Loki doit être joignable depuis le conteneur Grafana sur `http://loki:3100` (réseau Docker `memoon-monitoring`).
 - **Prometheus : « Unable to retrieve metric names » / Internal Server Error** : redémarrer Grafana après mise à jour du provisioning (`yarn compose -f docker-compose.monitoring.yml restart grafana`). Vérifier que Prometheus est **Up** (`curl -s http://127.0.0.1:9090/-/healthy` depuis l’hôte). Si la datasource a été modifiée à la main avec **HTTP method POST**, repasser sur **GET** (défaut) ou supprimer la datasource et laisser le fichier `prometheus.yaml` la recréer au prochain démarrage.
 
 ## Production notes
 
 - Do not expose Grafana, Loki, Prometheus, or cAdvisor on a public interface; use **SSH tunnel** or **VPN**.
-- Retention: **14 days** (`336h`) in `loki-config.yaml`; edit if you need more or less disk use.
+- Retention: default **7 days** (`168h` in `loki-config.yaml`); increase `retention_period` if you need longer history (more disk).
 - **Browser errors**: in production the app POSTs to `/api/client-errors`; backend logs `event=client_error` (see section below).
 
 ## Browser errors → Loki
