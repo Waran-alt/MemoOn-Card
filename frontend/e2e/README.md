@@ -35,6 +35,21 @@ Optional env (see `env.example`): `E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, `E2E_TE
 
 - **auth.spec.ts**: Landing (Create account / Sign in); unauthenticated redirect to login for `/app` and `/app/decks/:id`; register short-password validation; login wrong-password error; login/register navigation; logged-in redirect from `/` to My decks.
 - **login.spec.ts**: Full flow: register → sign out → sign in with same credentials → My decks.
+- **stack-health.spec.ts**: Next.js `/en` loads; `GET /api/version`; backend `GET /health` on `E2E_BACKEND_URL` (default `http://127.0.0.1:4002`); unauthenticated `GET /api/auth/session` returns 401/403. Run these against the same stack as other E2E tests (CI starts Docker before `yarn test:e2e`).
 - **study.spec.ts**: Register → create deck → create card → study (Good) → Session complete; study empty deck (No cards to study); two cards with Again/Easy and session count; exit study → deck; two decks on My decks and Back to decks.
 
 Credentials are generated per run (no shared test user).
+
+## Docker Compose validation (no running containers)
+
+From the repo root:
+
+```bash
+yarn docker:verify
+```
+
+Runs `docker compose … config -q` on `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.monitoring.yml`, and `docker-compose.deploy.yml` with dummy secrets so interpolation is checked. Requires the Docker CLI. Same step runs in CI before unit tests and before E2E.
+
+## Docker stack + E2E (CI and local)
+
+CI **e2e** job runs `yarn docker:up`, waits for backend `/health` and frontend `/en`, then `yarn test:e2e` (includes **stack-health.spec.ts**). `NEXT_PUBLIC_API_URL=""` is set for the stack so the browser uses same-origin `/api` rewrites and refresh cookies work with `PLAYWRIGHT_BASE_URL=http://localhost:3002`.

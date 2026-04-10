@@ -2,7 +2,13 @@
 # Dev stack (docker-compose.yml): host bind-mounts ./frontend over /app/frontend. A production
 # .next from `yarn build`, a partial .next, or root-owned leftovers break Next 16 dev (ENOENT on
 # .next/dev/required-server-files.json, routes-manifest.json, …).
+#
+# Anonymous volumes for /app/node_modules and /app/frontend/node_modules can be empty on first
+# start; without a workspace install, `yarn dev` cannot find `next` (command not found).
 set -e
+export YARN_ENABLE_IMMUTABLE_INSTALLS=0
+cd /app
+yarn install
 cd /app/frontend
 if [ -d .next ]; then
   if [ ! -f .next/dev/required-server-files.json ] || [ ! -f .next/dev/routes-manifest.json ]; then

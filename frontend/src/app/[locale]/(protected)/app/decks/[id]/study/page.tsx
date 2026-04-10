@@ -16,6 +16,8 @@ import { useUserStudySettings } from '@/hooks/useUserStudySettings';
 import { STUDY_INTERVAL } from '@memoon-card/shared';
 import { ArrowLeft, Check, Hourglass, Rocket, X } from 'lucide-react';
 import { CardFormFields } from '../CardFormFields';
+import { CardHtmlContent } from '@/components/CardHtmlContent';
+import { isCardFieldEmpty } from '@/lib/cardHtml';
 
 /** When remaining queue size is at or below this, fetch more due cards (up to session ceiling). */
 const QUEUE_LOW_WATER = 5;
@@ -599,9 +601,7 @@ export default function StudyPage() {
   async function handleEditCardSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!editingCard) return;
-    const recto = editRecto.trim();
-    const verso = editVerso.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(editRecto) || isCardFieldEmpty(editVerso)) {
       setEditError(ta('frontBackRequired'));
       return;
     }
@@ -609,9 +609,9 @@ export default function StudyPage() {
     setEditError('');
     try {
       const res = await apiClient.put<{ success: boolean; data?: Card }>(`/api/cards/${editingCard.id}`, {
-        recto,
-        verso,
-        comment: editComment.trim() || undefined,
+        recto: editRecto,
+        verso: editVerso,
+        comment: isCardFieldEmpty(editComment) ? undefined : editComment,
       });
       if (res.data?.success && res.data.data) {
         setQueue((prev) =>
@@ -729,9 +729,10 @@ export default function StudyPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-(--mc-text-muted)">
               {ta('studyStepQuestion')}
             </p>
-            <p className="mt-2 whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
-              {card.recto}
-            </p>
+            <CardHtmlContent
+              html={card.recto}
+              className="mt-2 text-lg leading-relaxed text-(--mc-text-primary)"
+            />
             {!showAnswer ? (
               <div className="mt-6">
                 <button
@@ -752,9 +753,10 @@ export default function StudyPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-(--mc-text-muted)">
               {ta('studyStepAnswer')}
             </p>
-            <p className="mt-2 whitespace-pre-wrap text-lg leading-relaxed text-(--mc-text-primary)">
-              {card.verso}
-            </p>
+            <CardHtmlContent
+              html={card.verso}
+              className="mt-2 text-lg leading-relaxed text-(--mc-text-primary)"
+            />
             <p className="mt-3 text-sm text-(--mc-text-muted)">
               {ta('studyThinkingTimeLabel')}
               :{' '}

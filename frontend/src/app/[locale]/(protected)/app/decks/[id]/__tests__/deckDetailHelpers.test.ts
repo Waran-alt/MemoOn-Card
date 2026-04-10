@@ -37,6 +37,19 @@ describe('deckDetailHelpers', () => {
     expect(cardMatchesSearch(base, 'nope')).toBe(false);
   });
 
+  it('cardMatchesSearch searches plain text inside HTML (WYSIWYG)', () => {
+    const htmlCard: Card = {
+      ...base,
+      recto: '<p><strong>Alpha</strong> term</p>',
+      verso: '<ul><li>Beta</li></ul>',
+      comment: '<p>Gamma note</p>',
+    };
+    expect(cardMatchesSearch(htmlCard, 'alpha')).toBe(true);
+    expect(cardMatchesSearch(htmlCard, 'beta')).toBe(true);
+    expect(cardMatchesSearch(htmlCard, 'gamma')).toBe(true);
+    expect(cardMatchesSearch(htmlCard, '<strong>')).toBe(false);
+  });
+
   it('previewCardRecto strips HTML', () => {
     expect(previewCardRecto('<b>Hi</b> there', 10)).toBe('Hi there');
   });

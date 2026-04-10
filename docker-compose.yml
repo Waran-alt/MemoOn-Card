@@ -62,6 +62,7 @@ services:
     working_dir: /app/frontend
     environment:
       NODE_ENV: ${NODE_ENV:-development}
+      YARN_ENABLE_IMMUTABLE_INSTALLS: "0"
       PORT: ${FRONTEND_PORT:-3002}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://memoon-card.localhost}
       BACKEND_URL: ${BACKEND_URL_DOCKER:-http://memoon-card-backend:4002}
@@ -75,6 +76,9 @@ services:
       - ./frontend:/app/frontend
       - ./shared:/app/shared
       # Keep root workspace node_modules inside the image (hoisted install).
+      # Same for frontend/node_modules: the bind mount would otherwise replace the image install
+      # with the host's tree (mixed Yarn/npm or wrong tough-cookie layout → ENOENT on dist/cookie/…).
+      - /app/frontend/node_modules
       # Do NOT mount an anonymous volume over frontend/.next: an empty volume hides
       # the build output and causes ENOENT on .next/dev (routes-manifest, required-server-files, …).
       - /app/node_modules

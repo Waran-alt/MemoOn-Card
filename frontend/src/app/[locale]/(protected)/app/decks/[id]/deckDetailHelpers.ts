@@ -1,4 +1,5 @@
 import type { Card } from '@/types';
+import { cardPlainText } from '@/lib/cardHtml';
 
 export const LAST_STUDIED_KEY = (deckId: string) => `memoon_last_studied_${deckId}`;
 
@@ -84,16 +85,15 @@ export function getTimingEventColor(eventType: string): string {
 export function cardMatchesSearch(card: Card, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return (
-    card.recto.toLowerCase().includes(q) ||
-    card.verso.toLowerCase().includes(q) ||
-    (card.comment?.toLowerCase().includes(q) ?? false)
-  );
+  const r = cardPlainText(card.recto).toLowerCase();
+  const v = cardPlainText(card.verso).toLowerCase();
+  const c = card.comment ? cardPlainText(card.comment).toLowerCase() : '';
+  return r.includes(q) || v.includes(q) || c.includes(q);
 }
 
 /** Plain-text preview of card front for link lists. */
 export function previewCardRecto(html: string, maxLen = 52): string {
-  const t = html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  const t = cardPlainText(html).replace(/\s+/g, ' ');
   if (t.length <= maxLen) return t || '—';
   return `${t.slice(0, maxLen)}…`;
 }

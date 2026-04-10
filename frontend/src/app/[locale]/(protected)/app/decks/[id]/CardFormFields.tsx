@@ -1,6 +1,7 @@
 'use client';
 
 import { VALIDATION_LIMITS } from '@memoon-card/shared';
+import { CardRichTextField } from './CardRichTextField';
 
 const { CARD_CONTENT_MAX, CARD_COMMENT_MAX } = VALIDATION_LIMITS;
 
@@ -30,61 +31,63 @@ export function CardFormFields({
   const rectoId = `${idPrefix}-recto`;
   const versoId = `${idPrefix}-verso`;
   const commentId = `${idPrefix}-comment`;
-  const inputClass =
-    'w-full min-h-[4.5rem] rounded border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-3 py-2 text-sm text-(--mc-text-primary) resize-y';
+  const rectoLabelId = `${idPrefix}-recto-label`;
+  const versoLabelId = `${idPrefix}-verso-label`;
+  const commentLabelId = `${idPrefix}-comment-label`;
   const labelClass = 'mb-1 block text-sm font-medium text-(--mc-text-secondary)';
   const countClass = 'mt-0.5 text-xs text-(--mc-text-secondary)';
 
   return (
     <div className="space-y-3">
       <div>
-        <label htmlFor={rectoId} className={labelClass}>
+        <label id={rectoLabelId} className={labelClass}>
           {t('recto')}
         </label>
-        <textarea
+        <CardRichTextField
           id={rectoId}
+          ariaLabelledby={rectoLabelId}
           value={recto}
-          onChange={(e) => onRectoChange(e.target.value)}
+          onChange={onRectoChange}
           maxLength={CARD_CONTENT_MAX}
           placeholder={t('rectoPlaceholder')}
+          toolbarT={t}
           required
-          rows={5}
-          className={inputClass}
         />
         <p className={countClass}>
           {recto.length}/{CARD_CONTENT_MAX}
         </p>
       </div>
       <div>
-        <label htmlFor={versoId} className={labelClass}>
+        <label id={versoLabelId} className={labelClass}>
           {t('verso')}
         </label>
-        <textarea
+        <CardRichTextField
           id={versoId}
+          ariaLabelledby={versoLabelId}
           value={verso}
-          onChange={(e) => onVersoChange(e.target.value)}
+          onChange={onVersoChange}
           maxLength={CARD_CONTENT_MAX}
           placeholder={t('versoPlaceholder')}
+          toolbarT={t}
           required
-          rows={5}
-          className={inputClass}
         />
         <p className={countClass}>
           {verso.length}/{CARD_CONTENT_MAX}
         </p>
       </div>
       <div>
-        <label htmlFor={commentId} className={labelClass}>
+        <label id={commentLabelId} className={labelClass}>
           {t('commentOptional')}
         </label>
-        <textarea
+        <CardRichTextField
           id={commentId}
+          ariaLabelledby={commentLabelId}
           value={comment}
-          onChange={(e) => onCommentChange(e.target.value)}
+          onChange={onCommentChange}
           maxLength={CARD_COMMENT_MAX}
           placeholder={t('commentPlaceholder')}
-          rows={2}
-          className={inputClass}
+          toolbarT={t}
+          compact
         />
         <p className={countClass}>
           {comment.length}/{CARD_COMMENT_MAX}

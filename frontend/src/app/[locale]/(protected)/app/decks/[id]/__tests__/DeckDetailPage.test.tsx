@@ -4,6 +4,49 @@ import userEvent from '@testing-library/user-event';
 import DeckDetailPage from '../page';
 import type { Deck, Card, Category } from '@/types';
 
+/** TipTap contenteditable is awkward in jsdom; keep integration tests on plain fields. */
+vi.mock('../CardFormFields', () => ({
+  CardFormFields: ({
+    idPrefix,
+    recto,
+    verso,
+    comment,
+    onRectoChange,
+    onVersoChange,
+    onCommentChange,
+    t,
+  }: {
+    idPrefix: string;
+    recto: string;
+    verso: string;
+    comment: string;
+    onRectoChange: (v: string) => void;
+    onVersoChange: (v: string) => void;
+    onCommentChange: (v: string) => void;
+    t: (key: string) => string;
+  }) => {
+    const rectoId = `${idPrefix}-recto`;
+    const versoId = `${idPrefix}-verso`;
+    const commentId = `${idPrefix}-comment`;
+    return (
+      <div className="space-y-3">
+        <div>
+          <label htmlFor={rectoId}>{t('recto')}</label>
+          <textarea id={rectoId} value={recto} onChange={(e) => onRectoChange(e.target.value)} rows={3} />
+        </div>
+        <div>
+          <label htmlFor={versoId}>{t('verso')}</label>
+          <textarea id={versoId} value={verso} onChange={(e) => onVersoChange(e.target.value)} rows={3} />
+        </div>
+        <div>
+          <label htmlFor={commentId}>{t('commentOptional')}</label>
+          <textarea id={commentId} value={comment} onChange={(e) => onCommentChange(e.target.value)} rows={2} />
+        </div>
+      </div>
+    );
+  },
+}));
+
 const mockGet = vi.hoisted(() => vi.fn());
 const mockPost = vi.hoisted(() => vi.fn());
 const mockPut = vi.hoisted(() => vi.fn());

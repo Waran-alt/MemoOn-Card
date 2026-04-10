@@ -1,0 +1,22 @@
+# Build context for frontend/Dockerfile, backend/Dockerfile, etc. (context: repo root).
+# Excluding node_modules prevents COPY from replacing the image's `yarn install` tree with the
+# host's — mixed hoisting / OS can cause ENOENT (e.g. tough-cookie v5 paths vs v6 layout).
+
+**/node_modules
+
+**/.next
+**/coverage
+**/playwright-report
+**/test-results
+
+.git
+.gitignore
+.cursor
+
+**/.env
+**/.env.local
+
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*

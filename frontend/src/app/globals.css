@@ -153,6 +153,99 @@ body {
   border-color: var(--mc-border-subtle);
 }
 
+/* Sanitized card HTML (recto/verso/comment) */
+.mc-card-html {
+  line-height: 1.6;
+}
+.mc-card-html p {
+  margin: 0.35em 0;
+}
+.mc-card-html p:first-child {
+  margin-top: 0;
+}
+.mc-card-html p:last-child {
+  margin-bottom: 0;
+}
+.mc-card-html a {
+  color: var(--mc-accent-primary);
+  text-decoration: underline;
+}
+.mc-card-html ul {
+  margin: 0.35em 0;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+}
+.mc-card-html ol {
+  margin: 0.35em 0;
+  padding-left: 1.25rem;
+  list-style-type: decimal;
+}
+.mc-card-html blockquote {
+  margin: 0.35em 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--mc-border-subtle);
+  color: var(--mc-text-secondary);
+}
+.mc-card-html code {
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--mc-bg-card-back) 85%, transparent);
+}
+.mc-card-html pre {
+  margin: 0.35em 0;
+  padding: 0.5rem 0.75rem;
+  overflow-x: auto;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--mc-bg-card-back) 90%, transparent);
+  font-size: 0.875em;
+}
+.mc-card-html hr {
+  margin: 0.75em 0;
+  border: 0;
+  border-top: 1px solid var(--mc-border-subtle);
+}
+
+/* Tiptap editor: Tailwind preflight removes list markers (ul/ol { list-style: none }); restore them
+   so bullet / numbered lists match .mc-card-html while editing. */
+.mc-rich-text-content .ProseMirror ul {
+  margin: 0.35em 0;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+  list-style-position: outside;
+}
+.mc-rich-text-content .ProseMirror ol {
+  margin: 0.35em 0;
+  padding-left: 1.25rem;
+  list-style-type: decimal;
+  list-style-position: outside;
+}
+.mc-rich-text-content .ProseMirror ul ul {
+  list-style-type: circle;
+}
+.mc-rich-text-content .ProseMirror ul ul ul {
+  list-style-type: square;
+}
+.mc-rich-text-content .ProseMirror ol ol {
+  list-style-type: lower-alpha;
+}
+.mc-rich-text-content .ProseMirror li > p {
+  margin: 0;
+}
+.mc-rich-text-content .ProseMirror li {
+  display: list-item;
+}
+
+/* Tiptap editor surface — do not set min-height here; it overrides Tailwind min-h-* on the editor
+   (specificity beats utilities) and collapses the field when the parent has no min-height. */
+.mc-rich-text-content .ProseMirror p[data-placeholder]::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--mc-text-muted);
+}
+
 /* Subtle focus ring for keyboard users */
 .mc-focus-ring:focus-visible {
   outline: none;

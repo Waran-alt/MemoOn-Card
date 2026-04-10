@@ -1,7 +1,7 @@
 # Multi-stage build for backend (context: repo root).
 # DB credentials and JWT secrets are runtime env only — never bake them into layers (see ENVIRONMENT_SETUP / env.example).
 FROM node:22-bookworm-slim AS base
-RUN corepack enable && corepack prepare yarn@4.12.0 --activate
+RUN corepack enable && corepack prepare yarn@4.13.0 --activate
 
 # Liquibase + PostgreSQL driver for running migrations at backend startup (no separate migrate container)
 FROM liquibase/liquibase:latest AS liquibase-tools

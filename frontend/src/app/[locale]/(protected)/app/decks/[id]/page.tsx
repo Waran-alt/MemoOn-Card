@@ -26,6 +26,8 @@ import { CardFollowUpModal } from './CardFollowUpModal';
 import { DeckStatsModal } from './DeckStatsModal';
 import { CARD_REVIEW_LOGS_FETCH_LIMIT } from './cardStatsConstants';
 import { useCreateCardForm } from './useCreateCardForm';
+import { isCardFieldEmpty } from '@/lib/cardHtml';
+import { CardHtmlContent } from '@/components/CardHtmlContent';
 
 const { DECK_TITLE_MAX, DECK_DESCRIPTION_MAX } = VALIDATION_LIMITS;
 
@@ -634,18 +636,16 @@ export default function DeckDetailPage() {
     if (!editingCard) return;
     setEditError('');
     setEditSaveSuccessMessage('');
-    const recto = editRecto.trim();
-    const verso = editVerso.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(editRecto) || isCardFieldEmpty(editVerso)) {
       setEditError(ta('frontBackRequired'));
       return;
     }
     setEditSaving(true);
     apiClient
       .put<{ success: boolean; data?: Card }>(`/api/cards/${editingCard.id}`, {
-        recto,
-        verso,
-        comment: editComment.trim() || undefined,
+        recto: editRecto,
+        verso: editVerso,
+        comment: isCardFieldEmpty(editComment) ? undefined : editComment,
       })
       .then(async (res) => {
         if (res.data?.success && res.data.data) {
@@ -845,17 +845,13 @@ export default function DeckDetailPage() {
   function handleCreateCard(e: React.FormEvent) {
     e.preventDefault();
     setCreateError('');
-    const recto = createRecto.trim();
-    const verso = createVerso.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso)) {
       setCreateError(ta('frontBackRequired'));
       return;
     }
     const useBulk = showReversedZone || createKnowledgeContent.trim() !== '';
     if (showReversedZone) {
-      const rectoB = createRectoB.trim();
-      const versoB = createVersoB.trim();
-      if (!rectoB || !versoB) {
+      if (isCardFieldEmpty(createRectoB) || isCardFieldEmpty(createVersoB)) {
         setCreateError(ta('frontBackRequiredBoth') !== 'frontBackRequiredBoth' ? ta('frontBackRequiredBoth') : 'Front and back are required for both cards.');
         return;
       }
@@ -865,15 +861,15 @@ export default function DeckDetailPage() {
     if (useBulk) {
       const cardsPayload = showReversedZone
         ? [
-            { recto, verso, comment: createComment.trim() || null, category_ids: categoryIds },
+            { recto: createRecto, verso: createVerso, comment: isCardFieldEmpty(createComment) ? null : createComment, category_ids: categoryIds },
             {
-              recto: createRectoB.trim(),
-              verso: createVersoB.trim(),
-              comment: createCommentB.trim() || null,
+              recto: createRectoB,
+              verso: createVersoB,
+              comment: isCardFieldEmpty(createCommentB) ? null : createCommentB,
               category_ids: categoryIds,
             },
           ]
-        : [{ recto, verso, comment: createComment.trim() || null, category_ids: categoryIds }];
+        : [{ recto: createRecto, verso: createVerso, comment: isCardFieldEmpty(createComment) ? null : createComment, category_ids: categoryIds }];
       apiClient
         .post<{ success: boolean; data?: Card | Card[] }>(`/api/decks/${id}/cards/bulk`, {
           knowledge: { content: createKnowledgeContent.trim() || null },
@@ -896,9 +892,9 @@ export default function DeckDetailPage() {
     } else {
       apiClient
         .post<{ success: boolean; data?: Card }>(`/api/decks/${id}/cards`, {
-          recto,
-          verso,
-          comment: createComment.trim() || undefined,
+          recto: createRecto,
+          verso: createVerso,
+          comment: isCardFieldEmpty(createComment) ? undefined : createComment,
         })
         .then(async (res) => {
           if (res.data?.success && res.data.data) {
@@ -931,9 +927,7 @@ export default function DeckDetailPage() {
   /** Simple form: create card A and linked reverse B (verso↔recto), or bulk+knowledge when that UI is enabled. */
   async function handleCreateWithAutoReverse() {
     setCreateError('');
-    const recto = createRecto.trim();
-    const verso = createVerso.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso)) {
       setCreateError(ta('frontBackRequired'));
       return;
     }
@@ -945,8 +939,8 @@ export default function DeckDetailPage() {
         const res = await apiClient.post<{ success: boolean; data?: Card | Card[] }>(`/api/decks/${id}/cards/bulk`, {
           knowledge: { content: createKnowledgeContent.trim() || null },
           cards: [
-            { recto, verso, comment: createComment.trim() || null, category_ids: categoryIds },
-            { recto: verso, verso: recto, comment: createComment.trim() || null, category_ids: categoryIds },
+            { recto: createRecto, verso: createVerso, comment: isCardFieldEmpty(createComment) ? null : createComment, category_ids: categoryIds },
+            { recto: createVerso, verso: createRecto, comment: isCardFieldEmpty(createComment) ? null : createComment, category_ids: categoryIds },
           ],
         });
         if (res.data?.success && res.data.data) {
@@ -962,9 +956,9 @@ export default function DeckDetailPage() {
         return;
       }
       const res = await apiClient.post<{ success: boolean; data?: Card }>(`/api/decks/${id}/cards`, {
-        recto,
-        verso,
-        comment: createComment.trim() || undefined,
+        recto: createRecto,
+        verso: createVerso,
+        comment: isCardFieldEmpty(createComment) ? undefined : createComment,
       });
       if (!res.data?.success || !res.data.data) {
         setCreateError(tc('invalidResponse'));
@@ -981,7 +975,7 @@ export default function DeckDetailPage() {
         }
       }
       const r = await apiClient.post<{ success: boolean; data?: Card }>(`/api/cards/${cardA.id}/reversed`, {
-        card_b: { recto: verso, verso: recto, comment: createComment.trim() || null },
+        card_b: { recto: createVerso, verso: createRecto, comment: isCardFieldEmpty(createComment) ? null : createComment },
         copy_categories: true,
         copy_knowledge: true,
       });
@@ -1004,18 +998,16 @@ export default function DeckDetailPage() {
   function handleCreateCardAOnly(e: React.FormEvent) {
     e.preventDefault();
     setCreateError('');
-    const recto = createRecto.trim();
-    const verso = createVerso.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso)) {
       setCreateError(ta('frontBackRequired'));
       return;
     }
     setCreatingA(true);
     apiClient
       .post<{ success: boolean; data?: Card }>(`/api/decks/${id}/cards`, {
-        recto,
-        verso,
-        comment: createComment.trim() || undefined,
+        recto: createRecto,
+        verso: createVerso,
+        comment: isCardFieldEmpty(createComment) ? undefined : createComment,
       })
       .then(async (res) => {
         if (res.data?.success && res.data.data) {
@@ -1047,24 +1039,20 @@ export default function DeckDetailPage() {
     e.preventDefault();
     setCreateError('');
     setCreateErrorB('');
-    const recto = createRecto.trim();
-    const verso = createVerso.trim();
-    const rectoB = createRectoB.trim();
-    const versoB = createVersoB.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso)) {
       setCreateError(ta('frontBackRequired'));
       return;
     }
-    if (!rectoB || !versoB) {
+    if (isCardFieldEmpty(createRectoB) || isCardFieldEmpty(createVersoB)) {
       setCreateErrorB(ta('frontBackRequiredBoth') !== 'frontBackRequiredBoth' ? ta('frontBackRequiredBoth') : 'Front and back are required for both cards.');
       return;
     }
     setCreatingB(true);
     apiClient
       .post<{ success: boolean; data?: Card }>(`/api/decks/${id}/cards`, {
-        recto,
-        verso,
-        comment: createComment.trim() || undefined,
+        recto: createRecto,
+        verso: createVerso,
+        comment: isCardFieldEmpty(createComment) ? undefined : createComment,
       })
       .then(async (res) => {
         if (!res.data?.success || !res.data.data) {
@@ -1083,7 +1071,7 @@ export default function DeckDetailPage() {
         }
         return apiClient
           .post<{ success: boolean; data?: Card }>(`/api/cards/${cardA.id}/reversed`, {
-            card_b: { recto: rectoB, verso: versoB, comment: createCommentB.trim() || null },
+            card_b: { recto: createRectoB, verso: createVersoB, comment: isCardFieldEmpty(createCommentB) ? null : createCommentB },
             copy_categories: true,
             copy_knowledge: true,
           })
@@ -1128,9 +1116,7 @@ export default function DeckDetailPage() {
     e.preventDefault();
     const source = generateReversedSourceCard;
     if (!source) return;
-    const recto = reverseRectoA.trim();
-    const verso = reverseVersoA.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(reverseRectoA) || isCardFieldEmpty(reverseVersoA)) {
       setReverseSaveAError(ta('frontBackRequired') !== 'frontBackRequired' ? ta('frontBackRequired') : 'Front and back are required.');
       return;
     }
@@ -1138,9 +1124,9 @@ export default function DeckDetailPage() {
     setReverseSaveASaving(true);
     try {
       const res = await apiClient.put<{ success: boolean; data?: Card }>(`/api/cards/${source.id}`, {
-        recto,
-        verso,
-        comment: reverseCommentA.trim() || undefined,
+        recto: reverseRectoA,
+        verso: reverseVersoA,
+        comment: isCardFieldEmpty(reverseCommentA) ? undefined : reverseCommentA,
       });
       if (res.data?.success && res.data.data) {
         const updated = res.data.data;
@@ -1164,9 +1150,7 @@ export default function DeckDetailPage() {
     e.preventDefault();
     const existingB = generateReversedExistingCard;
     if (!existingB) return;
-    const recto = reverseRectoB.trim();
-    const verso = reverseVersoB.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(reverseRectoB) || isCardFieldEmpty(reverseVersoB)) {
       setReverseSaveBError(ta('frontBackRequired') !== 'frontBackRequired' ? ta('frontBackRequired') : 'Front and back are required.');
       return;
     }
@@ -1174,9 +1158,9 @@ export default function DeckDetailPage() {
     setReverseSaveBSaving(true);
     try {
       const res = await apiClient.put<{ success: boolean; data?: Card }>(`/api/cards/${existingB.id}`, {
-        recto,
-        verso,
-        comment: reverseCommentB.trim() || undefined,
+        recto: reverseRectoB,
+        verso: reverseVersoB,
+        comment: isCardFieldEmpty(reverseCommentB) ? undefined : reverseCommentB,
       });
       if (res.data?.success && res.data.data) {
         const updated = res.data.data;
@@ -1200,9 +1184,7 @@ export default function DeckDetailPage() {
     e.preventDefault();
     const source = generateReversedSourceCard;
     if (!source) return;
-    const recto = reverseRectoB.trim();
-    const verso = reverseVersoB.trim();
-    if (!recto || !verso) {
+    if (isCardFieldEmpty(reverseRectoB) || isCardFieldEmpty(reverseVersoB)) {
       setReverseSubmitError(ta('frontBackRequired') !== 'frontBackRequired' ? ta('frontBackRequired') : 'Front and back are required.');
       return;
     }
@@ -1210,7 +1192,7 @@ export default function DeckDetailPage() {
     setReverseSubmitSaving(true);
     try {
       const res = await apiClient.post<{ success: boolean; data?: Card }>(`/api/cards/${source.id}/reversed`, {
-        card_b: { recto, verso, comment: reverseCommentB.trim() || null },
+        card_b: { recto: reverseRectoB, verso: reverseVersoB, comment: isCardFieldEmpty(reverseCommentB) ? null : reverseCommentB },
         copy_categories: generateReversedCopyCategories,
         copy_knowledge: generateReversedCopyKnowledge,
       });
@@ -1469,7 +1451,7 @@ export default function DeckDetailPage() {
                     <div className="mt-3">
                       <button
                         type="submit"
-                        disabled={creatingA || !createRecto.trim() || !createVerso.trim()}
+                        disabled={creatingA || isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso)}
                         className="rounded bg-(--mc-accent-success) px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                       >
                         {creatingA ? tc('creating') : ta('createCard')}
@@ -1500,7 +1482,7 @@ export default function DeckDetailPage() {
                     <div className="mt-3">
                       <button
                         type="submit"
-                        disabled={creatingB || !createRecto.trim() || !createVerso.trim() || !createRectoB.trim() || !createVersoB.trim()}
+                        disabled={creatingB || isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso) || isCardFieldEmpty(createRectoB) || isCardFieldEmpty(createVersoB)}
                         className="rounded bg-(--mc-accent-primary) px-3 pt-1 pb-1.5 text-sm font-medium text-white opacity-90 hover:opacity-100 disabled:opacity-50"
                       >
                         {creatingB ? tc('creating') : (ta('generateReversedCard') !== 'generateReversedCard' ? ta('generateReversedCard') : 'Create reversed card')}
@@ -1556,7 +1538,7 @@ export default function DeckDetailPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="submit"
-                    disabled={creating || !createRecto.trim() || !createVerso.trim()}
+                    disabled={creating || isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso)}
                     className="rounded bg-(--mc-accent-success) px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                   >
                     {creating ? tc('creating') : tc('create')}
@@ -1564,7 +1546,7 @@ export default function DeckDetailPage() {
                   <button
                     type="button"
                     onClick={() => void handleCreateWithAutoReverse()}
-                    disabled={creating || !createRecto.trim() || !createVerso.trim()}
+                    disabled={creating || isCardFieldEmpty(createRecto) || isCardFieldEmpty(createVerso)}
                     className="rounded border border-(--mc-accent-primary) bg-(--mc-bg-surface) px-3 pt-1 pb-1.5 text-sm font-medium text-(--mc-accent-primary) transition-opacity hover:bg-(--mc-accent-primary)/10 disabled:opacity-50"
                   >
                     {creating ? tc('creating') : ta('createWithAutoReversePair')}
@@ -1883,7 +1865,7 @@ export default function DeckDetailPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="submit"
-                    disabled={editSaving || !editRecto.trim() || !editVerso.trim()}
+                    disabled={editSaving || isCardFieldEmpty(editRecto) || isCardFieldEmpty(editVerso)}
                     className="rounded bg-(--mc-accent-success) px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                   >
                     {editSaving ? tc('saving') : tc('save')}
@@ -2039,9 +2021,10 @@ export default function DeckDetailPage() {
                                       <p className="text-[0.625rem] font-medium leading-tight tracking-wide text-(--mc-text-muted)">
                                         {ta('recto')}
                                       </p>
-                                      <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm text-(--mc-text-primary)">
-                                        {nb.recto}
-                                      </p>
+                                      <CardHtmlContent
+                                        html={nb.recto}
+                                        className="mt-1 wrap-break-word text-sm text-(--mc-text-primary)"
+                                      />
                                     </div>
                                     <hr
                                       className="border-0 border-t border-(--mc-border-subtle) opacity-60"
@@ -2051,9 +2034,10 @@ export default function DeckDetailPage() {
                                       <p className="text-[0.625rem] font-medium leading-tight tracking-wide text-(--mc-text-muted)">
                                         {ta('verso')}
                                       </p>
-                                      <p className="mt-1 whitespace-pre-wrap wrap-break-word text-sm text-(--mc-text-primary)">
-                                        {nb.verso}
-                                      </p>
+                                      <CardHtmlContent
+                                        html={nb.verso}
+                                        className="mt-1 wrap-break-word text-sm text-(--mc-text-primary)"
+                                      />
                                     </div>
                                     <hr
                                       className="border-0 border-t border-(--mc-border-subtle) opacity-60"
@@ -2168,7 +2152,7 @@ export default function DeckDetailPage() {
                   <div className="mt-3">
                     <button
                       type="submit"
-                      disabled={reverseSaveASaving || !reverseRectoA.trim() || !reverseVersoA.trim()}
+                      disabled={reverseSaveASaving || isCardFieldEmpty(reverseRectoA) || isCardFieldEmpty(reverseVersoA)}
                       className="rounded bg-(--mc-accent-success) px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                     >
                       {reverseSaveASaving ? (tc('saving') !== 'saving' ? tc('saving') : 'Saving…') : tc('save')}
@@ -2232,7 +2216,7 @@ export default function DeckDetailPage() {
                     {generateReversedExistingCard ? (
                       <button
                         type="submit"
-                        disabled={reverseSaveBSaving || !reverseRectoB.trim() || !reverseVersoB.trim()}
+                        disabled={reverseSaveBSaving || isCardFieldEmpty(reverseRectoB) || isCardFieldEmpty(reverseVersoB)}
                         className="rounded bg-(--mc-accent-success) px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                       >
                         {reverseSaveBSaving ? (tc('saving') !== 'saving' ? tc('saving') : 'Saving…') : tc('save')}
@@ -2240,7 +2224,7 @@ export default function DeckDetailPage() {
                     ) : (
                       <button
                         type="submit"
-                        disabled={reverseSubmitSaving || !reverseRectoB.trim() || !reverseVersoB.trim()}
+                        disabled={reverseSubmitSaving || isCardFieldEmpty(reverseRectoB) || isCardFieldEmpty(reverseVersoB)}
                         className="rounded bg-(--mc-accent-primary) px-3 pt-1 pb-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50 hover:opacity-90"
                       >
                         {reverseSubmitSaving ? (tc('creating') !== 'creating' ? tc('creating') : 'Creating…') : (ta('generateReversedCard') !== 'generateReversedCard' ? ta('generateReversedCard') : 'Create reversed card')}

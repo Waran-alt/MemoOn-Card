@@ -1,4 +1,4 @@
-# CI: immutable yarn install, npm audit (high, non-blocking), API route heuristic audit (non-blocking), Liquibase smoke, typecheck, Next build, lint, Vitest, Playwright E2E.
+# CI: immutable yarn install, Docker Compose validation, npm audit (high, non-blocking), API route heuristic audit (non-blocking), Liquibase smoke, typecheck, Next build, lint, Vitest, Playwright E2E (Docker stack + stack-health specs).
 # JWT_SECRET / DB passwords below are CI-only placeholders. See documentation/private/CODEBASE_AUDIT_GRID.md sections 6 and 9.
 name: CI
 
@@ -51,6 +51,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
+      - name: Validate Docker Compose files
+        run: yarn docker:verify
+
       - name: Audit dependencies
         run: yarn npm audit --all --severity high
         continue-on-error: true
@@ -91,6 +94,9 @@ jobs:
       FRONTEND_PORT: "3002"
       BACKEND_PORT: "4002"
       POSTGRES_PORT: "5433"
+      # Same-origin API via Next rewrites so refresh cookies work for Playwright at localhost:3002
+      NEXT_PUBLIC_API_URL: ""
+      E2E_BACKEND_URL: http://127.0.0.1:4002
       PLAYWRIGHT_BASE_URL: http://localhost:3002
       E2E_TEST_PASSWORD: TestPassword123!
       E2E_TEST_EMAIL: e2e@test.local
@@ -116,6 +122,9 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --immutable
+
+      - name: Validate Docker Compose files
+        run: yarn docker:verify
 
       - name: Install Playwright browsers
         run: yarn test:e2e:install

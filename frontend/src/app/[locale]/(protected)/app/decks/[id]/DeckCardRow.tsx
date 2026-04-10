@@ -5,6 +5,7 @@ import type { Card } from '@/types';
 import type { TranslationOptions } from '@/hooks/useTranslation';
 import { CategoryBadgePill } from './CategoryBadgePill';
 import { IconChartBar, IconCog6Tooth, IconEye, IconEyeSlash } from './DeckUiIcons';
+import { CardHtmlContent } from '@/components/CardHtmlContent';
 
 export type DeckCardRowT = (key: string, options?: TranslationOptions) => string;
 
@@ -146,23 +147,25 @@ export const DeckCardRow = memo(function DeckCardRow({
             <div className="flex flex-col gap-2">
               <div className={`${facePanelClass} mc-study-card-front`}>
                 <p className={faceLabelClass}>{ta('recto')}</p>
-                <p className="mt-2 whitespace-pre-wrap wrap-break-word text-sm text-(--mc-text-primary)">
-                  {card.recto}
-                </p>
+                <CardHtmlContent
+                  html={card.recto}
+                  className="mt-2 wrap-break-word text-sm text-(--mc-text-primary)"
+                />
               </div>
               <div className={`${facePanelClass} mc-study-card-back`}>
                 <p className={faceLabelClass}>{ta('verso')}</p>
-                <p className="mt-2 whitespace-pre-wrap wrap-break-word text-sm text-(--mc-text-primary)">
-                  {card.verso}
-                </p>
+                <CardHtmlContent
+                  html={card.verso}
+                  className="mt-2 wrap-break-word text-sm text-(--mc-text-primary)"
+                />
               </div>
             </div>
 
             {card.comment && (
-              <p className="text-xs text-(--mc-text-muted)">
+              <div className="text-xs text-(--mc-text-muted)">
                 <span className="font-medium text-(--mc-text-secondary)">{ta('commentOptional')}: </span>
-                {card.comment}
-              </p>
+                <CardHtmlContent html={card.comment} className="mt-0.5 text-(--mc-text-muted)" />
+              </div>
             )}
 
             {(card.categories?.length ?? 0) > 0 && (

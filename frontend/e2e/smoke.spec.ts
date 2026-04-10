@@ -29,8 +29,8 @@ test('smoke: register, create deck/card, open study', async ({ page }) => {
   await expect(page).toHaveURL(/\/en\/app\/decks\/.+/);
 
   await page.getByRole('button', { name: new RegExp(`^${a('newCard')}$`) }).first().click();
-  await page.locator('#card-recto').fill('What is 2 + 2?');
-  await page.locator('#card-verso').fill('4');
+  await page.getByLabel(a('recto')).fill('What is 2 + 2?');
+  await page.getByLabel(a('verso')).fill('4');
   await page.getByRole('button', { name: c('create'), exact: true }).click();
   await expect(page.getByText('What is 2 + 2?')).toBeVisible();
 
