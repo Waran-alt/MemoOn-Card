@@ -124,5 +124,37 @@ describe('auth.store', () => {
       expect(r1).toBe('shared-token');
       expect(r2).toBe('shared-token');
     });
+
+    it('runs refresh through navigator.locks when available (cross-tab serialization)', async () => {
+      const user = { id: '1', email: 'a@b.com', name: 'A' };
+      const lockSpy = vi.fn((_name: string, _opts: unknown, cb: () => Promise<string | null>) => cb());
+      const prevLocks = globalThis.navigator.locks;
+      Object.defineProperty(globalThis.navigator, 'locks', {
+        configurable: true,
+        value: { request: lockSpy },
+      });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            data: { accessToken: 'locked-token', user },
+          }),
+      }) as typeof fetch;
+      try {
+        await useAuthStore.getState().refreshAccess();
+        expect(lockSpy).toHaveBeenCalledWith(
+          'memoon-auth-refresh',
+          { mode: 'exclusive' },
+          expect.any(Function)
+        );
+        expect(useAuthStore.getState().accessToken).toBe('locked-token');
+      } finally {
+        Object.defineProperty(globalThis.navigator, 'locks', {
+          configurable: true,
+          value: prevLocks,
+        });
+      }
+    });
   });
 });

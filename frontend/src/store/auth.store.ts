@@ -25,6 +25,17 @@ let proactiveRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** Single in-flight refresh so Strict Mode double-mount + axios 401 retry cannot race two POST /refresh (rotating refresh cookie would fail the second). */
 let refreshAccessSingleFlight: Promise<string | null> | null = null;
 
+/**
+ * Serialize refresh across browser tabs. Without this, two tabs can POST /refresh with the same
+ * cookie; the first rotates and revokes it, the second hits "reuse detected" and revokes all sessions.
+ */
+async function withCrossTabRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+    return navigator.locks.request('memoon-auth-refresh', { mode: 'exclusive' }, fn);
+  }
+  return fn();
+}
+
 function clearProactiveRefresh(): void {
   if (proactiveRefreshTimeoutId != null) {
     clearTimeout(proactiveRefreshTimeoutId);
@@ -109,26 +120,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       headers['X-Forwarded-Host'] = window.location.host;
     }
     refreshAccessSingleFlight = (async (): Promise<string | null> => {
-      try {
-        const res = await fetch(`${API_URL}/api/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-          headers,
-          body: JSON.stringify({}),
-        });
-        const data = await res.json();
-        if (!res.ok || !data?.success || !data?.data?.accessToken) {
+      return withCrossTabRefreshLock(async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include',
+            headers,
+            body: JSON.stringify({}),
+          });
+          const data = await res.json();
+          if (!res.ok || !data?.success || !data?.data?.accessToken) {
+            set({ reauthRequired: true, accessToken: null });
+            return null;
+          }
+          const { accessToken, user } = data.data;
+          set({ accessToken, user: user ?? get().user, reauthRequired: false });
+          if (typeof window !== 'undefined') scheduleProactiveRefresh(accessToken, get().refreshAccess);
+          return accessToken;
+        } catch {
           set({ reauthRequired: true, accessToken: null });
           return null;
         }
-        const { accessToken, user } = data.data;
-        set({ accessToken, user: user ?? get().user, reauthRequired: false });
-        if (typeof window !== 'undefined') scheduleProactiveRefresh(accessToken, get().refreshAccess);
-        return accessToken;
-      } catch {
-        set({ reauthRequired: true, accessToken: null });
-        return null;
-      }
+      });
     })().finally(() => {
       refreshAccessSingleFlight = null;
     });
