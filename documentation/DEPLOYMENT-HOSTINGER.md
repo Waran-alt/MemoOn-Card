@@ -2,12 +2,12 @@
 
 > Revue secrets / HTTPS / deploiement : croiser avec `documentation/private/CODEBASE_AUDIT_GRID.md` (sections 7 et 1).
 
-Mise en place : **push sur `main` ou `master`** → GitHub Actions déclenche le déploiement sur le VPS Hostinger via l’API Hostinger. Le fichier **`docker-compose.deploy.yml`** est une **copie fusionnée** (une seule section `services`) de l’app prod et de l’observabilité : Hostinger exige une section `services` à la racine et n’accepte pas un fichier qui ne contient que `include`. À **maintenir aligné** avec `docker-compose.prod.yml` et `docker-compose.monitoring.yml` si vous modifiez ces fichiers. Les configs d’observabilité sont **intégrées aux images** (`monitoring/Dockerfile.prometheus`, `Dockerfile.loki`, etc.) : le répertoire `/docker/memoon-card/monitoring` n’a pas besoin d’exister au **runtime** sur le VPS (le build clone le dépôt et construit ces images).
+Mise en place : **push sur `main` ou `master`** → GitHub Actions déclenche le déploiement sur le VPS Hostinger via l’API Hostinger. Par défaut le workflow utilise **`docker-compose.prod.yml`** (Postgres + backend + frontend uniquement) pour limiter la charge mémoire pendant `docker compose build` sur un petit VPS. Le fichier **`docker-compose.deploy.yml`** est une **copie fusionnée** (une seule section `services`) de l’app prod et de l’observabilité : Hostinger exige une section `services` à la racine et n’accepte pas un fichier qui ne contient que `include`. À **maintenir aligné** avec `docker-compose.prod.yml` et `docker-compose.monitoring.yml` si vous modifiez ces fichiers. Pour déployer aussi Loki/Grafana/Prometheus, définir la variable GitHub **`HOSTINGER_COMPOSE_FILE=docker-compose.deploy.yml`** (voir section *Fonctionnement*). Les configs d’observabilité sont **intégrées aux images** (`monitoring/Dockerfile.prometheus`, `Dockerfile.loki`, etc.) : le répertoire `/docker/memoon-card/monitoring` n’a pas besoin d’exister au **runtime** sur le VPS (le build clone le dépôt et construit ces images).
 
 ## Prérequis
 
 - Un **VPS Hostinger** avec Docker (template Docker disponible dans le panel).
-- **RAM** : l’observabilité ajoute plusieurs conteneurs ; un VPS très petit peut saturer (surveiller avec `docker stats`). Le compose impose des **plafonds CPU/mémoire** sur les services de monitoring (`deploy.resources`) et une rétention courte par défaut (Prometheus **7j** via `PROMETHEUS_RETENTION`, Loki **7j** dans `monitoring/loki-config.yaml`). Détail et pistes d’allègement : `monitoring/README.md` section « Ressources (VPS) ».
+- **RAM** : reconstruire les images **en parallèle** (`docker compose up --build`) alors que la stack tourne (surtout avec Loki, Prometheus, Grafana) peut provoquer un **OOM global** : le noyau tue un conteneur (souvent **loki** ou un processus de build), visible dans `dmesg -T` (`Out of memory: Killed process … (loki)`). **Par défaut** le déploiement CI n’embarque pas le monitoring ; pour l’activer il faut assez de RAM (souvent **≥ 4 Go**), de la **swap**, ou déployer le monitoring à part (`yarn docker:prod:monitoring:up` sur une autre machine / après coup). Détail : `monitoring/README.md` section « Ressources (VPS) ».
 - Un dépôt GitHub (public ou privé) avec le code MemoOn-Card.
 
 ## Configuration une fois
@@ -29,7 +29,7 @@ Si vous mettez une valeur en **Secret** alors que le workflow lit une **Variable
 | `HOSTINGER_API_KEY` | **Secret** | Oui | — | Clé API Hostinger : [hPanel → Profile → API](https://hpanel.hostinger.com/profile/api) |
 | `POSTGRES_PASSWORD` | **Secret** | Oui | — | Mot de passe PostgreSQL de production |
 | `JWT_SECRET` | **Secret** | Oui | — | Secret JWT (au moins 32 caractères) |
-| `GRAFANA_ADMIN_PASSWORD` | **Secret** | Recommandé | — | Mot de passe administrateur Grafana (stack monitoring déployée avec l’app). **À définir** : sans secret, une valeur vide peut être envoyée et empêcher Grafana de démarrer correctement. Pour **ne pas** déployer le monitoring, remplacez dans le workflow `docker-compose-path: docker-compose.deploy.yml` par `docker-compose.prod.yml`. |
+| `GRAFANA_ADMIN_PASSWORD` | **Secret** | Recommandé si monitoring | — | Mot de passe administrateur Grafana. Utile seulement si vous déployez **`docker-compose.deploy.yml`** (variable `HOSTINGER_COMPOSE_FILE`). Avec le défaut **`docker-compose.prod.yml`**, Grafana n’est pas lancé par le CI. |
 | `HOSTINGER_VM_ID` | **Variable** | Oui | — | ID du VPS (ex. dans l’URL hPanel : `.../vps/123456/overview` → `123456`) |
 | `NEXT_PUBLIC_API_URL` | **Variable** | Recommandé | — | URL publique de l’app, ex. `https://memoon-card.focus-on-pixel.com` (sans slash final). **En Variable**, pas en Secret. Sans cela, le front peut appeler une mauvaise API (ERR_NAME_NOT_RESOLVED). |
 | `CORS_ORIGIN` | **Variable** | Recommandé | — | Origine CORS, en général la même que `NEXT_PUBLIC_API_URL`. **En Variable**, pas en Secret. |
@@ -122,7 +122,7 @@ Si l'utilisateur est déconnecté après un rechargement (F5) alors qu'il était
 
 ### Si le déploiement n’applique pas les changements
 
-**Comportement Hostinger** : au déclenchement (push ou redeploy), Hostinger clone le dépôt au **bon commit** (celui de l’URL envoyée par le workflow), utilise `docker-compose.prod.yml` de ce clone, puis lance le build des images. **Si le build échoue** (erreur TypeScript, dépendance, etc.), les conteneurs ne sont pas mis à jour et le site continue avec l’ancienne image — d’où l’impression que « rien ne change ». Il faut donc **consulter les logs de build** pour voir l’erreur réelle.
+**Comportement Hostinger** : au déclenchement (push ou redeploy), Hostinger clone le dépôt au **bon commit** (celui de l’URL envoyée par le workflow), utilise le fichier compose configuré dans le workflow (par défaut **`docker-compose.prod.yml`**, ou **`docker-compose.deploy.yml`** si `HOSTINGER_COMPOSE_FILE` est défini), puis lance le build des images. **Si le build échoue** (erreur TypeScript, dépendance, etc.), les conteneurs ne sont pas mis à jour et le site continue avec l’ancienne image — d’où l’impression que « rien ne change ». Il faut donc **consulter les logs de build** pour voir l’erreur réelle.
 
 **Consulter le log de build (SSH)** : sur le VPS, le log du dernier build est en général dans le dossier du projet, par ex. :
 
@@ -154,7 +154,7 @@ Ou en combinant avec l’app : `yarn docker:prod:monitoring:up` (fusionne `.env`
 
 **Sécurité (défaut)** : Grafana et Loki sont publiés sur **127.0.0.1** uniquement ; accès via **tunnel SSH** (ex. `ssh -L 3333:127.0.0.1:3333 user@vps`). Définir `GRAFANA_ADMIN_PASSWORD` dans `.env` (voir `env.example`). Ne pas exposer Grafana sur Internet sans **HTTPS** et un **mot de passe fort** (et éventuellement une couche d’auth supplémentaire).
 
-**CI/CD** : le workflow `.github/workflows/deploy-hostinger.yml` utilise **`docker-compose.deploy.yml`**, qui déploie aussi ce monitoring à chaque push.
+**CI/CD** : le workflow `.github/workflows/deploy-hostinger.yml` utilise par défaut **`docker-compose.prod.yml`** (app seule). Pour déployer en même temps Loki, Promtail, Grafana, Prometheus et cAdvisor, définir la variable de dépôt **`HOSTINGER_COMPOSE_FILE=docker-compose.deploy.yml`** (voir *Fonctionnement*).
 
 ### Grafana par sous-domaine (HTTPS, optionnel)
 
@@ -442,13 +442,16 @@ Cela assure que le frontend et le backend utilisent bien l’URL HTTPS en produc
 1. **Workflow** : `.github/workflows/deploy-hostinger.yml`
    - Déclenché sur **push** vers `main` ou `master` (ou manuellement via *workflow_dispatch*).
    - Utilise l’action officielle `hostinger/deploy-on-vps@v2`.
-   - Envoie le repo sur le VPS et exécute **`docker compose -f docker-compose.deploy.yml`** (build + up), fichier unique fusionnant app et observabilité.
+   - Envoie le repo sur le VPS et exécute **`docker compose -f <fichier>`** (build + up). Le fichier est **`docker-compose.prod.yml`** par défaut, ou la valeur de la variable **`HOSTINGER_COMPOSE_FILE`** si elle est définie (ex. `docker-compose.deploy.yml`).
 
-2. **Compose déployé** : `docker-compose.deploy.yml` → app (`postgres`, `backend`, `frontend`) + observabilité (Loki, Promtail, Grafana, Prometheus, cAdvisor).
-   - Les variables d’environnement (dont `POSTGRES_PASSWORD`, `JWT_SECRET`, `NEXT_PUBLIC_API_URL`, `CORS_ORIGIN`, `GRAFANA_ADMIN_PASSWORD`) sont fournies par le workflow.
-   - **Sans monitoring** : dans le workflow, remplacer `docker-compose-path: docker-compose.deploy.yml` par `docker-compose.prod.yml`.
+2. **Fichiers compose** :
+   - **`docker-compose.prod.yml`** (défaut CI) : `postgres`, `backend`, `frontend`.
+   - **`docker-compose.deploy.yml`** (optionnel, variable `HOSTINGER_COMPOSE_FILE`) : même app + observabilité (Loki, Promtail, Grafana, Prometheus, cAdvisor). À réserver aux VPS avec assez de RAM pour éviter les OOM pendant le build.
+   - Les variables d’environnement (dont `POSTGRES_PASSWORD`, `JWT_SECRET`, `NEXT_PUBLIC_API_URL`, `CORS_ORIGIN`, `GRAFANA_ADMIN_PASSWORD`) sont fournies par le workflow ; les secrets Grafana ne servent que si le compose inclut Grafana.
 
 Après configuration, un **simple push sur `main`/`master`** met à jour les conteneurs sur Hostinger.
+
+Si vous passiez auparavant à **`docker-compose.deploy.yml`** via le workflow et que vous repassez au défaut **prod seule**, les conteneurs monitoring déjà créés **ne sont pas supprimés automatiquement** : en SSH, arrêtez-les pour libérer la RAM, par ex. `docker compose -f docker-compose.deploy.yml down` depuis le dossier du projet (sans `-v` si vous voulez conserver les volumes Grafana/Prometheus jusqu’à décision).
 
 ## VPS déjà utilisé par un autre projet
 

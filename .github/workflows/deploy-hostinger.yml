@@ -1,13 +1,17 @@
-# Deploy on push to main/master: Hostinger VPS builds and runs app + observability (docker-compose.deploy.yml).
+# Deploy on push to main/master: Hostinger VPS builds and runs the stack from a compose file.
+#
+# Default compose is docker-compose.prod.yml (postgres + backend + frontend only). Rebuilding images
+# alongside Loki/Prometheus/Grafana on a small VPS often triggers OOM (kernel may kill e.g. loki).
+# To deploy app + observability, set Repository variable HOSTINGER_COMPOSE_FILE=docker-compose.deploy.yml
+# (recommend ≥4 GB RAM, or add swap). See documentation/DEPLOYMENT-HOSTINGER.md.
 #
 # One-time setup: Settings → Secrets and variables → Actions → Repository (not Environment).
-# - Secrets: HOSTINGER_API_KEY, POSTGRES_PASSWORD, JWT_SECRET, GRAFANA_ADMIN_PASSWORD (strong; Grafana)
+# - Secrets: HOSTINGER_API_KEY, POSTGRES_PASSWORD, JWT_SECRET, GRAFANA_ADMIN_PASSWORD (if using deploy.yml + Grafana)
 #   optional: DEV_EMAIL, DEV_PASSWORD, DEV_USERNAME
 # - Variables: HOSTINGER_VM_ID, NEXT_PUBLIC_API_URL, CORS_ORIGIN; optional: POSTGRES_DB, POSTGRES_USER,
-#   GRAFANA_ROOT_URL (public Grafana URL, e.g. https://grafana.memoon-card.focus-on-pixel.com — no trailing slash)
+#   HOSTINGER_COMPOSE_FILE, GRAFANA_ROOT_URL (public Grafana URL, e.g. https://grafana.example.com — no trailing slash)
 # If NEXT_PUBLIC_API_URL / CORS_ORIGIN are in Secrets instead of Variables, they stay empty
 # because this workflow uses vars.* for them. See documentation/DEPLOYMENT-HOSTINGER.md.
-# App-only (no monitoring): set docker-compose-path to docker-compose.prod.yml in the step below.
 
 name: Deploy to Hostinger VPS
 
@@ -38,7 +42,7 @@ jobs:
           api-key: ${{ secrets.HOSTINGER_API_KEY }}
           virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
           project-name: memoon-card
-          docker-compose-path: docker-compose.deploy.yml
+          docker-compose-path: ${{ vars.HOSTINGER_COMPOSE_FILE || 'docker-compose.prod.yml' }}
           environment-variables: |
             NODE_ENV=production
             GIT_SHA=${{ github.sha }}

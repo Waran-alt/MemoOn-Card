@@ -1,6 +1,6 @@
 # Self-hosted observability (Loki + Prometheus + Grafana)
 
-Stack option **1** from the monitoring discussion: centralize **stdout/stderr** (Loki + Promtail) and optional **metrics** (Prometheus scrapes the backend `/metrics` and cAdvisor for container CPU/memory). On Hostinger, **`docker-compose.deploy.yml`** duplicates this stack alongside prod (keep both YAMLs in sync when you change monitoring). Locally, `yarn docker:deploy:up` uses that file.
+Stack option **1** from the monitoring discussion: centralize **stdout/stderr** (Loki + Promtail) and optional **metrics** (Prometheus scrapes the backend `/metrics` and cAdvisor for container CPU/memory). On Hostinger, **CI/CD defaults to app-only** (`docker-compose.prod.yml`) to avoid OOM during image rebuilds; set GitHub variable **`HOSTINGER_COMPOSE_FILE=docker-compose.deploy.yml`** to deploy this stack with the app (needs enough RAM). **`docker-compose.deploy.yml`** duplicates monitoring alongside prod (keep both YAMLs in sync when you change monitoring). Locally, `yarn docker:deploy:up` uses that file.
 
 ## Prerequisites
 
