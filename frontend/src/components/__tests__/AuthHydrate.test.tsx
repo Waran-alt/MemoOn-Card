@@ -12,6 +12,7 @@ vi.mock('@/store/auth.store', () => ({
       refreshAccess: mockRefreshAccess,
       refreshIfStale: vi.fn().mockResolvedValue(undefined),
       reauthRequired: false,
+      reauthSessionInvalidated: false,
       user: null,
       setAuthSuccess: vi.fn(),
       logout: vi.fn(),

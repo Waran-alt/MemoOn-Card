@@ -58,12 +58,34 @@ function isRefreshAuthFailureStatus(status: number): boolean {
   return status === 401 || status === 403;
 }
 
+/**
+ * POST /refresh returned 401 with a message that means the refresh cookie chain is dead
+ * (reuse/revocation/rotation). Retrying refresh without a new login cannot succeed.
+ */
+function isRefreshSessionInvalidatedMessage(message: unknown): boolean {
+  if (typeof message !== 'string') return false;
+  const m = message.toLowerCase();
+  return (
+    m.includes('reuse') ||
+    m.includes('revoked') ||
+    m.includes('invalid or expired refresh') ||
+    m.includes('invalid refresh token') ||
+    m.includes('session not found') ||
+    m.includes('user not found')
+  );
+}
+
 export interface AuthState {
   user: AuthUser | null;
   accessToken: string | null;
   isHydrated: boolean;
   /** When true, refresh failed (e.g. session expired); show re-auth modal instead of redirecting. */
   reauthRequired: boolean;
+  /**
+   * When true with reauthRequired, the server invalidated refresh sessions (e.g. token reuse across tabs).
+   * UI should not offer “retry refresh” — only password login can issue a new session.
+   */
+  reauthSessionInvalidated: boolean;
   setUser: (user: AuthUser | null) => void;
   setAccessToken: (token: string | null) => void;
   setHydrated: (hydrated: boolean) => void;
@@ -114,6 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   accessToken: null,
   isHydrated: false,
   reauthRequired: false,
+  reauthSessionInvalidated: false,
 
   setUser: (user) => set({ user }),
   setAccessToken: (token) => set({ accessToken: token }),
@@ -121,7 +144,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setReauthRequired: (value) => set({ reauthRequired: value }),
 
   setAuthSuccess: (data) => {
-    set({ user: data.user, accessToken: data.accessToken, isHydrated: true, reauthRequired: false });
+    set({
+      user: data.user,
+      accessToken: data.accessToken,
+      isHydrated: true,
+      reauthRequired: false,
+      reauthSessionInvalidated: false,
+    });
     if (typeof window !== 'undefined')
       scheduleProactiveRefresh(data.accessToken, get().refreshAccess, () => ({
         reauthRequired: get().reauthRequired,
@@ -133,7 +162,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     clearProactiveRefresh();
-    set({ user: null, accessToken: null, isHydrated: true, reauthRequired: false });
+    set({
+      user: null,
+      accessToken: null,
+      isHydrated: true,
+      reauthRequired: false,
+      reauthSessionInvalidated: false,
+    });
   },
 
   refreshAccess: async (): Promise<string | null> => {
@@ -159,12 +194,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           });
           const text = await res.text();
           const parsed = parseRefreshResponseJson(text);
-          const data = parsed as { success?: boolean; data?: { accessToken?: string; user?: AuthUser } } | null;
+          const data = parsed as {
+            success?: boolean;
+            error?: string;
+            data?: { accessToken?: string; user?: AuthUser };
+          } | null;
           const accessToken = data?.success === true && typeof data.data?.accessToken === 'string' ? data.data.accessToken : null;
           const user = data?.data?.user;
+          const apiError = typeof data?.error === 'string' ? data.error : '';
 
           if (res.ok && accessToken) {
-            set({ accessToken, user: user ?? get().user, reauthRequired: false });
+            set({
+              accessToken,
+              user: user ?? get().user,
+              reauthRequired: false,
+              reauthSessionInvalidated: false,
+            });
             if (typeof window !== 'undefined')
               scheduleProactiveRefresh(accessToken, get().refreshAccess, () => ({
                 reauthRequired: get().reauthRequired,
@@ -174,7 +219,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
 
           if (isRefreshAuthFailureStatus(res.status)) {
-            set({ reauthRequired: true, accessToken: null });
+            set({
+              reauthRequired: true,
+              accessToken: null,
+              reauthSessionInvalidated: isRefreshSessionInvalidatedMessage(apiError),
+            });
             return null;
           }
 

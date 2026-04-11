@@ -7,6 +7,7 @@
   "reauthSubmit": "Se reconnecter",
   "reauthRetryRefresh": "Réessayer de renouveler la session",
   "reauthRetryRefreshFailed": "La session n’a pas pu être renouvelée automatiquement. Connectez-vous ci-dessous ou réessayez.",
+  "reauthSessionInvalidatedMessage": "Votre connexion a été réinitialisée pour des raisons de sécurité (par ex. rafraîchissement du compte dans un autre onglet, ou double tentative de renouvellement). Connectez-vous avec votre mot de passe ci-dessous. Renouveler sans mot de passe ne peut pas fonctionner.",
   "reauthLogout": "Se déconnecter",
   "forgotPassword": "Mot de passe oublié ?",
   "forgotPasswordTitle": "Mot de passe oublié",

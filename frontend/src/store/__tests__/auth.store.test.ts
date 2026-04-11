@@ -8,6 +8,7 @@ describe('auth.store', () => {
       accessToken: null,
       isHydrated: false,
       reauthRequired: false,
+      reauthSessionInvalidated: false,
     });
     vi.clearAllMocks();
   });
@@ -32,12 +33,13 @@ describe('auth.store', () => {
 
   describe('setAuthSuccess', () => {
     it('sets user, accessToken, reauthRequired false, and marks hydrated', () => {
-      useAuthStore.setState({ reauthRequired: true });
+      useAuthStore.setState({ reauthRequired: true, reauthSessionInvalidated: true });
       const user = { id: '1', email: 'a@b.com', name: 'Alice' };
       useAuthStore.getState().setAuthSuccess({ accessToken: 'token-xyz', user });
       expect(useAuthStore.getState().user).toEqual(user);
       expect(useAuthStore.getState().accessToken).toBe('token-xyz');
       expect(useAuthStore.getState().reauthRequired).toBe(false);
+      expect(useAuthStore.getState().reauthSessionInvalidated).toBe(false);
       expect(useAuthStore.getState().isHydrated).toBe(true);
     });
   });
@@ -58,11 +60,13 @@ describe('auth.store', () => {
         accessToken: 'token',
         isHydrated: true,
         reauthRequired: true,
+        reauthSessionInvalidated: true,
       });
       useAuthStore.getState().logout();
       expect(useAuthStore.getState().user).toBeNull();
       expect(useAuthStore.getState().accessToken).toBeNull();
       expect(useAuthStore.getState().reauthRequired).toBe(false);
+      expect(useAuthStore.getState().reauthSessionInvalidated).toBe(false);
       expect(useAuthStore.getState().isHydrated).toBe(true);
     });
   });
@@ -84,8 +88,21 @@ describe('auth.store', () => {
       const result = await useAuthStore.getState().refreshAccess();
       expect(result).toBeNull();
       expect(useAuthStore.getState().reauthRequired).toBe(true);
+      expect(useAuthStore.getState().reauthSessionInvalidated).toBe(false);
       expect(useAuthStore.getState().accessToken).toBeNull();
       expect(useAuthStore.getState().user).not.toBeNull();
+    });
+
+    it('sets reauthSessionInvalidated when refresh returns reuse / revoked errors', async () => {
+      useAuthStore.setState({ user: { id: '1', email: 'u@x.com', name: 'U' } });
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(JSON.stringify({ success: false, error: 'Refresh token reuse detected' })),
+      }) as typeof fetch;
+      await useAuthStore.getState().refreshAccess();
+      expect(useAuthStore.getState().reauthSessionInvalidated).toBe(true);
     });
 
     it('does not set reauthRequired on 503 or network-style failures', async () => {

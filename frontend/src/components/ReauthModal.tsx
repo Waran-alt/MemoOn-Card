@@ -14,6 +14,7 @@ interface ReauthModalProps {
 export function ReauthModal({ locale }: ReauthModalProps) {
   const router = useRouter();
   const reauthRequired = useAuthStore((s) => s.reauthRequired);
+  const reauthSessionInvalidated = useAuthStore((s) => s.reauthSessionInvalidated);
   const user = useAuthStore((s) => s.user);
   const setAuthSuccess = useAuthStore((s) => s.setAuthSuccess);
   const logout = useAuthStore((s) => s.logout);
@@ -49,6 +50,7 @@ export function ReauthModal({ locale }: ReauthModalProps) {
         setAuthSuccess({ accessToken: data.data.accessToken, user: data.data.user });
         setPassword('');
         setTrustDevice(false);
+        router.refresh();
         return;
       }
       setError('error' in data && typeof data.error === 'string' ? data.error : tc('loginFailed'));
@@ -70,7 +72,13 @@ export function ReauthModal({ locale }: ReauthModalProps) {
     setRetrying(true);
     try {
       const token = await refreshAccess();
-      if (!token) setError(ta('reauthRetryRefreshFailed'));
+      if (token) {
+        router.refresh();
+        return;
+      }
+      if (!useAuthStore.getState().reauthSessionInvalidated) {
+        setError(ta('reauthRetryRefreshFailed'));
+      }
     } finally {
       setRetrying(false);
     }
@@ -90,17 +98,19 @@ export function ReauthModal({ locale }: ReauthModalProps) {
           {ta('reauthModalTitle')}
         </h2>
         <p className="mt-2 text-center text-sm text-(--mc-text-secondary)">
-          {ta('reauthModalMessage')}
+          {reauthSessionInvalidated ? ta('reauthSessionInvalidatedMessage') : ta('reauthModalMessage')}
         </p>
-        <button
-          type="button"
-          disabled={retrying}
-          onClick={() => void handleRetryRefresh()}
-          className="mt-4 w-full rounded border border-(--mc-border-subtle) py-2 text-sm font-medium text-(--mc-text-primary) transition-colors hover:bg-(--mc-bg-muted) disabled:opacity-50"
-        >
-          {retrying ? tc('loading') : ta('reauthRetryRefresh')}
-        </button>
-        <form onSubmit={handleSubmit} className="mt-3 space-y-4" autoComplete="on">
+        {!reauthSessionInvalidated && (
+          <button
+            type="button"
+            disabled={retrying}
+            onClick={() => void handleRetryRefresh()}
+            className="mt-4 w-full rounded border border-(--mc-border-subtle) py-2 text-sm font-medium text-(--mc-text-primary) transition-colors hover:bg-(--mc-bg-muted) disabled:opacity-50"
+          >
+            {retrying ? tc('loading') : ta('reauthRetryRefresh')}
+          </button>
+        )}
+        <form onSubmit={handleSubmit} className={`space-y-4 ${reauthSessionInvalidated ? 'mt-4' : 'mt-3'}`} autoComplete="on">
           <div>
             <label htmlFor="reauth-email" className="mb-1 block text-sm font-medium text-(--mc-text-secondary)">
               {tc('email')}
