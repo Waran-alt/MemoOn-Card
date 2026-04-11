@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
+import { normalizeVersionLabel } from '@/lib/version-display';
 
 /**
  * Returns the product version: RELEASE_LABEL (root package.json semver ± short sha) baked at build,
@@ -21,5 +22,5 @@ export async function GET() {
   } catch {
     version = 'dev';
   }
-  return NextResponse.json({ version });
+  return NextResponse.json({ version: normalizeVersionLabel(version) });
 }

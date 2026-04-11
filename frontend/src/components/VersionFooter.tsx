@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { normalizeVersionLabel } from '@/lib/version-display';
 
 const FALLBACK_VERSION = '—';
 
@@ -20,7 +21,7 @@ export function VersionFooter() {
     const t = setTimeout(() => ac.abort(), 3000);
     fetch('/api/version', { signal: ac.signal })
       .then((res) => (res.ok ? res.json() : { version: 'dev' }))
-      .then((data) => setVersion(data?.version ?? 'dev'))
+      .then((data) => setVersion(normalizeVersionLabel(data?.version ?? 'dev')))
       .catch(() => setVersion('dev'))
       .finally(() => clearTimeout(t));
     return () => { ac.abort(); clearTimeout(t); };

@@ -69,6 +69,7 @@ COPY backend/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/backend/package.json ./backend/package.json
 # Replace workspace symlink with real package so Node finds dist at node_modules/@memoon-card/shared/dist
 RUN rm -rf ./node_modules/@memoon-card/shared && mkdir -p ./node_modules/@memoon-card/shared
 COPY --from=builder /app/shared/package.json ./node_modules/@memoon-card/shared/

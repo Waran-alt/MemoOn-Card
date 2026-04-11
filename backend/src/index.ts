@@ -51,6 +51,7 @@ import devRoutes from './routes/dev.routes';
 import { FsrsMetricsJobService } from './services/fsrs-metrics-job.service';
 import { ensureDevUser } from './dev/ensureDevUser';
 import { logger, serializeError } from './utils/logger';
+import { resolvePublicAppVersion } from './utils/version-display';
 import { getMetricsContentType, getMetricsText, httpMetricsMiddleware } from './metrics/prometheus';
 
 const app = express();
@@ -185,12 +186,7 @@ app.use('/api/auth', authRoutes);
 
 // Version (public, no auth) — used by VersionFooter; Nginx proxies /api to backend so Next.js route never receives it in prod
 app.get('/api/version', (_req: Request, res: Response) => {
-  const version =
-    process.env.APP_RELEASE?.trim() ||
-    process.env.NEXT_PUBLIC_APP_VERSION?.trim() ||
-    process.env.GIT_SHA?.trim() ||
-    'dev';
-  return res.json({ version });
+  return res.json({ version: resolvePublicAppVersion() });
 });
 
 // API Routes (require authentication + CSRF protection)
