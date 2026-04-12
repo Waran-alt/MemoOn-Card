@@ -134,6 +134,14 @@ export function DeckStatsModal({
       ratingMarkersHidden: ta('deckStatsOverlayRatingMarkersHidden'),
       ratingMarkersModeGroup: ta('deckStatsOverlayRatingMarkersModeGroup'),
       stabilityLongTermGoalCaption: ta('chartStabilityLongTermGoalCaption'),
+      aggregateMeanCaption: ta('deckStatsOverlayAggregateMeanCaption'),
+      aggregateMedianCaption: ta('deckStatsOverlayAggregateMedianCaption'),
+      lineEndMeanCaption: ta('deckStatsOverlayLineEndMean'),
+      lineEndMedianCaption: ta('deckStatsOverlayLineEndMedian'),
+      lineTooltipLtm: ta('deckStatsOverlayLineTooltipLtm'),
+      lineTooltipMean: ta('deckStatsOverlayLineTooltipMean'),
+      lineTooltipMedian: ta('deckStatsOverlayLineTooltipMedian'),
+      helpIconAria: ta('deckStatsOverlayHelpIconAria'),
     }),
     [ta]
   );

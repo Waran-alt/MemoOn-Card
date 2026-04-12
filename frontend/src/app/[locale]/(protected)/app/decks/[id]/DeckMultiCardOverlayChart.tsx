@@ -12,12 +12,109 @@ import {
   type RatingMarkerMode,
 } from './CardReviewHistoryChart';
 
-const M = { top: 14, right: 20, bottom: 54, left: 46 };
+const M = { top: 14, right: 36, bottom: 54, left: 46 };
+
+/** Outer radius of the help icon in chart space (matches Lucide circle r=10 scaled). */
+const HELP_ICON_R = 9;
+
+/**
+ * Lucide `CircleQuestionMark` (a.k.a. circle-help) vector, viewBox 0 0 24 24.
+ * Source: lucide-react `circle-question-mark` (ISC). Strokes use `currentColor`.
+ */
+function appendLucideCircleQuestionHelp(
+  parent: d3.Selection<SVGGElement, unknown, null, undefined>,
+  strokeCss: string
+) {
+  const k = HELP_ICON_R / 12;
+  const inner = parent
+    .append('g')
+    .attr('transform', `scale(${k}) translate(-12,-12)`)
+    .style('color', strokeCss);
+  inner
+    .append('circle')
+    .attr('cx', 12)
+    .attr('cy', 12)
+    .attr('r', 10)
+    .attr('fill', 'color-mix(in oklab, var(--mc-bg-surface) 88%, transparent)')
+    .attr('stroke', 'currentColor')
+    .attr('stroke-width', 2)
+    .attr('stroke-linecap', 'round')
+    .attr('stroke-linejoin', 'round');
+  inner
+    .append('path')
+    .attr('d', 'M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3')
+    .attr('fill', 'none')
+    .attr('stroke', 'currentColor')
+    .attr('stroke-width', 2)
+    .attr('stroke-linecap', 'round')
+    .attr('stroke-linejoin', 'round');
+  inner
+    .append('path')
+    .attr('d', 'M12 17h.01')
+    .attr('fill', 'none')
+    .attr('stroke', 'currentColor')
+    .attr('stroke-width', 2)
+    .attr('stroke-linecap', 'round')
+    .attr('stroke-linejoin', 'round');
+}
+
+type EndCapRow = {
+  y: number;
+  strokeColor: string;
+  tooltip: string;
+};
+
+/** Avoid overlapping end-cap help icons (SVG y grows downward). */
+function packEndLabels(items: EndCapRow[], lineH: number, minGap = HELP_ICON_R * 2 + 4): EndCapRow[] {
+  const sorted = [...items].sort((a, b) => a.y - b.y);
+  let prevY = -Infinity;
+  const out: EndCapRow[] = [];
+  for (const it of sorted) {
+    let yPos = it.y;
+    if (prevY !== -Infinity && yPos - prevY < minGap) {
+      yPos = prevY + minGap;
+    }
+    yPos = Math.min(Math.max(yPos, 9), lineH - 5);
+    out.push({ ...it, y: yPos });
+    prevY = yPos;
+  }
+  return out;
+}
 const CHART_MIN_WIDTH = 320;
 const CHART_HEIGHT = 300;
 const R_BAND = 36;
 
 type Metric = 'stability' | 'difficulty';
+
+/** Local midnight (ms) for the calendar day containing `ms`. */
+function startOfLocalDayMs(ms: number): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** End of that local calendar day (inclusive upper bound for “through this day”). */
+function endOfLocalDayMsFromDayStart(dayStartMs: number): number {
+  const d = new Date(dayStartMs);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+}
+
+function lastMetricYAtOrBefore(
+  pts: Array<{ tMs: number; y: number }>,
+  cutoffMs: number
+): number | null {
+  if (pts.length === 0 || pts[0]!.tMs > cutoffMs) return null;
+  let lo = 0;
+  let hi = pts.length - 1;
+  let ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (pts[mid]!.tMs <= cutoffMs) {
+      ans = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return pts[ans]!.y;
+}
 
 export type DeckMultiCardOverlayChartLabels = {
   chartTitle: string;
@@ -34,6 +131,22 @@ export type DeckMultiCardOverlayChartLabels = {
   ratingMarkersModeGroup: string;
   /** On-chart label for the S≥15d long-term zone (stability metric only). */
   stabilityLongTermGoalCaption: string;
+  /** Accessible name (SVG title) for deck mean-by-day curve. */
+  aggregateMeanCaption: string;
+  /** Accessible name (SVG title) for deck median-by-day curve. */
+  aggregateMedianCaption: string;
+  /** Short label at plot right for mean (with numeric value). */
+  lineEndMeanCaption: string;
+  /** Short label at plot right for median (with numeric value). */
+  lineEndMedianCaption: string;
+  /** Tooltip for the ≥15d LTM reference (stability only). */
+  lineTooltipLtm: string;
+  /** Tooltip for the deck mean curve. */
+  lineTooltipMean: string;
+  /** Tooltip for the deck median curve. */
+  lineTooltipMedian: string;
+  /** Shared aria-label prefix for ? help icons (screen readers). */
+  helpIconAria: string;
 };
 
 type CardSeries = {
@@ -89,6 +202,36 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     return withIdx.filter((s) => s.points.length > 0);
   }, [cards, metric]);
 
+  /** One sample per local calendar day that has ≥1 review anywhere in the deck. */
+  const deckEvolution = useMemo(() => {
+    if (seriesList.length === 0) return [] as Array<{ tMs: number; mean: number; median: number }>;
+
+    const dayStarts = new Set<number>();
+    for (const s of seriesList) {
+      for (const p of s.points) {
+        dayStarts.add(startOfLocalDayMs(p.tMs));
+      }
+    }
+    const sortedDays = [...dayStarts].sort((a, b) => a - b);
+    const out: Array<{ tMs: number; mean: number; median: number }> = [];
+
+    for (const dayStart of sortedDays) {
+      const cutoff = endOfLocalDayMsFromDayStart(dayStart);
+      const slice: number[] = [];
+      for (const s of seriesList) {
+        const yVal = lastMetricYAtOrBefore(s.points, cutoff);
+        if (yVal != null && Number.isFinite(yVal)) slice.push(yVal);
+      }
+      if (slice.length === 0) continue;
+      const mean = d3.mean(slice);
+      const median = d3.median(slice);
+      if (mean == null || !Number.isFinite(mean) || median == null || !Number.isFinite(median))
+        continue;
+      out.push({ tMs: cutoff, mean, median });
+    }
+    return out;
+  }, [seriesList]);
+
   const allT = useMemo(() => seriesList.flatMap((s) => s.points.map((p) => p.tMs)), [seriesList]);
   const tMin = allT.length ? d3.min(allT)! : Date.now();
   const tMax = allT.length ? d3.max(allT)! : Date.now();
@@ -100,19 +243,21 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
 
   const yExtent = useMemo(() => {
     const vals = seriesList.flatMap((s) => s.points.map((p) => p.y));
+    const evoVals = deckEvolution.flatMap((e) => [e.mean, e.median]);
+    const forExtent = vals.length ? [...vals, ...evoVals] : [];
     if (vals.length === 0) return { min: 0, max: 1 };
     if (metric === 'stability') {
-      const maxS = Math.max(0.5, d3.max(vals) ?? 1);
+      const maxS = Math.max(0.5, d3.max(forExtent) ?? 1);
       return {
         min: 0,
         max: Math.max(maxS * 1.12, STABILITY_LONG_TERM_GOAL_DAYS * 1.12),
       };
     }
-    const dMin = Math.min(0, d3.min(vals) ?? 0);
-    const dMax = Math.max(10, d3.max(vals) ?? 10);
+    const dMin = Math.min(0, d3.min(forExtent) ?? 0);
+    const dMax = Math.max(10, d3.max(forExtent) ?? 10);
     const dSpan = dMax - dMin;
     return { min: dMin, max: dMax + Math.max(dSpan * 0.08, 0.01) };
-  }, [seriesList, metric]);
+  }, [seriesList, metric, deckEvolution]);
 
   const chartTotalWidth = M.left + innerW + M.right;
 
@@ -182,15 +327,6 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         .attr('stroke-width', 1.25)
         .attr('stroke-dasharray', '5 4')
         .attr('opacity', 0.92);
-      goalG
-        .append('text')
-        .attr('x', innerW - 6)
-        .attr('y', Math.max(11, yG - 4))
-        .attr('text-anchor', 'end')
-        .style('fill', 'var(--mc-accent-success)')
-        .attr('font-size', 10)
-        .attr('font-weight', '600')
-        .text(labels.stabilityLongTermGoalCaption);
     }
 
     const lineGen = d3
@@ -209,6 +345,67 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
           .attr('stroke-opacity', 0.88)
           .attr('d', lineGen);
       }
+    }
+
+    const meanPathGen = d3
+      .line<{ tMs: number; mean: number; median: number }>()
+      .x((d) => xTime(new Date(d.tMs)))
+      .y((d) => y(d.mean))
+      .curve(d3.curveMonotoneX);
+    const medianPathGen = d3
+      .line<{ tMs: number; mean: number; median: number }>()
+      .x((d) => xTime(new Date(d.tMs)))
+      .y((d) => y(d.median))
+      .curve(d3.curveMonotoneX);
+
+    if (deckEvolution.length >= 2) {
+      const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
+      const meanPath = aggG
+        .append('path')
+        .datum(deckEvolution)
+        .attr('fill', 'none')
+        .attr('stroke', 'var(--mc-text-muted)')
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '6 5')
+        .attr('opacity', 0.95)
+        .attr('d', meanPathGen);
+      meanPath.append('title').text(labels.aggregateMeanCaption);
+      const medPath = aggG
+        .append('path')
+        .datum(deckEvolution)
+        .attr('fill', 'none')
+        .attr('stroke', 'var(--mc-accent-primary)')
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '3 4')
+        .attr('opacity', 0.95)
+        .attr('d', medianPathGen);
+      medPath.append('title').text(labels.aggregateMedianCaption);
+    } else if (deckEvolution.length === 1) {
+      const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
+      const d0 = deckEvolution[0]!;
+      const xm = xTime(new Date(d0.tMs));
+      const ym = y(d0.mean);
+      const ymed = y(d0.median);
+      aggG
+        .append('circle')
+        .attr('cx', xm)
+        .attr('cy', ym)
+        .attr('r', 4)
+        .attr('fill', 'none')
+        .attr('stroke', 'var(--mc-text-muted)')
+        .attr('stroke-width', 2)
+        .append('title')
+        .text(labels.aggregateMeanCaption);
+      aggG
+        .append('circle')
+        .attr('cx', xm)
+        .attr('cy', ymed)
+        .attr('r', 4)
+        .attr('fill', 'none')
+        .attr('stroke', 'var(--mc-accent-primary)')
+        .attr('stroke-width', 2)
+        .append('title')
+        .text(labels.aggregateMedianCaption);
     }
 
     /** Rating-colored markers (cross for Again), aligned with CardReviewHistoryChart. */
@@ -294,6 +491,44 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       .attr('font-size', 10)
       .text(yLabel);
 
+    /** Right-edge circled ? icons (LTM + last deck mean/median); values only in tooltips. */
+    const endLab = g.append('g').attr('class', 'deck-overlay-end-labels');
+    const fmtEnd = d3.format('.2f');
+    const iconCx = innerW + 6 + HELP_ICON_R;
+    const endItems: EndCapRow[] = [];
+    if (metric === 'stability') {
+      const ltmDays = STABILITY_LONG_TERM_GOAL_DAYS;
+      endItems.push({
+        y: y(ltmDays),
+        strokeColor: 'var(--mc-accent-success)',
+        tooltip: `${labels.stabilityLongTermGoalCaption}\n${ltmDays} d\n\n${labels.lineTooltipLtm}`,
+      });
+    }
+    if (deckEvolution.length > 0) {
+      const lastE = deckEvolution[deckEvolution.length - 1]!;
+      endItems.push({
+        y: y(lastE.mean),
+        strokeColor: 'var(--mc-text-muted)',
+        tooltip: `${labels.lineEndMeanCaption}: ${fmtEnd(lastE.mean)}\n\n${labels.lineTooltipMean}`,
+      });
+      endItems.push({
+        y: y(lastE.median),
+        strokeColor: 'var(--mc-accent-primary)',
+        tooltip: `${labels.lineEndMedianCaption}: ${fmtEnd(lastE.median)}\n\n${labels.lineTooltipMedian}`,
+      });
+    }
+    for (const it of packEndLabels(endItems, lineH)) {
+      const iconG = endLab
+        .append('g')
+        .attr('class', 'deck-overlay-end-help-icon')
+        .attr('transform', `translate(${iconCx},${it.y})`)
+        .attr('role', 'img')
+        .attr('aria-label', `${labels.helpIconAria}: ${it.tooltip}`)
+        .style('cursor', 'help');
+      iconG.append('title').text(it.tooltip);
+      appendLucideCircleQuestionHelp(iconG, it.strokeColor);
+    }
+
     /** Invisible overlay for nearest-point tooltip */
     const flatPoints = seriesList.flatMap((s) =>
       s.points.map((p) => ({
@@ -357,6 +592,15 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     labels.axisDifficulty,
     labels.axisTimeCaption,
     labels.stabilityLongTermGoalCaption,
+    labels.aggregateMeanCaption,
+    labels.aggregateMedianCaption,
+    labels.lineEndMeanCaption,
+    labels.lineEndMedianCaption,
+    labels.lineTooltipLtm,
+    labels.lineTooltipMean,
+    labels.lineTooltipMedian,
+    labels.helpIconAria,
+    deckEvolution,
     metric,
     padT,
     spanT,
