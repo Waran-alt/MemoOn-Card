@@ -11,13 +11,20 @@ import {
   getLastReviewCalendarTone,
   calendarDaysSinceLastReview,
 } from './cardFollowUpCopy';
-import { CardReviewHistoryChart, type CardReviewLogPoint } from './CardReviewHistoryChart';
+import {
+  CardReviewHistoryChart,
+  type CardReviewLinkedSeries,
+  type CardReviewLogPoint,
+} from './CardReviewHistoryChart';
 import { IconArrowsPointingIn, IconArrowsPointingOut } from './DeckUiIcons';
 import { ModalCloseButton } from './ModalCloseButton';
 
 export type CardFollowUpModalProps = {
   card: Card;
   reviewLogs: CardReviewLogPoint[];
+  linkedSeries?: CardReviewLinkedSeries[];
+  compareLinked?: boolean;
+  onCompareLinkedChange?: (value: boolean) => void;
   loading: boolean;
   error: string;
   locale: string;
@@ -34,6 +41,9 @@ export type CardFollowUpModalProps = {
 export function CardFollowUpModal({
   card,
   reviewLogs,
+  linkedSeries = [],
+  compareLinked = false,
+  onCompareLinkedChange,
   loading,
   error,
   locale,
@@ -86,6 +96,10 @@ export function CardFollowUpModal({
       axisTimeCaption: ta('cardFollowUpAxisTimeCaption'),
       chartXAxisSwitchToTime: ta('cardFollowUpChartXAxisSwitchToTime'),
       chartXAxisSwitchToIndex: ta('cardFollowUpChartXAxisSwitchToIndex'),
+      chartXAxisModeGroup: ta('cardFollowUpChartXAxisModeGroup'),
+      chartCompareLinkedOff: ta('cardFollowUpChartCompareLinkedOff'),
+      chartCompareLinkedOn: ta('cardFollowUpChartCompareLinkedOn'),
+      chartCompareLinkedGroup: ta('cardFollowUpChartCompareLinkedGroup'),
       srCaption: ta('cardFollowUpChartSrCaption'),
       ratingMarkersSolid: ta('deckStatsOverlayRatingMarkersSolid'),
       ratingMarkersFaded: ta('deckStatsOverlayRatingMarkersFaded'),
@@ -231,6 +245,10 @@ export function CardFollowUpModal({
                   labels={chartLabels}
                   ratingLabel={ratingLabel}
                   formatLogGap={formatLogGap}
+                  canCompareLinked={linkedSeries.length > 0}
+                  compareLinked={compareLinked}
+                  onCompareLinkedChange={onCompareLinkedChange}
+                  linkedSeries={compareLinked ? linkedSeries : []}
                 />
               )}
             </>

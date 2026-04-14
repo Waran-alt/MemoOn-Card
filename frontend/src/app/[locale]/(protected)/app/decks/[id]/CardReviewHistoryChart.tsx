@@ -67,6 +67,14 @@ export const STABILITY_LONG_TERM_GOAL_DAYS = 15;
 
 export type RatingMarkerMode = 'visible' | 'faded' | 'hidden';
 
+/** Optional neighbor histories for Tier A comparison (S/D polylines only, no markers). */
+export type CardReviewLinkedSeries = {
+  cardId: string;
+  /** Short label (e.g. recto preview) for tooltips. */
+  label: string;
+  logs: CardReviewLogPoint[];
+};
+
 export type CardReviewHistoryChartLabels = {
   chartTitle: string;
   axisStability: string;
@@ -76,6 +84,11 @@ export type CardReviewHistoryChartLabels = {
   axisTimeCaption: string;
   chartXAxisSwitchToTime: string;
   chartXAxisSwitchToIndex: string;
+  /** Accessible name for the X-axis mode `<select>`. */
+  chartXAxisModeGroup: string;
+  chartCompareLinkedOff: string;
+  chartCompareLinkedOn: string;
+  chartCompareLinkedGroup: string;
   srCaption: string;
   ratingMarkersSolid: string;
   ratingMarkersFaded: string;
@@ -93,6 +106,12 @@ type Props = {
   ratingLabel: (rating: number) => string;
   /** `null` = first log in chart (no previous sibling). */
   formatLogGap: (deltaMs: number | null) => string;
+  /** When true, show compare control (parent still passes `linkedSeries` only when compare is on). */
+  canCompareLinked?: boolean;
+  compareLinked?: boolean;
+  onCompareLinkedChange?: (value: boolean) => void;
+  /** Linked card histories; typically empty unless compare is enabled. */
+  linkedSeries?: CardReviewLinkedSeries[];
 };
 
 /** Top margin reduced: S/D/R legends live below the SVG. */
@@ -137,12 +156,21 @@ function stripeFromDayKey(key: string): number {
   return Math.floor(Date.UTC(y, mo - 1, d) / 86_400_000) % 2;
 }
 
+function linkedSeriesHue(j: number, total: number): string {
+  const h = ((j + 3) * 360) / Math.max(total + 3, 1);
+  return `hsl(${h} 52% 40%)`;
+}
+
 export function CardReviewHistoryChart({
   logs,
   locale,
   labels,
   ratingLabel,
   formatLogGap,
+  canCompareLinked = false,
+  compareLinked = false,
+  onCompareLinkedChange,
+  linkedSeries = [],
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -156,15 +184,38 @@ export function CardReviewHistoryChart({
   const titleId = useId();
 
   const augmented = useMemo(() => buildAugmented(logs), [logs]);
+  const linkedAugmented = useMemo(
+    () => linkedSeries.map((s) => buildAugmented(s.logs)),
+    [linkedSeries]
+  );
 
   const nLogs = augmented.length;
+  const maxLinkedN = useMemo(
+    () => (linkedAugmented.length ? Math.max(...linkedAugmented.map((a) => a.length)) : 0),
+    [linkedAugmented]
+  );
+  const maxN = Math.max(nLogs, maxLinkedN, 1);
+
+  const { tMin, tMax, spanT, padT } = useMemo(() => {
+    const allRows = [augmented, ...linkedAugmented];
+    const allT = allRows.flatMap((a) => a.map((x) => x.tMs));
+    if (allT.length === 0) {
+      return { tMin: 0, tMax: 1, spanT: 1, padT: 1 };
+    }
+    const tMinV = d3.min(allT)!;
+    const tMaxV = d3.max(allT)!;
+    const spanTV = Math.max(tMaxV - tMinV, 60_000);
+    const padTV = Math.max(spanTV * 0.05, 3_600_000);
+    return { tMin: tMinV, tMax: tMaxV, spanT: spanTV, padT: padTV };
+  }, [augmented, linkedAugmented]);
+
   const plotInnerW = useMemo(() => {
     const vw = Math.max(viewportWidth, CHART_MIN_WIDTH);
     const viewportInnerW = Math.max(0, vw - M.left - M.right);
     if (xAxisByTime) return viewportInnerW;
-    if (nLogs <= 1) return viewportInnerW;
-    return Math.max(viewportInnerW, (nLogs - 1) * MIN_LOG_GAP_PX);
-  }, [viewportWidth, xAxisByTime, nLogs]);
+    if (maxN <= 1) return viewportInnerW;
+    return Math.max(viewportInnerW, (maxN - 1) * MIN_LOG_GAP_PX);
+  }, [viewportWidth, xAxisByTime, maxN]);
 
   const chartTotalWidth = M.left + plotInnerW + M.right;
 
@@ -211,7 +262,7 @@ export function CardReviewHistoryChart({
     };
     run();
     requestAnimationFrame(run);
-  }, [xAxisByTime, plotInnerW, chartTotalWidth, nLogs, viewportWidth]);
+  }, [xAxisByTime, plotInnerW, chartTotalWidth, nLogs, maxN, viewportWidth]);
 
   useEffect(() => {
     const svgEl = svgRef.current;
@@ -224,13 +275,9 @@ export function CardReviewHistoryChart({
 
     const xIndex = d3
       .scaleLinear()
-      .domain(n === 1 ? [-0.5, 0.5] : [-0.5, n - 0.5])
+      .domain(maxN === 1 ? [-0.5, 0.5] : [-0.5, maxN - 0.5])
       .range([0, innerW]);
 
-    const tMin = d3.min(augmented, (d) => d.tMs)!;
-    const tMax = d3.max(augmented, (d) => d.tMs)!;
-    const spanT = Math.max(tMax - tMin, 60_000);
-    const padT = Math.max(spanT * 0.05, 3_600_000);
     const xTime = d3
       .scaleTime()
       .domain([new Date(tMin - padT), new Date(tMax + padT)])
@@ -255,18 +302,20 @@ export function CardReviewHistoryChart({
       });
     };
 
-    const sVals = augmented
-      .map((a) => a.log.stability_after)
-      .filter((v): v is number => v != null && Number.isFinite(v));
+    const sVals = [
+      ...augmented.map((a) => a.log.stability_after),
+      ...linkedAugmented.flatMap((a) => a.map((x) => x.log.stability_after)),
+    ].filter((v): v is number => v != null && Number.isFinite(v));
     const maxS = Math.max(0.5, d3.max(sVals) ?? 1);
     const yS = d3
       .scaleLinear()
       .domain([0, Math.max(maxS * 1.12, STABILITY_LONG_TERM_GOAL_DAYS * 1.12)])
       .range([lineH, 0]);
 
-    const dVals = augmented
-      .map((a) => a.log.difficulty_after)
-      .filter((v): v is number => v != null && Number.isFinite(v));
+    const dVals = [
+      ...augmented.map((a) => a.log.difficulty_after),
+      ...linkedAugmented.flatMap((a) => a.map((x) => x.log.difficulty_after)),
+    ].filter((v): v is number => v != null && Number.isFinite(v));
     const dMin = Math.min(0, d3.min(dVals) ?? 0);
     const dMax = Math.max(10, d3.max(dVals) ?? 10);
     const dSpan = dMax - dMin;
@@ -391,6 +440,16 @@ export function CardReviewHistoryChart({
           );
         }
       }
+      if (maxN > n && n >= 1) {
+        const tLast = augmented[n - 1]!.tMs;
+        const dayEndLast = addLocalDays(startOfLocalDay(new Date(tLast)), 1).getTime();
+        appendCalendarStripesForTimeSegment(
+          tLast,
+          dayEndLast,
+          xIndex(n - 1),
+          xIndex(maxN - 0.5)
+        );
+      }
     }
 
     /** Dashed threshold at goal stability (days) — behind R bars and curves. */
@@ -418,6 +477,59 @@ export function CardReviewHistoryChart({
         .text(labels.stabilityLongTermGoalCaption);
     }
 
+    for (let j = 0; j < linkedAugmented.length; j++) {
+      const la = linkedAugmented[j]!;
+      const strokeHue = linkedSeriesHue(j, linkedAugmented.length);
+      const xL = (idx: number, tMs: number) => (useTimeX ? xTime(new Date(tMs)) : xIndex(idx));
+      const sLinked = la.map((a, idx) => ({
+        index: idx,
+        tMs: a.tMs,
+        y:
+          a.log.stability_after != null && Number.isFinite(a.log.stability_after)
+            ? a.log.stability_after
+            : null,
+      }));
+      if (sLinked.some((d) => d.y != null)) {
+        const lineSL = d3
+          .line<(typeof sLinked)[0]>()
+          .defined((d) => d.y != null)
+          .x((d) => xL(d.index, d.tMs))
+          .y((d) => yS(d.y as number))
+          .curve(d3.curveMonotoneX);
+        g.append('path')
+          .datum(sLinked)
+          .attr('fill', 'none')
+          .style('stroke', strokeHue)
+          .attr('stroke-width', 1.2)
+          .attr('stroke-opacity', 0.52)
+          .attr('d', lineSL);
+      }
+      const dLinked = la.map((a, idx) => ({
+        index: idx,
+        tMs: a.tMs,
+        y:
+          a.log.difficulty_after != null && Number.isFinite(a.log.difficulty_after)
+            ? a.log.difficulty_after
+            : null,
+      }));
+      if (dLinked.some((d) => d.y != null)) {
+        const lineDL = d3
+          .line<(typeof dLinked)[0]>()
+          .defined((d) => d.y != null)
+          .x((d) => xL(d.index, d.tMs))
+          .y((d) => yD(d.y as number))
+          .curve(d3.curveMonotoneX);
+        g.append('path')
+          .datum(dLinked)
+          .attr('fill', 'none')
+          .style('stroke', strokeHue)
+          .attr('stroke-width', 1.15)
+          .attr('stroke-dasharray', '4 3')
+          .attr('stroke-opacity', 0.48)
+          .attr('d', lineDL);
+      }
+    }
+
     const rBarsBack = g.append('g').attr('class', 'chart-r-bars-back');
     const rBarW = 5;
     augmented.forEach((a) => {
@@ -436,7 +548,7 @@ export function CardReviewHistoryChart({
         .style('opacity', '0.28');
     });
 
-    const labelStep = n <= 16 ? 1 : Math.max(1, Math.ceil(n / 14));
+    const labelStep = maxN <= 16 ? 1 : Math.max(1, Math.ceil(maxN / 14));
     const xAxisG = g.append('g').attr('transform', `translate(0,${lineH})`);
     if (useTimeX) {
       const xAxis = d3
@@ -450,17 +562,17 @@ export function CardReviewHistoryChart({
         sel
           .selectAll('text')
           .style('fill', 'var(--mc-text-secondary)')
-          .attr('font-size', n > 24 ? 8 : 10)
+          .attr('font-size', maxN > 24 ? 8 : 10)
           .attr('text-anchor', 'middle')
           .attr('dy', '0.71em');
       });
     } else {
       const xAxis = d3
         .axisBottom(xIndex)
-        .tickValues(d3.range(n))
+        .tickValues(d3.range(maxN))
         .tickFormat((d) => {
           const i = Number(d);
-          return i % labelStep === 0 || i === n - 1 ? String(i + 1) : '';
+          return i % labelStep === 0 || i === maxN - 1 ? String(i + 1) : '';
         });
       xAxisG.call(xAxis);
       xAxisG.call((sel) => {
@@ -469,16 +581,16 @@ export function CardReviewHistoryChart({
         sel
           .selectAll('text')
           .style('fill', 'var(--mc-text-secondary)')
-          .attr('font-size', n > 24 ? 8 : 10)
-          .attr('text-anchor', n > 16 ? 'end' : 'middle')
-          .attr('dx', n > 16 ? '-0.35em' : '0')
-          .attr('dy', n > 16 ? '0.5em' : '0.71em')
-          .attr('transform', n > 16 ? 'rotate(-52)' : null);
+          .attr('font-size', maxN > 24 ? 8 : 10)
+          .attr('text-anchor', maxN > 16 ? 'end' : 'middle')
+          .attr('dx', maxN > 16 ? '-0.35em' : '0')
+          .attr('dy', maxN > 16 ? '0.5em' : '0.71em')
+          .attr('transform', maxN > 16 ? 'rotate(-52)' : null);
       });
     }
 
     if (!useTimeX && n > 1) {
-      const segWIndex = innerW / (n - 1);
+      const segWIndex = innerW / Math.max(maxN - 1, 1);
       const gapG = g.append('g').attr('class', 'chart-x-gap-labels');
       let lastCx = -Infinity;
       for (let i = 1; i < n; i++) {
@@ -504,7 +616,7 @@ export function CardReviewHistoryChart({
 
     g.append('text')
       .attr('x', innerW / 2)
-      .attr('y', lineH + (n > 16 ? 54 : 42))
+      .attr('y', lineH + (maxN > 16 ? 54 : 42))
       .attr('text-anchor', 'middle')
       .style('fill', 'var(--mc-text-muted)')
       .attr('font-size', 10)
@@ -699,6 +811,8 @@ export function CardReviewHistoryChart({
     return () => setTip(null);
   }, [
     augmented,
+    linkedAugmented,
+    maxN,
     chartTotalWidth,
     formatLogGap,
     locale,
@@ -707,6 +821,10 @@ export function CardReviewHistoryChart({
     ratingLabel,
     xAxisByTime,
     ratingMarkerMode,
+    tMin,
+    tMax,
+    spanT,
+    padT,
   ]);
 
   const srLines = useMemo(() => {
@@ -725,44 +843,44 @@ export function CardReviewHistoryChart({
       className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3"
       aria-labelledby={titleId}
     >
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <h4 id={titleId} className="text-sm font-medium text-(--mc-text-primary)">
+      <div className="mb-2 flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
+        <h4
+          id={titleId}
+          className="min-w-0 text-sm font-medium text-(--mc-text-primary) md:max-w-[min(100%,20rem)] md:shrink"
+        >
           {labels.chartTitle}
         </h4>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          <button
-            type="button"
-            className="rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-xs font-medium text-(--mc-text-secondary) transition-colors hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)"
-            aria-pressed={xAxisByTime}
-            onClick={() => setXAxisByTime((v) => !v)}
+        <div className="grid min-w-0 w-full grid-cols-2 gap-x-1.5 gap-y-1.5 md:flex md:w-auto md:max-w-full md:flex-wrap md:items-center md:justify-end md:gap-1">
+          {canCompareLinked && (
+            <select
+              className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+              value={compareLinked ? 'on' : 'off'}
+              aria-label={labels.chartCompareLinkedGroup}
+              onChange={(e) => onCompareLinkedChange?.(e.target.value === 'on')}
+            >
+              <option value="off">{labels.chartCompareLinkedOff}</option>
+              <option value="on">{labels.chartCompareLinkedOn}</option>
+            </select>
+          )}
+          <select
+            className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+            value={xAxisByTime ? 'time' : 'index'}
+            aria-label={labels.chartXAxisModeGroup}
+            onChange={(e) => setXAxisByTime(e.target.value === 'time')}
           >
-            {xAxisByTime ? labels.chartXAxisSwitchToIndex : labels.chartXAxisSwitchToTime}
-          </button>
-          <div
-            className="flex gap-0.5 rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-0.5"
-            role="group"
+            <option value="time">{labels.chartXAxisSwitchToTime}</option>
+            <option value="index">{labels.chartXAxisSwitchToIndex}</option>
+          </select>
+          <select
+            className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+            value={ratingMarkerMode}
             aria-label={labels.ratingMarkersModeGroup}
+            onChange={(e) => setRatingMarkerMode(e.target.value as RatingMarkerMode)}
           >
-            {(['visible', 'faded', 'hidden'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={`rounded px-1.5 py-1 text-[11px] font-medium transition-colors sm:px-2 sm:text-xs ${
-                  ratingMarkerMode === mode
-                    ? 'bg-(--mc-bg-card-back) text-(--mc-text-primary)'
-                    : 'text-(--mc-text-secondary) hover:text-(--mc-text-primary)'
-                }`}
-                aria-pressed={ratingMarkerMode === mode}
-                onClick={() => setRatingMarkerMode(mode)}
-              >
-                {mode === 'visible'
-                  ? labels.ratingMarkersSolid
-                  : mode === 'faded'
-                    ? labels.ratingMarkersFaded
-                    : labels.ratingMarkersHidden}
-              </button>
-            ))}
-          </div>
+            <option value="visible">{labels.ratingMarkersSolid}</option>
+            <option value="faded">{labels.ratingMarkersFaded}</option>
+            <option value="hidden">{labels.ratingMarkersHidden}</option>
+          </select>
         </div>
       </div>
       <div

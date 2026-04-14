@@ -17,12 +17,14 @@ import {
   formatCardDate,
   formatCardDateOrTime,
   cardMatchesSearch,
+  previewCardRecto,
 } from './deckDetailHelpers';
 import { CategoryBadgePill } from './CategoryBadgePill';
 import { IconChartBar } from './DeckUiIcons';
 import { CardLinkCombobox } from './CardLinkCombobox';
 import { EditCardCategoryPicker } from './EditCardCategoryPicker';
 import { CardFollowUpModal } from './CardFollowUpModal';
+import type { CardReviewLinkedSeries, CardReviewLogPoint } from './CardReviewHistoryChart';
 import { DeckStatsModal } from './DeckStatsModal';
 import { CARD_REVIEW_LOGS_FETCH_LIMIT } from './cardStatsConstants';
 import { useCreateCardForm } from './useCreateCardForm';
@@ -144,19 +146,11 @@ export default function DeckDetailPage() {
   const [editLinkSaving, setEditLinkSaving] = useState(false);
   const [editLinkError, setEditLinkError] = useState('');
   const [cardDetailsCard, setCardDetailsCard] = useState<Card | null>(null);
-  const [cardDetailsReviewLogs, setCardDetailsReviewLogs] = useState<Array<{
-    id: string;
-    rating: number;
-    review_time: number;
-    review_date: string;
-    scheduled_days: number;
-    elapsed_days: number;
-    stability_before: number | null;
-    difficulty_before: number | null;
-    retrievability_before: number | null;
-    stability_after: number | null;
-    difficulty_after: number | null;
-  }>>([]);
+  const [cardDetailsReviewLogs, setCardDetailsReviewLogs] = useState<CardReviewLogPoint[]>([]);
+  const [cardDetailsLinkedSeries, setCardDetailsLinkedSeries] = useState<CardReviewLinkedSeries[]>(
+    []
+  );
+  const [cardDetailsCompareLinked, setCardDetailsCompareLinked] = useState(false);
   const [cardDetailsLoading, setCardDetailsLoading] = useState(false);
   const [cardDetailsError, setCardDetailsError] = useState('');
 
@@ -566,38 +560,52 @@ export default function DeckDetailPage() {
   const openCardDetailsModal = useCallback((card: Card) => {
     setCardDetailsCard(card);
     setCardDetailsReviewLogs([]);
+    setCardDetailsLinkedSeries([]);
+    setCardDetailsCompareLinked(false);
     setCardDetailsError('');
     setCardDetailsLoading(true);
-    Promise.all([
-      apiClient.get<{ success: boolean; data?: Card }>(`/api/cards/${card.id}`),
-      apiClient.get<{
-        success: boolean;
-        data?: Array<{
-          id: string;
-          rating: number;
-          review_time: number;
-          review_date: string;
-          scheduled_days: number;
-          elapsed_days: number;
-          stability_before: number | null;
-          difficulty_before: number | null;
-          retrievability_before: number | null;
-          stability_after: number | null;
-          difficulty_after: number | null;
-        }>;
-      }>(`/api/cards/${card.id}/review-logs?limit=${CARD_REVIEW_LOGS_FETCH_LIMIT}`),
-    ])
-      .then(([cardRes, logsRes]) => {
+    const linkedIds = card.linked_card_ids ?? [];
+    void (async () => {
+      try {
+        const [cardRes, logsRes] = await Promise.all([
+          apiClient.get<{ success: boolean; data?: Card }>(`/api/cards/${card.id}`),
+          apiClient.get<{ success: boolean; data?: CardReviewLogPoint[] }>(
+            `/api/cards/${card.id}/review-logs?limit=${CARD_REVIEW_LOGS_FETCH_LIMIT}`
+          ),
+        ]);
         if (cardRes.data?.success && cardRes.data.data) setCardDetailsCard(cardRes.data.data);
-        if (logsRes.data?.success && Array.isArray(logsRes.data.data)) setCardDetailsReviewLogs(logsRes.data.data);
-      })
-      .catch(() => setCardDetailsError(ta('cardDetailsLoadError')))
-      .finally(() => setCardDetailsLoading(false));
+        if (logsRes.data?.success && Array.isArray(logsRes.data.data)) {
+          setCardDetailsReviewLogs(logsRes.data.data);
+        }
+        const linked: CardReviewLinkedSeries[] = [];
+        for (const lid of linkedIds) {
+          const [cR, lR] = await Promise.all([
+            apiClient.get<{ success: boolean; data?: Card }>(`/api/cards/${lid}`),
+            apiClient.get<{ success: boolean; data?: CardReviewLogPoint[] }>(
+              `/api/cards/${lid}/review-logs?limit=${CARD_REVIEW_LOGS_FETCH_LIMIT}`
+            ),
+          ]);
+          const recto = cR.data?.data?.recto ?? '';
+          linked.push({
+            cardId: lid,
+            label: previewCardRecto(recto, 48),
+            logs: lR.data?.success && Array.isArray(lR.data.data) ? lR.data.data : [],
+          });
+        }
+        setCardDetailsLinkedSeries(linked);
+      } catch {
+        setCardDetailsError(ta('cardDetailsLoadError'));
+      } finally {
+        setCardDetailsLoading(false);
+      }
+    })();
   }, [ta]);
 
   const closeCardDetailsModal = useCallback(() => {
     setCardDetailsCard(null);
     setCardDetailsReviewLogs([]);
+    setCardDetailsLinkedSeries([]);
+    setCardDetailsCompareLinked(false);
     setCardDetailsError('');
   }, []);
 
@@ -2373,6 +2381,9 @@ export default function DeckDetailPage() {
         <CardFollowUpModal
           card={cardDetailsCard}
           reviewLogs={cardDetailsReviewLogs}
+          linkedSeries={cardDetailsLinkedSeries}
+          compareLinked={cardDetailsCompareLinked}
+          onCompareLinkedChange={setCardDetailsCompareLinked}
           loading={cardDetailsLoading}
           error={cardDetailsError}
           locale={locale}

@@ -86,6 +86,8 @@ function packEndLabels(items: EndCapRow[], lineH: number, minGap = HELP_ICON_R *
 const CHART_MIN_WIDTH = 320;
 const CHART_HEIGHT = 300;
 const R_BAND = 36;
+/** Same as single-card chart: min horizontal gap between reviews in index (even-spacing) mode. */
+const MIN_LOG_GAP_PX = 35;
 
 /** Cap per-card polylines/markers when scope is “capped” (deck stats use the same subset). */
 const MAX_OVERLAY_VISIBLE_CARDS = 100;
@@ -133,6 +135,11 @@ export type DeckMultiCardOverlayChartLabels = {
   axisStability: string;
   axisDifficulty: string;
   axisTimeCaption: string;
+  /** X-axis caption in even-spacing (review index) mode. */
+  axisReviewOrder: string;
+  chartXAxisSwitchToTime: string;
+  chartXAxisSwitchToIndex: string;
+  chartXAxisModeGroup: string;
   metricStability: string;
   metricDifficulty: string;
   /** Accessible name for the metric `<select>`. */
@@ -207,6 +214,8 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
   const [ratingMarkerMode, setRatingMarkerMode] = useState<RatingMarkerMode>('visible');
   const [displayMode, setDisplayMode] = useState<OverlayDisplayMode>('all');
   const [cardScope, setCardScope] = useState<OverlayCardScope>('all');
+  /** `true` = real dates on X; `false` = one step per review index (aligned across cards). */
+  const [xAxisByTime, setXAxisByTime] = useState(true);
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   const showCardSeries = displayMode === 'all' || displayMode === 'cardsOnly';
@@ -270,18 +279,52 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     return out;
   }, [seriesList]);
 
+  /** Mean/median at each review index k across cards that have a k-th review (even-spacing mode). */
+  const deckEvolutionIndex = useMemo(() => {
+    if (seriesList.length === 0) return [] as Array<{ idx: number; mean: number; median: number }>;
+    const maxLen = d3.max(seriesList, (s) => s.points.length) ?? 0;
+    const out: Array<{ idx: number; mean: number; median: number }> = [];
+    for (let k = 0; k < maxLen; k++) {
+      const slice: number[] = [];
+      for (const s of seriesList) {
+        if (k < s.points.length) slice.push(s.points[k]!.y);
+      }
+      if (slice.length === 0) continue;
+      const mean = d3.mean(slice);
+      const median = d3.median(slice);
+      if (mean == null || !Number.isFinite(mean) || median == null || !Number.isFinite(median)) continue;
+      out.push({ idx: k, mean, median });
+    }
+    return out;
+  }, [seriesList]);
+
+  const maxSeriesLen = useMemo(
+    () => (seriesList.length ? d3.max(seriesList, (s) => s.points.length) ?? 0 : 0),
+    [seriesList]
+  );
+
   const allT = useMemo(() => seriesList.flatMap((s) => s.points.map((p) => p.tMs)), [seriesList]);
   const tMin = allT.length ? d3.min(allT)! : Date.now();
   const tMax = allT.length ? d3.max(allT)! : Date.now();
   const spanT = Math.max(tMax - tMin, 60_000);
   const padT = Math.max(spanT * 0.04, 3_600_000);
 
-  const innerW = Math.max(0, viewportWidth - M.left - M.right);
   const lineH = CHART_HEIGHT - M.top - M.bottom - R_BAND;
+
+  const plotInnerW = useMemo(() => {
+    const vw = Math.max(viewportWidth, CHART_MIN_WIDTH);
+    const base = Math.max(0, vw - M.left - M.right);
+    if (xAxisByTime) return base;
+    if (maxSeriesLen <= 1) return base;
+    return Math.max(base, (maxSeriesLen - 1) * MIN_LOG_GAP_PX);
+  }, [viewportWidth, xAxisByTime, maxSeriesLen]);
 
   const yExtent = useMemo(() => {
     const vals = seriesList.flatMap((s) => s.points.map((p) => p.y));
-    const evoVals = deckEvolution.flatMap((e) => [e.mean, e.median]);
+    const evoVals = [
+      ...deckEvolution.flatMap((e) => [e.mean, e.median]),
+      ...deckEvolutionIndex.flatMap((e) => [e.mean, e.median]),
+    ];
     const forExtent = vals.length ? [...vals, ...evoVals] : [];
     if (vals.length === 0) return { min: 0, max: 1 };
     if (metric === 'stability') {
@@ -295,9 +338,9 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     const dMax = Math.max(10, d3.max(forExtent) ?? 10);
     const dSpan = dMax - dMin;
     return { min: dMin, max: dMax + Math.max(dSpan * 0.08, 0.01) };
-  }, [seriesList, metric, deckEvolution]);
+  }, [seriesList, metric, deckEvolution, deckEvolutionIndex]);
 
-  const chartTotalWidth = M.left + innerW + M.right;
+  const chartTotalWidth = M.left + plotInnerW + M.right;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -313,17 +356,34 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
-  }, [chartTotalWidth, seriesList.length, metric, displayMode, cardScope]);
+    if (xAxisByTime) {
+      el.scrollLeft = 0;
+      return;
+    }
+    const run = () => {
+      const s = scrollRef.current;
+      if (!s) return;
+      s.scrollLeft = Math.max(0, s.scrollWidth - s.clientWidth);
+    };
+    run();
+    requestAnimationFrame(run);
+  }, [xAxisByTime, chartTotalWidth, plotInnerW, maxSeriesLen, seriesList.length, metric, displayMode, cardScope]);
 
   useEffect(() => {
     const svgEl = svgRef.current;
-    if (!svgEl || seriesList.length === 0 || innerW <= 0) return;
+    if (!svgEl || seriesList.length === 0 || plotInnerW <= 0) return;
+
+    const useTimeX = xAxisByTime;
+    const nIdx = maxSeriesLen;
+    const xIndex = d3
+      .scaleLinear()
+      .domain(nIdx <= 1 ? [-0.5, 0.5] : [-0.5, nIdx - 0.5])
+      .range([0, plotInnerW]);
 
     const xTime = d3
       .scaleTime()
       .domain([new Date(tMin - padT), new Date(tMax + padT)])
-      .range([0, innerW]);
+      .range([0, plotInnerW]);
 
     const y = d3
       .scaleLinear()
@@ -361,7 +421,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       goalG
         .append('line')
         .attr('x1', 0)
-        .attr('x2', innerW)
+        .attr('x2', plotInnerW)
         .attr('y1', yG)
         .attr('y2', yG)
         .attr('stroke', 'var(--mc-accent-success)')
@@ -370,9 +430,11 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         .attr('opacity', 0.92);
     }
 
+    const xForSeriesPt = (tMs: number, i: number) => (useTimeX ? xTime(new Date(tMs)) : xIndex(i));
+
     const lineGen = d3
       .line<{ tMs: number; y: number }>()
-      .x((d) => xTime(new Date(d.tMs)))
+      .x((d, i) => xForSeriesPt(d.tMs, i))
       .y((d) => y(d.y))
       .curve(d3.curveMonotoneX);
 
@@ -390,44 +452,104 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       }
     }
 
-    const meanPathGen = d3
+    const meanPathGenTime = d3
       .line<{ tMs: number; mean: number; median: number }>()
       .x((d) => xTime(new Date(d.tMs)))
       .y((d) => y(d.mean))
       .curve(d3.curveMonotoneX);
-    const medianPathGen = d3
+    const medianPathGenTime = d3
       .line<{ tMs: number; mean: number; median: number }>()
       .x((d) => xTime(new Date(d.tMs)))
       .y((d) => y(d.median))
       .curve(d3.curveMonotoneX);
+    const meanPathGenIdx = d3
+      .line<{ idx: number; mean: number; median: number }>()
+      .x((d) => xIndex(d.idx))
+      .y((d) => y(d.mean))
+      .curve(d3.curveMonotoneX);
+    const medianPathGenIdx = d3
+      .line<{ idx: number; mean: number; median: number }>()
+      .x((d) => xIndex(d.idx))
+      .y((d) => y(d.median))
+      .curve(d3.curveMonotoneX);
 
     if (showDeckSummary) {
-      if (deckEvolution.length >= 2) {
+      if (useTimeX) {
+        if (deckEvolution.length >= 2) {
+          const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
+          const meanPath = aggG
+            .append('path')
+            .datum(deckEvolution)
+            .attr('fill', 'none')
+            .attr('stroke', 'var(--mc-text-muted)')
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '6 5')
+            .attr('opacity', 0.95)
+            .attr('d', meanPathGenTime);
+          meanPath.append('title').text(labels.aggregateMeanCaption);
+          const medPath = aggG
+            .append('path')
+            .datum(deckEvolution)
+            .attr('fill', 'none')
+            .attr('stroke', 'var(--mc-accent-primary)')
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '3 4')
+            .attr('opacity', 0.95)
+            .attr('d', medianPathGenTime);
+          medPath.append('title').text(labels.aggregateMedianCaption);
+        } else if (deckEvolution.length === 1) {
+          const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
+          const d0 = deckEvolution[0]!;
+          const xm = xTime(new Date(d0.tMs));
+          const ym = y(d0.mean);
+          const ymed = y(d0.median);
+          aggG
+            .append('circle')
+            .attr('cx', xm)
+            .attr('cy', ym)
+            .attr('r', 4)
+            .attr('fill', 'none')
+            .attr('stroke', 'var(--mc-text-muted)')
+            .attr('stroke-width', 2)
+            .append('title')
+            .text(labels.aggregateMeanCaption);
+          aggG
+            .append('circle')
+            .attr('cx', xm)
+            .attr('cy', ymed)
+            .attr('r', 4)
+            .attr('fill', 'none')
+            .attr('stroke', 'var(--mc-accent-primary)')
+            .attr('stroke-width', 2)
+            .append('title')
+            .text(labels.aggregateMedianCaption);
+        }
+      } else if (deckEvolutionIndex.length >= 2) {
         const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
         const meanPath = aggG
           .append('path')
-          .datum(deckEvolution)
+          .datum(deckEvolutionIndex)
           .attr('fill', 'none')
           .attr('stroke', 'var(--mc-text-muted)')
           .attr('stroke-width', 2)
           .attr('stroke-dasharray', '6 5')
           .attr('opacity', 0.95)
-          .attr('d', meanPathGen);
+          .attr('d', meanPathGenIdx);
         meanPath.append('title').text(labels.aggregateMeanCaption);
         const medPath = aggG
           .append('path')
-          .datum(deckEvolution)
+          .datum(deckEvolutionIndex)
           .attr('fill', 'none')
           .attr('stroke', 'var(--mc-accent-primary)')
           .attr('stroke-width', 2)
           .attr('stroke-dasharray', '3 4')
           .attr('opacity', 0.95)
-          .attr('d', medianPathGen);
+          .attr('d', medianPathGenIdx);
         medPath.append('title').text(labels.aggregateMedianCaption);
-      } else if (deckEvolution.length === 1) {
+      } else if (deckEvolutionIndex.length === 1) {
         const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
-        const d0 = deckEvolution[0]!;
-        const xm = xTime(new Date(d0.tMs));
+        const d0 = deckEvolutionIndex[0]!;
+        const xm = xIndex(d0.idx);
         const ym = y(d0.mean);
         const ymed = y(d0.median);
         aggG
@@ -465,7 +587,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         for (let i = 0; i < pts.length; i++) {
           const p = pts[i]!;
           const isLast = i === pts.length - 1;
-          const cx = xTime(new Date(p.tMs));
+          const cx = xForSeriesPt(p.tMs, i);
           const cy = y(p.y);
           const fill = ratingFillCss(p.log.rating);
           if (p.log.rating === 1) {
@@ -515,24 +637,48 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     }
 
     const xAxisG = g.append('g').attr('transform', `translate(0,${lineH})`);
-    const xAxis = d3
-      .axisBottom(xTime)
-      .ticks(Math.min(8, Math.max(3, Math.floor(innerW / 72))))
-      .tickFormat((d) => tickFormatTime(d as Date));
-    xAxisG.call(xAxis);
-    xAxisG.call((sel) => {
-      sel.select('.domain').remove();
-      sel.selectAll('.tick line').style('stroke', 'var(--mc-border-subtle)');
-      sel.selectAll('text').style('fill', 'var(--mc-text-secondary)').attr('font-size', 10);
-    });
+    if (useTimeX) {
+      const xAxis = d3
+        .axisBottom(xTime)
+        .ticks(Math.min(8, Math.max(3, Math.floor(plotInnerW / 72))))
+        .tickFormat((d) => tickFormatTime(d as Date));
+      xAxisG.call(xAxis);
+      xAxisG.call((sel) => {
+        sel.select('.domain').remove();
+        sel.selectAll('.tick line').style('stroke', 'var(--mc-border-subtle)');
+        sel.selectAll('text').style('fill', 'var(--mc-text-secondary)').attr('font-size', 10);
+      });
+    } else {
+      const labelStep = nIdx <= 16 ? 1 : Math.max(1, Math.ceil(nIdx / 14));
+      const xAxis = d3
+        .axisBottom(xIndex)
+        .tickValues(d3.range(nIdx))
+        .tickFormat((d) => {
+          const i = Number(d);
+          return i % labelStep === 0 || i === nIdx - 1 ? String(i + 1) : '';
+        });
+      xAxisG.call(xAxis);
+      xAxisG.call((sel) => {
+        sel.select('.domain').remove();
+        sel.selectAll('.tick line').style('stroke', 'var(--mc-border-subtle)');
+        sel
+          .selectAll('text')
+          .style('fill', 'var(--mc-text-secondary)')
+          .attr('font-size', nIdx > 24 ? 8 : 10)
+          .attr('text-anchor', nIdx > 16 ? 'end' : 'middle')
+          .attr('dx', nIdx > 16 ? '-0.35em' : '0')
+          .attr('dy', nIdx > 16 ? '0.5em' : '0.71em')
+          .attr('transform', nIdx > 16 ? 'rotate(-52)' : null);
+      });
+    }
 
     g.append('text')
-      .attr('x', innerW / 2)
+      .attr('x', plotInnerW / 2)
       .attr('y', lineH + 28)
       .attr('text-anchor', 'middle')
       .style('fill', 'var(--mc-text-muted)')
       .attr('font-size', 10)
-      .text(labels.axisTimeCaption);
+      .text(useTimeX ? labels.axisTimeCaption : labels.axisReviewOrder);
 
     const axisY = d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2f'));
     g.append('g')
@@ -556,7 +702,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     /** Right-edge circled ? icons (LTM + last deck mean/median); values only in tooltips. */
     const endLab = g.append('g').attr('class', 'deck-overlay-end-labels');
     const fmtEnd = d3.format('.2f');
-    const iconCx = innerW + 6 + HELP_ICON_R;
+    const iconCx = plotInnerW + 6 + HELP_ICON_R;
     const endItems: EndCapRow[] = [];
     if (metric === 'stability') {
       const ltmDays = STABILITY_LONG_TERM_GOAL_DAYS;
@@ -566,8 +712,11 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         tooltip: `${labels.stabilityLongTermGoalCaption}\n${ltmDays} d\n\n${labels.lineTooltipLtm}`,
       });
     }
-    if (showDeckSummary && deckEvolution.length > 0) {
-      const lastE = deckEvolution[deckEvolution.length - 1]!;
+    const activeEvoLast = useTimeX
+      ? deckEvolution[deckEvolution.length - 1]
+      : deckEvolutionIndex[deckEvolutionIndex.length - 1];
+    if (showDeckSummary && activeEvoLast) {
+      const lastE = activeEvoLast;
       endItems.push({
         y: y(lastE.mean),
         strokeColor: 'var(--mc-text-muted)',
@@ -594,8 +743,8 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     /** Invisible overlay for nearest-point tooltip */
     const flatPoints = showCardSeries
       ? seriesList.flatMap((s) =>
-          s.points.map((p) => ({
-            px: xTime(new Date(p.tMs)),
+          s.points.map((p, i) => ({
+            px: xForSeriesPt(p.tMs, i),
             py: y(p.y),
             cardId: s.cardId,
             recto: s.recto,
@@ -608,7 +757,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     g.append('rect')
       .attr('x', 0)
       .attr('y', 0)
-      .attr('width', innerW)
+      .attr('width', plotInnerW)
       .attr('height', lineH)
       .attr('fill', 'transparent')
       .style('cursor', showCardSeries ? 'crosshair' : 'default')
@@ -653,12 +802,13 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
   }, [
     seriesList,
     chartTotalWidth,
-    innerW,
+    plotInnerW,
     lineH,
     locale,
     labels.axisStability,
     labels.axisDifficulty,
     labels.axisTimeCaption,
+    labels.axisReviewOrder,
     labels.stabilityLongTermGoalCaption,
     labels.aggregateMeanCaption,
     labels.aggregateMedianCaption,
@@ -669,6 +819,9 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     labels.lineTooltipMedian,
     labels.helpIconAria,
     deckEvolution,
+    deckEvolutionIndex,
+    maxSeriesLen,
+    xAxisByTime,
     metric,
     padT,
     spanT,
@@ -690,7 +843,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3"
       aria-labelledby={titleId}
     >
-           <div className="mb-2 flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
+      <div className="mb-2 flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
         <h4
           id={titleId}
           className="min-w-0 text-sm font-medium text-(--mc-text-primary) md:max-w-[min(100%,20rem)] md:shrink"
@@ -716,6 +869,15 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
             <option value="visible">{labels.ratingMarkersSolid}</option>
             <option value="faded">{labels.ratingMarkersFaded}</option>
             <option value="hidden">{labels.ratingMarkersHidden}</option>
+          </select>
+          <select
+            className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+            value={xAxisByTime ? 'time' : 'index'}
+            aria-label={labels.chartXAxisModeGroup}
+            onChange={(e) => setXAxisByTime(e.target.value === 'time')}
+          >
+            <option value="time">{labels.chartXAxisSwitchToTime}</option>
+            <option value="index">{labels.chartXAxisSwitchToIndex}</option>
           </select>
           <select
             className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
