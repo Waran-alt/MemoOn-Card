@@ -52,6 +52,12 @@ const R_BAR_FILL = 'var(--mc-accent-primary)';
 
 /** Half-size of Again (rating 1) cross arms; matches visual weight of r=5 circles. */
 export const RATING_AGAIN_CROSS_ARM = 4;
+/** Latest review on the card: full dot with surface ring (deck overlay uses the same). */
+export const RATING_MARKER_R_LAST = 5;
+/** Earlier reviews: smaller fill-only dot. */
+export const RATING_MARKER_R_INNER = 2.75;
+/** Again cross arm for earlier reviews (no halo). */
+export const RATING_AGAIN_CROSS_ARM_INNER = 2.35;
 
 /** Opacity for rating circles/crosses in "faded" mode (deck overlay + card history charts). */
 export const RATING_MARKER_FADE_OPACITY = 0.4;
@@ -639,35 +645,53 @@ export function CardReviewHistoryChart({
         .style('pointer-events', 'none')
         .attr('opacity', ratingMarkerMode === 'faded' ? RATING_MARKER_FADE_OPACITY : 1);
       pointLayout.forEach(({ a, cx, cy }) => {
+        const isLast = a.index === augmented.length - 1;
         const fill = ratingFillCss(a.log.rating);
         if (a.log.rating === 1) {
-          const arm = RATING_AGAIN_CROSS_ARM;
+          const arm = isLast ? RATING_AGAIN_CROSS_ARM : RATING_AGAIN_CROSS_ARM_INNER;
           const crossG = visLayer.append('g').attr('transform', `translate(${cx},${cy})`);
           const d = `M ${-arm},${-arm} L ${arm},${arm} M ${-arm},${arm} L ${arm},${-arm}`;
-          crossG.append('path')
-            .attr('d', d)
-            .attr('fill', 'none')
-            .style('stroke', 'var(--mc-bg-surface)')
-            .attr('stroke-width', 3)
-            .attr('stroke-linecap', 'round')
-            .style('pointer-events', 'none');
-          crossG.append('path')
-            .attr('d', d)
-            .attr('fill', 'none')
-            .style('stroke', fill)
-            .attr('stroke-width', 1.75)
-            .attr('stroke-linecap', 'round')
-            .style('pointer-events', 'none');
+          if (isLast) {
+            crossG
+              .append('path')
+              .attr('d', d)
+              .attr('fill', 'none')
+              .style('stroke', 'var(--mc-bg-surface)')
+              .attr('stroke-width', 3)
+              .attr('stroke-linecap', 'round')
+              .style('pointer-events', 'none');
+            crossG
+              .append('path')
+              .attr('d', d)
+              .attr('fill', 'none')
+              .style('stroke', fill)
+              .attr('stroke-width', 1.75)
+              .attr('stroke-linecap', 'round')
+              .style('pointer-events', 'none');
+          } else {
+            crossG
+              .append('path')
+              .attr('d', d)
+              .attr('fill', 'none')
+              .style('stroke', fill)
+              .attr('stroke-width', 1.2)
+              .attr('stroke-linecap', 'round')
+              .style('pointer-events', 'none');
+          }
         } else {
-          visLayer
+          const r = isLast ? RATING_MARKER_R_LAST : RATING_MARKER_R_INNER;
+          const dot = visLayer
             .append('circle')
             .attr('cx', cx)
             .attr('cy', cy)
-            .attr('r', 5)
+            .attr('r', r)
             .style('fill', fill)
-            .style('stroke', 'var(--mc-bg-surface)')
-            .attr('stroke-width', 1.5)
             .style('pointer-events', 'none');
+          if (isLast) {
+            dot.style('stroke', 'var(--mc-bg-surface)').attr('stroke-width', 1.5);
+          } else {
+            dot.attr('stroke', 'none');
+          }
         }
       });
     }

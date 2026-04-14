@@ -5,7 +5,10 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import { eventTimeToMs, formatEventTime, previewCardRecto } from './deckDetailHelpers';
 import {
   RATING_AGAIN_CROSS_ARM,
+  RATING_AGAIN_CROSS_ARM_INNER,
   RATING_MARKER_FADE_OPACITY,
+  RATING_MARKER_R_INNER,
+  RATING_MARKER_R_LAST,
   STABILITY_LONG_TERM_GOAL_DAYS,
   ratingFillCss,
   type CardReviewLogPoint,
@@ -84,7 +87,16 @@ const CHART_MIN_WIDTH = 320;
 const CHART_HEIGHT = 300;
 const R_BAND = 36;
 
+/** Cap per-card polylines/markers when scope is “capped” (deck stats use the same subset). */
+const MAX_OVERLAY_VISIBLE_CARDS = 100;
+
 type Metric = 'stability' | 'difficulty';
+
+/** What to draw: every card, deck aggregates only, or both. */
+export type OverlayDisplayMode = 'all' | 'cardsOnly' | 'deckOnly';
+
+/** Whether per-card series (and matching deck stats) use every card with data or the first N. */
+export type OverlayCardScope = 'all' | 'capped100';
 
 /** Local midnight (ms) for the calendar day containing `ms`. */
 function startOfLocalDayMs(ms: number): number {
@@ -123,6 +135,8 @@ export type DeckMultiCardOverlayChartLabels = {
   axisTimeCaption: string;
   metricStability: string;
   metricDifficulty: string;
+  /** Accessible name for the metric `<select>`. */
+  metricGroup: string;
   hoverHint: string;
   emptyMetric: string;
   ratingMarkersSolid: string;
@@ -147,6 +161,20 @@ export type DeckMultiCardOverlayChartLabels = {
   lineTooltipMedian: string;
   /** Shared aria-label prefix for ? help icons (screen readers). */
   helpIconAria: string;
+  /** Segmented control: show card lines + deck summary. */
+  displayModeAll: string;
+  /** Per-card series only (no deck mean/median curves). */
+  displayModeCardsOnly: string;
+  /** Deck mean/median (+ LTM when stability); no per-card lines. */
+  displayModeDeckOnly: string;
+  /** Accessible name for the display mode `<select>`. */
+  displayModeGroup: string;
+  /** `<option>`: include every card with data for this metric. */
+  cardScopeAll: string;
+  /** `<option>`: cap at 100 card series (same order as full list). */
+  cardScopeCap: string;
+  /** Accessible name for the card scope `<select>`. */
+  cardScopeGroup: string;
 };
 
 type CardSeries = {
@@ -177,10 +205,15 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
   const [viewportWidth, setViewportWidth] = useState(CHART_MIN_WIDTH);
   const [metric, setMetric] = useState<Metric>('stability');
   const [ratingMarkerMode, setRatingMarkerMode] = useState<RatingMarkerMode>('visible');
+  const [displayMode, setDisplayMode] = useState<OverlayDisplayMode>('all');
+  const [cardScope, setCardScope] = useState<OverlayCardScope>('all');
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
+
+  const showCardSeries = displayMode === 'all' || displayMode === 'cardsOnly';
+  const showDeckSummary = displayMode === 'all' || displayMode === 'deckOnly';
   const titleId = useId();
 
-  const seriesList = useMemo((): CardSeries[] => {
+  const seriesListFull = useMemo((): CardSeries[] => {
     const withIdx = cards.map((c, i) => {
       const pts: Array<{ tMs: number; y: number; log: CardReviewLogPoint }> = [];
       for (const log of c.logs) {
@@ -201,6 +234,11 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     });
     return withIdx.filter((s) => s.points.length > 0);
   }, [cards, metric]);
+
+  const seriesList = useMemo(() => {
+    if (cardScope === 'all') return seriesListFull;
+    return seriesListFull.slice(0, MAX_OVERLAY_VISIBLE_CARDS);
+  }, [seriesListFull, cardScope]);
 
   /** One sample per local calendar day that has ≥1 review anywhere in the deck. */
   const deckEvolution = useMemo(() => {
@@ -276,7 +314,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     const el = scrollRef.current;
     if (!el) return;
     el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
-  }, [chartTotalWidth, seriesList.length, metric]);
+  }, [chartTotalWidth, seriesList.length, metric, displayMode, cardScope]);
 
   useEffect(() => {
     const svgEl = svgRef.current;
@@ -316,7 +354,10 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
 
     if (metric === 'stability') {
       const yG = y(STABILITY_LONG_TERM_GOAL_DAYS);
-      const goalG = g.append('g').attr('class', 'deck-overlay-stability-ltm').style('pointer-events', 'none');
+      const goalG = g
+        .append('g')
+        .attr('class', 'deck-overlay-stability-ltm')
+        .style('pointer-events', 'none');
       goalG
         .append('line')
         .attr('x1', 0)
@@ -335,15 +376,17 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       .y((d) => y(d.y))
       .curve(d3.curveMonotoneX);
 
-    for (const s of seriesList) {
-      if (s.points.length >= 2) {
-        g.append('path')
-          .datum(s.points)
-          .attr('fill', 'none')
-          .attr('stroke', s.color)
-          .attr('stroke-width', seriesList.length > 40 ? 1 : seriesList.length > 15 ? 1.25 : 1.75)
-          .attr('stroke-opacity', 0.88)
-          .attr('d', lineGen);
+    if (showCardSeries) {
+      for (const s of seriesList) {
+        if (s.points.length >= 2) {
+          g.append('path')
+            .datum(s.points)
+            .attr('fill', 'none')
+            .attr('stroke', s.color)
+            .attr('stroke-width', seriesList.length > 40 ? 1 : seriesList.length > 15 ? 1.25 : 1.75)
+            .attr('stroke-opacity', 0.88)
+            .attr('d', lineGen);
+        }
       }
     }
 
@@ -358,95 +401,114 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       .y((d) => y(d.median))
       .curve(d3.curveMonotoneX);
 
-    if (deckEvolution.length >= 2) {
-      const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
-      const meanPath = aggG
-        .append('path')
-        .datum(deckEvolution)
-        .attr('fill', 'none')
-        .attr('stroke', 'var(--mc-text-muted)')
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', '6 5')
-        .attr('opacity', 0.95)
-        .attr('d', meanPathGen);
-      meanPath.append('title').text(labels.aggregateMeanCaption);
-      const medPath = aggG
-        .append('path')
-        .datum(deckEvolution)
-        .attr('fill', 'none')
-        .attr('stroke', 'var(--mc-accent-primary)')
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', '3 4')
-        .attr('opacity', 0.95)
-        .attr('d', medianPathGen);
-      medPath.append('title').text(labels.aggregateMedianCaption);
-    } else if (deckEvolution.length === 1) {
-      const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
-      const d0 = deckEvolution[0]!;
-      const xm = xTime(new Date(d0.tMs));
-      const ym = y(d0.mean);
-      const ymed = y(d0.median);
-      aggG
-        .append('circle')
-        .attr('cx', xm)
-        .attr('cy', ym)
-        .attr('r', 4)
-        .attr('fill', 'none')
-        .attr('stroke', 'var(--mc-text-muted)')
-        .attr('stroke-width', 2)
-        .append('title')
-        .text(labels.aggregateMeanCaption);
-      aggG
-        .append('circle')
-        .attr('cx', xm)
-        .attr('cy', ymed)
-        .attr('r', 4)
-        .attr('fill', 'none')
-        .attr('stroke', 'var(--mc-accent-primary)')
-        .attr('stroke-width', 2)
-        .append('title')
-        .text(labels.aggregateMedianCaption);
+    if (showDeckSummary) {
+      if (deckEvolution.length >= 2) {
+        const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
+        const meanPath = aggG
+          .append('path')
+          .datum(deckEvolution)
+          .attr('fill', 'none')
+          .attr('stroke', 'var(--mc-text-muted)')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '6 5')
+          .attr('opacity', 0.95)
+          .attr('d', meanPathGen);
+        meanPath.append('title').text(labels.aggregateMeanCaption);
+        const medPath = aggG
+          .append('path')
+          .datum(deckEvolution)
+          .attr('fill', 'none')
+          .attr('stroke', 'var(--mc-accent-primary)')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '3 4')
+          .attr('opacity', 0.95)
+          .attr('d', medianPathGen);
+        medPath.append('title').text(labels.aggregateMedianCaption);
+      } else if (deckEvolution.length === 1) {
+        const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
+        const d0 = deckEvolution[0]!;
+        const xm = xTime(new Date(d0.tMs));
+        const ym = y(d0.mean);
+        const ymed = y(d0.median);
+        aggG
+          .append('circle')
+          .attr('cx', xm)
+          .attr('cy', ym)
+          .attr('r', 4)
+          .attr('fill', 'none')
+          .attr('stroke', 'var(--mc-text-muted)')
+          .attr('stroke-width', 2)
+          .append('title')
+          .text(labels.aggregateMeanCaption);
+        aggG
+          .append('circle')
+          .attr('cx', xm)
+          .attr('cy', ymed)
+          .attr('r', 4)
+          .attr('fill', 'none')
+          .attr('stroke', 'var(--mc-accent-primary)')
+          .attr('stroke-width', 2)
+          .append('title')
+          .text(labels.aggregateMedianCaption);
+      }
     }
 
     /** Rating-colored markers (cross for Again), aligned with CardReviewHistoryChart. */
-    if (ratingMarkerMode !== 'hidden') {
+    if (showCardSeries && ratingMarkerMode !== 'hidden') {
       const visMarkers = g
         .append('g')
         .attr('class', 'deck-overlay-markers')
         .style('pointer-events', 'none')
         .attr('opacity', ratingMarkerMode === 'faded' ? RATING_MARKER_FADE_OPACITY : 1);
       for (const s of seriesList) {
-        for (const p of s.points) {
+        const pts = s.points;
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i]!;
+          const isLast = i === pts.length - 1;
           const cx = xTime(new Date(p.tMs));
           const cy = y(p.y);
           const fill = ratingFillCss(p.log.rating);
           if (p.log.rating === 1) {
-            const arm = RATING_AGAIN_CROSS_ARM;
+            const arm = isLast ? RATING_AGAIN_CROSS_ARM : RATING_AGAIN_CROSS_ARM_INNER;
             const crossG = visMarkers.append('g').attr('transform', `translate(${cx},${cy})`);
             const d = `M ${-arm},${-arm} L ${arm},${arm} M ${-arm},${arm} L ${arm},${-arm}`;
-            crossG
-              .append('path')
-              .attr('d', d)
-              .attr('fill', 'none')
-              .style('stroke', 'var(--mc-bg-surface)')
-              .attr('stroke-width', 3)
-              .attr('stroke-linecap', 'round');
-            crossG
-              .append('path')
-              .attr('d', d)
-              .attr('fill', 'none')
-              .style('stroke', fill)
-              .attr('stroke-width', 1.75)
-              .attr('stroke-linecap', 'round');
+            if (isLast) {
+              crossG
+                .append('path')
+                .attr('d', d)
+                .attr('fill', 'none')
+                .style('stroke', 'var(--mc-bg-surface)')
+                .attr('stroke-width', 3)
+                .attr('stroke-linecap', 'round');
+              crossG
+                .append('path')
+                .attr('d', d)
+                .attr('fill', 'none')
+                .style('stroke', fill)
+                .attr('stroke-width', 1.75)
+                .attr('stroke-linecap', 'round');
+            } else {
+              crossG
+                .append('path')
+                .attr('d', d)
+                .attr('fill', 'none')
+                .style('stroke', fill)
+                .attr('stroke-width', 1.2)
+                .attr('stroke-linecap', 'round');
+            }
           } else {
-            visMarkers
+            const r = isLast ? RATING_MARKER_R_LAST : RATING_MARKER_R_INNER;
+            const dot = visMarkers
               .append('circle')
               .attr('cx', cx)
               .attr('cy', cy)
-              .attr('r', 5)
-              .style('fill', fill)
-              .style('stroke', 'var(--mc-bg-surface)')
-              .attr('stroke-width', 1.5);
+              .attr('r', r)
+              .style('fill', fill);
+            if (isLast) {
+              dot.style('stroke', 'var(--mc-bg-surface)').attr('stroke-width', 1.5);
+            } else {
+              dot.attr('stroke', 'none');
+            }
           }
         }
       }
@@ -504,7 +566,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         tooltip: `${labels.stabilityLongTermGoalCaption}\n${ltmDays} d\n\n${labels.lineTooltipLtm}`,
       });
     }
-    if (deckEvolution.length > 0) {
+    if (showDeckSummary && deckEvolution.length > 0) {
       const lastE = deckEvolution[deckEvolution.length - 1]!;
       endItems.push({
         y: y(lastE.mean),
@@ -530,16 +592,18 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     }
 
     /** Invisible overlay for nearest-point tooltip */
-    const flatPoints = seriesList.flatMap((s) =>
-      s.points.map((p) => ({
-        px: xTime(new Date(p.tMs)),
-        py: y(p.y),
-        cardId: s.cardId,
-        recto: s.recto,
-        log: p.log,
-        color: s.color,
-      }))
-    );
+    const flatPoints = showCardSeries
+      ? seriesList.flatMap((s) =>
+          s.points.map((p) => ({
+            px: xTime(new Date(p.tMs)),
+            py: y(p.y),
+            cardId: s.cardId,
+            recto: s.recto,
+            log: p.log,
+            color: s.color,
+          }))
+        )
+      : [];
 
     g.append('rect')
       .attr('x', 0)
@@ -547,8 +611,12 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       .attr('width', innerW)
       .attr('height', lineH)
       .attr('fill', 'transparent')
-      .style('cursor', 'crosshair')
+      .style('cursor', showCardSeries ? 'crosshair' : 'default')
       .on('mousemove', function (ev: MouseEvent) {
+        if (!showCardSeries) {
+          setTip(null);
+          return;
+        }
         const [mx, my] = d3.pointer(ev, this);
         let best: (typeof flatPoints)[0] | null = null;
         let bestD = Infinity;
@@ -610,6 +678,9 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     yExtent.min,
     ratingLabel,
     ratingMarkerMode,
+    displayMode,
+    showCardSeries,
+    showDeckSummary,
   ]);
 
   if (cards.length === 0) return null;
@@ -619,62 +690,52 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       className="rounded-lg border border-(--mc-border-subtle) bg-(--mc-bg-page) p-3"
       aria-labelledby={titleId}
     >
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <h4 id={titleId} className="text-sm font-medium text-(--mc-text-primary)">
+           <div className="mb-2 flex min-w-0 flex-col gap-2 md:flex-row md:items-start md:justify-between md:gap-3">
+        <h4
+          id={titleId}
+          className="min-w-0 text-sm font-medium text-(--mc-text-primary) md:max-w-[min(100%,20rem)] md:shrink"
+        >
           {labels.chartTitle}
         </h4>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          <div className="flex gap-1 rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-0.5">
-            <button
-              type="button"
-              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                metric === 'stability'
-                  ? 'bg-(--mc-bg-card-back) text-(--mc-text-primary)'
-                  : 'text-(--mc-text-secondary) hover:text-(--mc-text-primary)'
-              }`}
-              aria-pressed={metric === 'stability'}
-              onClick={() => setMetric('stability')}
-            >
-              {labels.metricStability}
-            </button>
-            <button
-              type="button"
-              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                metric === 'difficulty'
-                  ? 'bg-(--mc-bg-card-back) text-(--mc-text-primary)'
-                  : 'text-(--mc-text-secondary) hover:text-(--mc-text-primary)'
-              }`}
-              aria-pressed={metric === 'difficulty'}
-              onClick={() => setMetric('difficulty')}
-            >
-              {labels.metricDifficulty}
-            </button>
-          </div>
-          <div
-            className="flex gap-0.5 rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-0.5"
-            role="group"
-            aria-label={labels.ratingMarkersModeGroup}
+        <div className="grid min-w-0 w-full grid-cols-2 gap-x-1.5 gap-y-1.5 md:flex md:w-auto md:max-w-full md:flex-wrap md:items-center md:justify-end md:gap-1">
+          <select
+            className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+            value={metric}
+            aria-label={labels.metricGroup}
+            onChange={(e) => setMetric(e.target.value as Metric)}
           >
-            {(['visible', 'faded', 'hidden'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={`rounded px-1.5 py-1 text-[11px] font-medium transition-colors sm:px-2 sm:text-xs ${
-                  ratingMarkerMode === mode
-                    ? 'bg-(--mc-bg-card-back) text-(--mc-text-primary)'
-                    : 'text-(--mc-text-secondary) hover:text-(--mc-text-primary)'
-                }`}
-                aria-pressed={ratingMarkerMode === mode}
-                onClick={() => setRatingMarkerMode(mode)}
-              >
-                {mode === 'visible'
-                  ? labels.ratingMarkersSolid
-                  : mode === 'faded'
-                    ? labels.ratingMarkersFaded
-                    : labels.ratingMarkersHidden}
-              </button>
-            ))}
-          </div>
+            <option value="stability">{labels.metricStability}</option>
+            <option value="difficulty">{labels.metricDifficulty}</option>
+          </select>
+          <select
+            className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+            value={ratingMarkerMode}
+            aria-label={labels.ratingMarkersModeGroup}
+            onChange={(e) => setRatingMarkerMode(e.target.value as RatingMarkerMode)}
+          >
+            <option value="visible">{labels.ratingMarkersSolid}</option>
+            <option value="faded">{labels.ratingMarkersFaded}</option>
+            <option value="hidden">{labels.ratingMarkersHidden}</option>
+          </select>
+          <select
+            className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+            value={displayMode}
+            aria-label={labels.displayModeGroup}
+            onChange={(e) => setDisplayMode(e.target.value as OverlayDisplayMode)}
+          >
+            <option value="all">{labels.displayModeAll}</option>
+            <option value="cardsOnly">{labels.displayModeCardsOnly}</option>
+            <option value="deckOnly">{labels.displayModeDeckOnly}</option>
+          </select>
+          <select
+            className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+            value={cardScope}
+            aria-label={labels.cardScopeGroup}
+            onChange={(e) => setCardScope(e.target.value as OverlayCardScope)}
+          >
+            <option value="all">{labels.cardScopeAll}</option>
+            <option value="capped100">{labels.cardScopeCap}</option>
+          </select>
         </div>
       </div>
       <p className="mb-2 text-[11px] text-(--mc-text-muted)">{labels.hoverHint}</p>

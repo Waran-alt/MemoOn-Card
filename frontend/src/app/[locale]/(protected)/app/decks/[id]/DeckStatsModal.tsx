@@ -127,6 +127,7 @@ export function DeckStatsModal({
       axisTimeCaption: ta('cardFollowUpAxisTimeCaption'),
       metricStability: ta('deckStatsOverlayMetricStability'),
       metricDifficulty: ta('deckStatsOverlayMetricDifficulty'),
+      metricGroup: ta('deckStatsOverlayMetricGroup'),
       hoverHint: ta('deckStatsOverlayChartHint'),
       emptyMetric: ta('deckStatsOverlayChartEmptyMetric'),
       ratingMarkersSolid: ta('deckStatsOverlayRatingMarkersSolid'),
@@ -142,6 +143,13 @@ export function DeckStatsModal({
       lineTooltipMean: ta('deckStatsOverlayLineTooltipMean'),
       lineTooltipMedian: ta('deckStatsOverlayLineTooltipMedian'),
       helpIconAria: ta('deckStatsOverlayHelpIconAria'),
+      displayModeAll: ta('deckStatsOverlayDisplayModeAll'),
+      displayModeCardsOnly: ta('deckStatsOverlayDisplayModeCardsOnly'),
+      displayModeDeckOnly: ta('deckStatsOverlayDisplayModeDeckOnly'),
+      displayModeGroup: ta('deckStatsOverlayDisplayModeGroup'),
+      cardScopeAll: ta('deckStatsOverlayCardScopeAll'),
+      cardScopeCap: ta('deckStatsOverlayCardScopeCap'),
+      cardScopeGroup: ta('deckStatsOverlayCardScopeGroup'),
     }),
     [ta]
   );
@@ -376,21 +384,13 @@ export function DeckStatsModal({
           ) : perCardLoading ? (
             <p className="mt-2 text-sm text-(--mc-text-muted)">{tc('loading')}</p>
           ) : perCardCharts && perCardCharts.cards.length > 0 ? (
-            <div className="mt-2 space-y-3">
+            <div className="mt-2">
               <DeckMultiCardOverlayChart
                 cards={perCardCharts.cards}
                 locale={locale}
                 labels={overlayChartLabels}
                 ratingLabel={overlayRatingLabel}
               />
-              <p className="text-xs text-(--mc-text-secondary)">
-                {ta('deckStatsPerCardChartsFootnote', {
-                  vars: {
-                    maxCards: String(perCardCharts.maxCards),
-                    limitPerCard: String(perCardCharts.limitPerCard),
-                  },
-                })}
-              </p>
             </div>
           ) : perCardCharts && perCardCharts.cards.length === 0 ? (
             <p className="mt-2 text-sm text-(--mc-text-muted)">{ta('deckStatsPerCardChartsEmpty')}</p>
