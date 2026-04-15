@@ -26,13 +26,42 @@ const userNavItems = [
   { path: '/app/import-export', labelKey: 'importExport' as const },
   { path: '/app/optimizer', labelKey: 'optimizer' as const },
   { path: '/app/study-health', labelKey: 'studyHealth' as const },
-  { path: '/app/settings', labelKey: 'settings' as const },
+  { path: '/app/account', labelKey: 'accountAndData' as const },
 ] as const;
 
 /** Admin nav item: only shown when user.role === 'admin' (user management). */
 const adminNavItem = { path: '/app/admin', labelKey: 'admin' as const };
 /** Dev nav item: only shown when user.role === 'dev' (technical panels, feature flags). */
 const devNavItem = { path: '/app/dev', labelKey: 'dev' as const };
+
+const SHELL_FOCUS_RING =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--mc-accent-success) focus-visible:ring-offset-2 focus-visible:ring-offset-(--mc-bg-surface)';
+
+/** Muted label + hover surface (sidebar rows, sign out, header user trigger). Pair with `transition-colors` on the control. */
+const SHELL_MUTED_INTERACTIVE =
+  'text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)';
+
+/** Subtle inset outline on hover so active rows (same bg as inactive hover) still feel interactive. */
+const SIDEBAR_ROW_HOVER_RING =
+  'ring-1 ring-inset ring-transparent hover:ring-(--mc-border-subtle)';
+
+/** Sidebar nav link / sign-out row: shared padding, type, motion, focus. */
+const SIDEBAR_NAV_ROW = `rounded-md px-3 pt-1.5 pb-2 text-sm font-medium transition-[color,background-color,box-shadow] duration-150 ease-out ${SHELL_FOCUS_RING}`;
+
+function sidebarNavLinkClass(isActive: boolean) {
+  return `${SIDEBAR_NAV_ROW} ${SIDEBAR_ROW_HOVER_RING} ${
+    isActive ? 'bg-(--mc-bg-card-back) text-(--mc-text-primary)' : SHELL_MUTED_INTERACTIVE
+  }`;
+}
+
+/** Decks home uses `/app`; `pathname.startsWith(\`/locale/app/\`)` would mark it active on every app page. */
+function isSidebarNavActive(pathname: string, locale: string, path: string) {
+  const href = `/${locale}${path}`;
+  if (path === '/app') {
+    return pathname === href || pathname.startsWith(`${href}/decks`);
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function AppLayoutShell({
   children,
@@ -50,7 +79,6 @@ export function AppLayoutShell({
   const { t: ta } = useTranslation('app', locale);
   const user = useAuthStore((s) => s.user);
   const appBase = `/${locale}/app`;
-  const isDeckDetail = pathname.startsWith(`/${locale}/app/decks/`);
   const pageTitle =
     pathname === appBase
       ? tc('myDecks')
@@ -66,8 +94,8 @@ export function AppLayoutShell({
           ? tc('importExport')
           : pathname === `/${locale}/app/study-health`
           ? tc('studyHealth')
-        : pathname === `/${locale}/app/settings`
-          ? tc('settings')
+        : pathname === `/${locale}/app/account`
+          ? tc('accountAndData')
         : pathname === `/${locale}/app/admin`
           ? tc('admin')
         : pathname === `/${locale}/app/dev`
@@ -75,9 +103,6 @@ export function AppLayoutShell({
         : pathname.startsWith(`/${locale}/app/decks/`)
           ? tc('decks')
           : tc('appName');
-
-  const focusRingClass =
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--mc-accent-success) focus-visible:ring-offset-2 focus-visible:ring-offset-(--mc-bg-surface)';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -119,6 +144,10 @@ export function AppLayoutShell({
     };
   }, [userMenuOpen]);
 
+  useEffect(() => {
+    setUserMenuOpen(false);
+  }, [pathname]);
+
   return (
     <div className="flex min-h-screen bg-(--mc-bg-base) text-(--mc-text-primary)">
       {/* E2E style probes for layout audit (ensures Tailwind utilities are applied). */}
@@ -147,7 +176,7 @@ export function AppLayoutShell({
           <Link
             href={appBase}
             onClick={() => setMenuOpen(false)}
-            className={`font-semibold text-(--mc-text-primary) ${focusRingClass}`}
+            className={`rounded-md px-2 py-1 -ml-2 font-semibold text-(--mc-text-primary) transition-[color,background-color,box-shadow] duration-150 ease-out hover:bg-(--mc-bg-card-back) ${SIDEBAR_ROW_HOVER_RING} ${SHELL_FOCUS_RING}`}
           >
             {tc('appName')}
           </Link>
@@ -155,17 +184,13 @@ export function AppLayoutShell({
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {[...userNavItems, ...(user?.role === 'admin' ? [adminNavItem] : []), ...(user?.role === 'dev' ? [devNavItem] : [])].map(({ path, labelKey }) => {
             const href = `/${locale}${path}`;
-            const isActive = pathname === href || pathname.startsWith(href + '/');
+            const isActive = isSidebarNavActive(pathname, locale, path);
             return (
               <Link
                 key={href}
                 href={href}
                 onClick={() => setMenuOpen(false)}
-                className={`rounded-md px-3 pt-1.5 pb-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-(--mc-bg-card-back) text-(--mc-text-primary)'
-                    : 'text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)'
-                } ${focusRingClass}`}
+                className={sidebarNavLinkClass(isActive)}
               >
                 {tc(labelKey)}
               </Link>
@@ -174,7 +199,7 @@ export function AppLayoutShell({
         </nav>
         <div className="border-t border-(--mc-border-subtle) p-3">
           <SignOutButton
-            className={`w-full rounded-md px-3 pt-1.5 pb-2 text-center text-sm text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary) ${focusRingClass}`}
+            className={`w-full text-center ${SIDEBAR_NAV_ROW} ${SIDEBAR_ROW_HOVER_RING} ${SHELL_MUTED_INTERACTIVE}`}
           />
         </div>
       </aside>
@@ -188,7 +213,7 @@ export function AppLayoutShell({
                 type="button"
                 aria-label={menuOpen ? tc('navCloseMenu') : tc('navOpenMenu')}
                 aria-expanded={menuOpen}
-                className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-(--mc-border-subtle) text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) md:hidden ${focusRingClass}`}
+                className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-(--mc-border-subtle) transition-colors md:hidden ${SHELL_MUTED_INTERACTIVE} ${SHELL_FOCUS_RING}`}
                 onClick={() => setMenuOpen((v) => !v)}
               >
                 <span aria-hidden className="text-lg leading-none">
@@ -198,7 +223,7 @@ export function AppLayoutShell({
               <h1 className="min-w-0 truncate text-lg font-medium text-(--mc-text-primary)">{pageTitle}</h1>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
-              <LanguageSwitcher />
+              {!user && <LanguageSwitcher />}
               {!user && <ThemeSwitcher />}
               {user && (
                 <div ref={userMenuRef} className="relative">
@@ -210,7 +235,7 @@ export function AppLayoutShell({
                     aria-controls="user-account-menu"
                     title={user.email}
                     aria-label={`${user.name || user.email} — ${tc('navUserMenu')}`}
-                    className={`inline-flex max-w-[min(100%,14rem)] items-center gap-1 rounded-md px-2 py-1.5 text-sm text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary) ${focusRingClass}`}
+                    className={`inline-flex max-w-[min(100%,14rem)] items-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors ${SHELL_MUTED_INTERACTIVE} ${SHELL_FOCUS_RING}`}
                     onClick={() => setUserMenuOpen((v) => !v)}
                   >
                     <span className="truncate">{user.name || user.email}</span>
@@ -224,10 +249,21 @@ export function AppLayoutShell({
                       id="user-account-menu"
                       role="region"
                       aria-label={tc('navUserMenu')}
-                      className="absolute right-0 top-full z-50 mt-1 min-w-[14rem] rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-3 shadow-lg"
+                      className="absolute right-0 top-full z-50 mt-1 min-w-56 rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) p-3 shadow-lg"
                     >
+                      <Link
+                        href={`/${locale}/app/account`}
+                        className={`mb-3 block rounded-md px-3 py-2 text-sm font-medium text-(--mc-text-primary) transition-colors hover:bg-(--mc-bg-card-back) ${SHELL_FOCUS_RING}`}
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        {tc('accountAndData')}
+                      </Link>
+                      <div className="mb-2 text-xs font-medium text-(--mc-text-secondary)">
+                        {tc('languageSwitcherAria')}
+                      </div>
+                      <LanguageSwitcher layout="panel" className="mb-4" />
                       <div className="mb-2 text-xs font-medium text-(--mc-text-secondary)">{ta('themeSwitcherAria')}</div>
-                      <ThemeSwitcher id="header-theme-switcher" compact={false} className="w-full min-w-[12rem]" />
+                      <ThemeSwitcher id="header-theme-switcher" compact={false} className="w-full min-w-48" />
                     </div>
                   )}
                 </div>

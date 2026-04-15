@@ -5,17 +5,33 @@ import { usePathname } from 'next/navigation';
 import { LANGUAGES, removeLocalePrefix, useLocale } from 'i18n';
 import { useTranslation } from '@/hooks/useTranslation';
 
-export function LanguageSwitcher() {
+const chipActive =
+  'border-(--mc-accent-primary) bg-(--mc-accent-primary)/15 text-(--mc-text-primary)';
+const chipInactive =
+  'border-(--mc-border-subtle) text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)';
+
+type Props = {
+  /** `header`: compact row for the top bar. `panel`: stacked full-width for menus / settings. */
+  layout?: 'header' | 'panel';
+  className?: string;
+};
+
+export function LanguageSwitcher({ layout = 'header', className = '' }: Props) {
   const pathname = usePathname();
   const { locale: currentLocale } = useLocale();
   const { t: tc } = useTranslation('common', currentLocale);
   const pathWithoutLocale = removeLocalePrefix(pathname);
   const ariaLabel =
     tc('languageSwitcherAria') !== 'languageSwitcherAria' ? tc('languageSwitcherAria') : 'Language';
+  const isPanel = layout === 'panel';
 
   return (
     <nav
-      className="flex flex-wrap items-center justify-end gap-1"
+      className={
+        isPanel
+          ? `flex w-full flex-col gap-2 ${className}`.trim()
+          : `flex flex-wrap items-center justify-end gap-1 ${className}`.trim()
+      }
       aria-label={ariaLabel}
     >
       {LANGUAGES.map((lang) => {
@@ -27,17 +43,27 @@ export function LanguageSwitcher() {
             key={lang.code}
             href={href}
             aria-label={aria}
-            className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors sm:text-sm ${
-              isActive
-                ? 'border-(--mc-accent-primary) bg-(--mc-accent-primary)/15 text-(--mc-text-primary)'
-                : 'border-(--mc-border-subtle) text-(--mc-text-secondary) hover:bg-(--mc-bg-card-back) hover:text-(--mc-text-primary)'
-            }`}
+            className={
+              isPanel
+                ? `block w-full rounded-md border px-3 py-2 text-center text-sm font-medium transition-colors ${
+                    isActive ? chipActive : chipInactive
+                  }`
+                : `rounded-md border px-2 py-1 text-xs font-medium transition-colors sm:text-sm ${
+                    isActive ? chipActive : chipInactive
+                  }`
+            }
             aria-current={isActive ? 'true' : undefined}
           >
-            <span className="inline-flex items-center gap-1" aria-hidden>
+            <span className="inline-flex items-center justify-center gap-2" aria-hidden>
               <span>{lang.flag}</span>
-              <span className="hidden sm:inline">{lang.nativeName}</span>
-              <span className="sm:hidden">{lang.code.toUpperCase()}</span>
+              {isPanel ? (
+                <span>{lang.nativeName}</span>
+              ) : (
+                <>
+                  <span className="hidden sm:inline">{lang.nativeName}</span>
+                  <span className="sm:hidden">{lang.code.toUpperCase()}</span>
+                </>
+              )}
             </span>
           </Link>
         );

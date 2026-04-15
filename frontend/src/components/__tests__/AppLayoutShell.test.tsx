@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { within } from '@testing-library/react';
 import { render, screen, waitFor } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import { AppLayoutShell } from '../AppLayoutShell';
@@ -30,18 +31,21 @@ vi.mock('@/hooks/useTranslation', () => ({
           appName: 'MemoOn Card',
           myDecks: 'My decks',
           decks: 'Decks',
+          stats: 'Stats',
           categories: 'Categories',
           flaggedCards: 'Flagged cards',
           importExport: 'Export / Import',
           optimizer: 'Optimizer',
           studyHealth: 'Stats & health',
           settings: 'Settings',
+          accountAndData: 'Account & data',
           admin: 'Admin',
           dev: 'Dev',
           navCloseMenuOverlay: 'Close menu overlay',
           navCloseMenu: 'Close menu',
           navOpenMenu: 'Open menu',
           navUserMenu: 'Account menu',
+          languageSwitcherAria: 'Language',
           themeSwitcherAria: 'Theme',
         } as Record<string, string>
       )[key] ?? key,
@@ -79,6 +83,10 @@ vi.mock('../AuthHydrate', () => ({
 
 const shellServerUser = { id: 'u1', email: 'user@example.com', name: 'User Name', role: 'admin' as const };
 
+function hasActiveSidebarBg(className: string) {
+  return className.split(/\s+/).includes('bg-(--mc-bg-card-back)');
+}
+
 describe('AppLayoutShell', () => {
   beforeEach(() => {
     pathnameState.value = '/en/app';
@@ -115,6 +123,37 @@ describe('AppLayoutShell', () => {
       </AppLayoutShell>
     );
     expect(screen.getByRole('heading', { name: 'Stats & health' })).toBeInTheDocument();
+  });
+
+  it('does not keep Decks nav active on other /app/* routes (hover styles work)', () => {
+    pathnameState.value = '/en/app/stats';
+    render(
+      <AppLayoutShell serverUser={shellServerUser}>
+        <div>child</div>
+      </AppLayoutShell>
+    );
+    const decks = screen.getByRole('link', { name: 'Decks' });
+    const stats = screen.getByRole('link', { name: 'Stats' });
+    expect(hasActiveSidebarBg(decks.className)).toBe(false);
+    expect(hasActiveSidebarBg(stats.className)).toBe(true);
+  });
+
+  it('keeps Decks nav active on deck list and deck detail routes', () => {
+    pathnameState.value = '/en/app/decks/abc';
+    const { rerender } = render(
+      <AppLayoutShell serverUser={shellServerUser}>
+        <div>child</div>
+      </AppLayoutShell>
+    );
+    expect(hasActiveSidebarBg(screen.getByRole('link', { name: 'Decks' }).className)).toBe(true);
+
+    pathnameState.value = '/en/app';
+    rerender(
+      <AppLayoutShell serverUser={shellServerUser}>
+        <div>child</div>
+      </AppLayoutShell>
+    );
+    expect(hasActiveSidebarBg(screen.getByRole('link', { name: 'Decks' }).className)).toBe(true);
   });
 
   it('sets E2E readiness data attributes on document root', async () => {
@@ -155,12 +194,18 @@ describe('AppLayoutShell', () => {
     );
 
     expect(screen.queryByText('Theme switcher')).not.toBeInTheDocument();
-    expect(screen.getByText('Language switcher')).toBeInTheDocument();
+    expect(screen.queryByText('Language switcher')).not.toBeInTheDocument();
     expect(screen.getByText('Sign out')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'User Name — Account menu' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'MemoOn Card' })).toHaveAttribute('href', '/en/app');
 
     await userEvent.click(screen.getByRole('button', { name: 'User Name — Account menu' }));
+    const userMenu = screen.getByRole('region', { name: 'Account menu' });
+    expect(within(userMenu).getByRole('link', { name: 'Account & data' })).toHaveAttribute(
+      'href',
+      '/en/app/account'
+    );
+    expect(screen.getByText('Language switcher')).toBeInTheDocument();
     expect(screen.getByText('Theme switcher')).toBeInTheDocument();
   });
 });
