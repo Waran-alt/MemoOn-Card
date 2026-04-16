@@ -1,3 +1,9 @@
+/**
+ * Frontend Vitest config (jsdom + React plugin).
+ *
+ * Coverage excludes app routes and heavy UI by default at the percentage level: many pages are
+ * covered by Playwright instead of unit tests. Thresholds track the current unit-tested subset.
+ */
 import { defineConfig } from 'vitest/config';
 import path from 'path';
 import react from '@vitejs/plugin-react';
@@ -28,6 +34,12 @@ export default defineConfig({
         'src/test-utils.tsx',
         'vitest.setup.ts',
       ],
+      thresholds: {
+        lines: 47,
+        statements: 47,
+        branches: 70,
+        functions: 55,
+      },
     },
     // Faster feedback: use single-thread by default; use --threads for CI
     pool: 'forks',

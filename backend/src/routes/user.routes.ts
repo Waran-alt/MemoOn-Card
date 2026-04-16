@@ -1,6 +1,13 @@
 /**
- * User routes: settings (study preferences, knowledge, etc.), change-password.
- * Identity is always `getUserId(req)` from the JWT; the body must not name another user (admin overrides use admin routes).
+ * User routes: settings (study preferences, knowledge, UI theme) and in-app change-password.
+ *
+ * Identity: always `getUserId(req)` from the verified JWT. Request bodies must never carry a
+ * target user id — that prevents confused deputy issues; admins use separate admin routes.
+ *
+ * Change-password flow (high level):
+ * 1. Verify current password against stored hash.
+ * 2. Persist new hash, revoke all refresh sessions (other devices), invalidate pending reset tokens.
+ * 3. Issue a fresh access + refresh pair for this device so the user is not logged out mid-flow.
  */
 
 import { Router } from 'express';
@@ -23,6 +30,7 @@ import { changePasswordLimiter } from '@/routes/auth/authLimiters';
 
 const router = Router();
 
+/** Full settings blob for the study session UI (FSRS weights, knowledge toggle, theme, etc.). */
 router.get(
   '/settings',
   asyncHandler(async (req, res) => {
@@ -32,6 +40,10 @@ router.get(
   })
 );
 
+/**
+ * Authenticated password change. Rate-limited per IP; validates with Zod before touching the DB.
+ * On success, other refresh cookies become invalid; this response includes a new access token.
+ */
 router.post(
   '/change-password',
   changePasswordLimiter,
@@ -73,6 +85,10 @@ router.post(
   })
 );
 
+/**
+ * Partial update for user-controlled settings. Uses `safeParse` so we can return 400 with Zod details
+ * without a separate `validateRequest` middleware (historical shape; keep consistent with clients).
+ */
 router.patch(
   '/settings',
   asyncHandler(async (req, res) => {

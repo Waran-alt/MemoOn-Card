@@ -1,7 +1,13 @@
 /**
- * Password reset (forgot-password) flow. Tokens stored as SHA-256 only; plain token exists only in email/link.
- * Email: set BREVO_API_KEY + BREVO_SENDER_EMAIL (verified sender in Brevo). Without them, production logs a warning;
- * development logs a token-redacted link (grid 1.5 / 8.1).
+ * Password reset (forgot-password) flow.
+ *
+ * Security notes:
+ * - Only SHA-256 hashes of tokens are stored. The plain token exists briefly in memory and in the
+ *   outbound email (or dev logs with token redacted).
+ * - Email sending: configure BREVO_API_KEY + BREVO_SENDER_EMAIL. Without them, dev logs a safe link;
+ *   production warns so operators know mail is not configured.
+ *
+ * See documentation/ENVIRONMENT_SETUP.md for Brevo and deliverability (DKIM/DMARC).
  */
 
 import crypto from 'crypto';
@@ -15,9 +21,16 @@ import {
 import { logger } from '@/utils/logger';
 import { sendBrevoTransactionalEmail } from '@/services/brevo-smtp.service';
 
+/** 32 random bytes → 64 hex chars; enough entropy for unguessable reset links. */
 const TOKEN_BYTES = 32;
+
+/** Default window in which the reset link remains valid. */
 const DEFAULT_EXPIRY_MINUTES = 60;
 
+/**
+ * Escape a string for use inside a double-quoted HTML attribute (e.g. href="...").
+ * Prevents breaking out of the attribute if the URL contains quotes or angle brackets.
+ */
 function escapeHtmlAttr(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -26,10 +39,12 @@ function escapeHtmlAttr(value: string): string {
     .replace(/</g, '&lt;');
 }
 
+/** Deterministic hash used for DB lookup; never store or log the plain token server-side after creation. */
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+/** Cryptographically random token shown once to the user (in link). */
 function generateToken(): string {
   return crypto.randomBytes(TOKEN_BYTES).toString('hex');
 }
@@ -89,9 +104,17 @@ export class PasswordResetService {
 
   /**
    * Send password reset email via Brevo when configured; otherwise dev log or warn.
+   *
+   * Branching:
+   * 1) BREVO_API_KEY + BREVO_SENDER_EMAIL: call Brevo; on failure log error (non-fatal). In development,
+   *    also log a redacted link for local debugging.
+   * 2) No Brevo, NODE_ENV development: log redacted link only.
+   * 3) No Brevo, production: warn (operators should configure mail).
    */
   async sendResetEmail(email: string, resetLink: string): Promise<void> {
+    // Light masking: keep first2 chars before @, hide the rest of the local part.
     const maskedEmail = email.replace(/(?<=.{2}).(?=@)/g, '*');
+    // Never log the raw token query param in structured logs.
     const safeLink = resetLink.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]');
 
     if (BREVO_API_KEY && BREVO_SENDER_EMAIL) {
@@ -146,4 +169,5 @@ export class PasswordResetService {
   }
 }
 
+/** Singleton used by routes; tests may dynamic-import the module with mocks. */
 export const passwordResetService = new PasswordResetService();

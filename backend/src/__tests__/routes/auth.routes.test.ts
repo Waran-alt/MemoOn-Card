@@ -49,6 +49,7 @@ vi.mock('@/services/user.service', () => ({
     getUserById: vi.fn(),
     getUserByEmail: vi.fn(),
     verifyPassword: vi.fn(),
+    updatePassword: vi.fn(),
   },
 }));
 
@@ -73,6 +74,8 @@ vi.mock('@/services/password-reset.service', () => ({
   passwordResetService: {
     createToken: vi.fn(),
     sendResetEmail: vi.fn(),
+    getUserIdForToken: vi.fn(),
+    consumeToken: vi.fn(),
   },
 }));
 
@@ -599,6 +602,41 @@ describe('Auth routes', () => {
         mockUser.email,
         'http://localhost:3002/reset-password?token=reset-token-plain'
       );
+    });
+  });
+
+  /**
+   * Token-based reset completes the flow started by forgot-password. Handler validates token,
+   * updates password, then marks the token row used so the link cannot be replayed.
+   */
+  describe('POST /api/auth/reset-password', () => {
+    it('updates password and consumes token when token is valid', async () => {
+      vi.mocked(passwordResetService.getUserIdForToken).mockResolvedValueOnce(mockUserId);
+      vi.mocked(userService.updatePassword).mockResolvedValueOnce();
+      vi.mocked(passwordResetService.consumeToken).mockResolvedValueOnce();
+
+      const res = await request(app).post('/api/auth/reset-password').send({
+        token: 'valid-reset-token',
+        newPassword: 'new-new-new',
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(userService.updatePassword).toHaveBeenCalledWith(mockUserId, 'new-new-new');
+      expect(passwordResetService.consumeToken).toHaveBeenCalledWith('valid-reset-token');
+    });
+
+    it('returns 400 when token is invalid or expired', async () => {
+      vi.mocked(passwordResetService.getUserIdForToken).mockResolvedValueOnce(null);
+
+      const res = await request(app).post('/api/auth/reset-password').send({
+        token: 'bad',
+        newPassword: 'new-new-new',
+      });
+
+      expect(res.status).toBe(400);
+      expect(userService.updatePassword).not.toHaveBeenCalled();
+      expect(passwordResetService.consumeToken).not.toHaveBeenCalled();
     });
   });
 });

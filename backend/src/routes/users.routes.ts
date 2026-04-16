@@ -1,5 +1,13 @@
 /**
- * Categories under /api/users/me/... for JWT user only. GET categories parses cardCount as a simple string flag; use Zod validateQuery if query surface grows.
+ * User-scoped **category** HTTP API under `/api/users`.
+ *
+ * Mount: `app.use('/api/users', authMiddleware, usersRoutes)` — every handler assumes `getUserId(req)`
+ * is already set by JWT middleware. Category IDs in params are validated as UUIDs; mutations always
+ * pair `(categoryId, userId)` in the service layer so one user cannot touch another user's rows.
+ *
+ * Query conventions:
+ * - `GET .../me/categories?cardCount=true|1` — include `card_count` per category (heavier query).
+ *   Any other value is treated as “without counts” (same as omitting the query).
  */
 
 import { Router } from 'express';
@@ -11,11 +19,12 @@ import { CategoryService } from '@/services/category.service';
 import { NotFoundError } from '@/utils/errors';
 
 const router = Router();
+/** One instance per process; holds no per-request state beyond the pool inside the service. */
 const categoryService = new CategoryService();
 
 /**
  * GET /api/users/me/categories
- * List categories for the current user (optional card_count via query)
+ * List categories for the current user (optional `card_count` per row via query).
  */
 router.get('/me/categories', asyncHandler(async (req, res) => {
   const userId = getUserId(req);
@@ -26,7 +35,7 @@ router.get('/me/categories', asyncHandler(async (req, res) => {
 
 /**
  * POST /api/users/me/categories
- * Create a category
+ * Create a category; body validated by `CreateCategorySchema` (trimmed name, max length).
  */
 router.post('/me/categories', validateRequest(CreateCategorySchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);
@@ -36,7 +45,7 @@ router.post('/me/categories', validateRequest(CreateCategorySchema), asyncHandle
 
 /**
  * PATCH /api/users/me/categories/:id
- * Update a category
+ * Rename a category. Returns 404 if the id does not exist for this user.
  */
 router.patch('/me/categories/:id', validateParams(CategoryIdParamSchema), validateRequest(UpdateCategorySchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);
@@ -48,7 +57,7 @@ router.patch('/me/categories/:id', validateParams(CategoryIdParamSchema), valida
 
 /**
  * DELETE /api/users/me/categories/:id
- * Delete a category (and remove from all card_categories)
+ * Delete a category and detach from cards (`card_categories`). Returns 404 if not found for user.
  */
 router.delete('/me/categories/:id', validateParams(CategoryIdParamSchema), asyncHandler(async (req, res) => {
   const userId = getUserId(req);

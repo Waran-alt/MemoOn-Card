@@ -1,5 +1,11 @@
 /**
- * POST /forgot-password (rate limits) and POST /reset-password. Same JSON on forgot to prevent enumeration (grid 1.5).
+ * Public password-recovery routes under `/api/auth`:
+ * - `POST /forgot-password` — rate-limited per email hash and per IP; always returns the same JSON
+ *   whether the email exists (anti-enumeration — grid 1.5).
+ * - `POST /reset-password` — consumes a one-time token, sets a new password, marks token used.
+ *
+ * Reset links are built with `resolvePasswordResetBaseUrl` so open redirects are blocked: only
+ * allowlisted origins become the link prefix.
  */
 import { Router } from 'express';
 import { userService } from '@/services/user.service';
@@ -47,6 +53,7 @@ passwordRouter.post(
     const { token, newPassword } = req.body;
     const userId = await passwordResetService.getUserIdForToken(token);
     if (!userId) {
+      // Generic message: do not reveal whether token format was wrong vs expired vs already used.
       throw new AppError(400, 'Invalid or expired reset link. Please request a new one.');
     }
     await userService.updatePassword(userId, newPassword);

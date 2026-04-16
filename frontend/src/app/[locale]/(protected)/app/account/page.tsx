@@ -1,5 +1,14 @@
 'use client';
 
+/**
+ * Account & security page: read-only identity (from auth store), optional knowledge feature toggle,
+ * theme/language controls, and authenticated password change.
+ *
+ * Password change calls `POST /api/user/change-password`; on success the API returns a new access token
+ * and user payload — we call `setAuthSuccess` so the client session updates without a full reload.
+ * Failed attempts surface API or validation messages via `getApiErrorMessage`.
+ */
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useLocale } from 'i18n';
@@ -22,19 +31,25 @@ export default function AccountPage() {
   const { t: ta } = useTranslation('app', locale);
   const user = useAuthStore((s) => s.user);
   const setAuthSuccess = useAuthStore((s) => s.setAuthSuccess);
+
+  /** Knowledge panel feature flag (persisted in user_settings). */
   const [knowledgeEnabled, setKnowledgeEnabled] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  /** Change-password form local state (not the same as login/register forms). */
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  /** Mirrors login “trust this device” — forwarded to refresh token issuance on the server. */
   const [trustDevicePwd, setTrustDevicePwd] = useState(false);
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdError, setPwdError] = useState('');
   const [pwdSuccess, setPwdSuccess] = useState(false);
 
+  /** Hydrate knowledge toggle from settings API once on mount; ignore result if unmounted. */
   useEffect(() => {
     let cancelled = false;
     apiClient
@@ -55,6 +70,7 @@ export default function AccountPage() {
     };
   }, []);
 
+  /** PATCH only `knowledge_enabled` today; server returns full settings blob (we don’t need it for UI). */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -73,6 +89,10 @@ export default function AccountPage() {
     }
   }
 
+  /**
+   * Validates confirm + min length client-side (server still enforces Zod + policy).
+   * Success path replaces Zustand auth so the new JWT is used immediately.
+   */
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
     setPwdError('');

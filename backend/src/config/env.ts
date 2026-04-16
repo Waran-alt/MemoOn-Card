@@ -10,6 +10,12 @@
  * 3) root .env
  *
  * JWT and DB secrets are validated at startup; never log them in debug output (use masked logs in auth).
+ *
+ * Optional groups (do not fail validation if unset):
+ * - **Brevo** (`BREVO_*`): transactional mail for password reset. Both API key and sender email are
+ *   required to send; otherwise dev logs a redacted link and production logs a warning.
+ * - **Dev bootstrap** (`DEV_*`): optional auto user with role `dev` on startup (see `dev/ensureDevUser.ts`).
+ * - **Rate limit overrides**: forgot/reset password and auth buckets; omit to use code defaults.
  */
 
 import path from 'path';
@@ -87,14 +93,21 @@ const EnvSchema = z.object({
   // Adaptive policy telemetry tagging
   ADAPTIVE_POLICY_VERSION: z.string().min(1).max(64).optional(),
 
-  // Dev user (auto-created/updated on startup when all three are set)
+  /**
+   * Dev user (auto-created/updated on startup when all three are set).
+   * If any of the three is missing, `ensureDevUser` skips work — avoids half-configured bootstrap.
+   */
   DEV_EMAIL: z.string().optional().transform((s) => (s && s.trim()) || undefined),
   DEV_PASSWORD: z.string().optional().transform((s) => (s && s.trim()) || undefined),
   DEV_USERNAME: z.string().optional().transform((s) => (s && s.trim()) || undefined),
 
-  /** Brevo transactional API (password reset). Both required to send; omit for dev log-only. */
+  /**
+   * Brevo transactional API (`POST /v3/smtp/email`) for password-reset emails.
+   * - `BREVO_API_KEY` + `BREVO_SENDER_EMAIL` must both be non-empty after trim to enable sending.
+   * - `BREVO_SENDER_NAME` defaults in code to "MemoOn Card" when omitted.
+   * Deliverability: use a domain-authenticated sender; see `documentation/ENVIRONMENT_SETUP.md`.
+   */
   BREVO_API_KEY: z.string().optional().transform((s) => (s && s.trim()) || undefined),
-  /** Must be a verified sender in Brevo. */
   BREVO_SENDER_EMAIL: z.string().optional().transform((s) => (s && s.trim()) || undefined),
   BREVO_SENDER_NAME: z.string().optional().transform((s) => (s && s.trim()) || undefined),
 });
@@ -103,6 +116,10 @@ type Env = z.infer<typeof EnvSchema>;
 
 let env: Env;
 
+/**
+ * Parses `process.env` once. On Zod failure, prints field-level errors and exits the process so the
+ * server never starts half-configured (e.g. wrong JWT length).
+ */
 export function validateEnv(): Env {
   try {
     env = EnvSchema.parse(process.env);
@@ -121,10 +138,10 @@ export function validateEnv(): Env {
   }
 }
 
-// Validate on import
+/** Single parsed snapshot; imported by services that need strongly typed env. */
 export const config = validateEnv();
 
-// Export individual config values
+/** Named exports for call sites that prefer `import { JWT_SECRET } from '@/config/env'`. */
 export const {
   NODE_ENV,
   PORT,
@@ -168,7 +185,10 @@ export const {
   BREVO_SENDER_NAME,
 } = config;
 
-/** CORS allowed origins (from CORS_ORIGINS or [CORS_ORIGIN]). */
+/**
+ * CORS allowed origins (from `CORS_ORIGINS` comma-list or single `CORS_ORIGIN`).
+ * Also used to validate client-suggested password-reset link bases (see `resolvePasswordResetBaseUrl`).
+ */
 export function getAllowedOrigins(): string[] {
   if (config.CORS_ORIGINS) {
     return config.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean);

@@ -1,5 +1,13 @@
 /**
- * Tests for /api/user/change-password and settings wiring (auth stub).
+ * Tests for authenticated `/api/user/*` routes (settings + change-password).
+ *
+ * The real app mounts these after `authMiddleware`; here we inject `req.userId` in a small Express
+ * stack so JWT verification is not duplicated in tests.
+ *
+ * Mocks:
+ * - `userService` / `refreshTokenService` / `passwordResetService` — isolate HTTP contract from DB.
+ * - `user-settings.service` — GET/PATCH settings without Liquibase/Postgres.
+ * - `setRefreshCookie` from auth-route helpers — we only assert password/session side effects on services.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -11,6 +19,17 @@ import { errorHandler } from '@/middleware/errorHandler';
 import { userService } from '@/services/user.service';
 import { refreshTokenService } from '@/services/refresh-token.service';
 import { passwordResetService } from '@/services/password-reset.service';
+import {
+  getStudySessionSettings,
+  updateKnowledgeEnabled,
+  updateUiTheme,
+} from '@/services/user-settings.service';
+
+vi.mock('@/services/user-settings.service', () => ({
+  getStudySessionSettings: vi.fn(),
+  updateKnowledgeEnabled: vi.fn(),
+  updateUiTheme: vi.fn(),
+}));
 
 vi.mock('@/services/user.service', () => ({
   userService: {
@@ -41,6 +60,7 @@ vi.mock('@/routes/auth-route.helpers', async () => {
   };
 });
 
+/** Stable UUID reused as JWT subject in mocks. */
 const mockUserId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 function createApp() {
@@ -130,6 +150,94 @@ describe('User routes', () => {
 
       expect(res.status).toBe(400);
       expect(userService.getUserWithPasswordHashById).not.toHaveBeenCalled();
+    });
+
+    it('returns 401 when user record is missing', async () => {
+      vi.mocked(userService.getUserWithPasswordHashById).mockResolvedValueOnce(null);
+
+      const res = await request(app)
+        .post('/api/user/change-password')
+        .send({
+          currentPassword: 'old-old-old',
+          newPassword: 'new-new-new',
+        });
+
+      expect(res.status).toBe(401);
+      expect(userService.updatePassword).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/user/settings', () => {
+    it('returns study session settings', async () => {
+      const settings = {
+        knowledge_enabled: true,
+        learning_min_interval_minutes: 1,
+        fsrs_weights_default: Array(21).fill(1),
+        target_retention_default: 0.9,
+      };
+      vi.mocked(getStudySessionSettings).mockResolvedValueOnce(settings as Awaited<
+        ReturnType<typeof getStudySessionSettings>
+      >);
+
+      const res = await request(app).get('/api/user/settings');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual(settings);
+      expect(getStudySessionSettings).toHaveBeenCalledWith(mockUserId);
+    });
+  });
+
+  describe('PATCH /api/user/settings', () => {
+    /**
+     * Route handler calls `updateKnowledgeEnabled` then `getStudySessionSettings` for the response body.
+     * Both return `StudySessionSettings`; we mock both with the same object so TypeScript matches the
+     * real service signatures (they return the updated snapshot from DB).
+     */
+    it('updates knowledge_enabled and returns fresh settings', async () => {
+      const fresh = {
+        knowledge_enabled: false,
+        learning_min_interval_minutes: 1,
+        fsrs_weights_default: Array(21).fill(1),
+        target_retention_default: 0.9,
+      };
+      const asSettings = fresh as Awaited<ReturnType<typeof getStudySessionSettings>>;
+      vi.mocked(updateKnowledgeEnabled).mockResolvedValueOnce(asSettings);
+      vi.mocked(getStudySessionSettings).mockResolvedValueOnce(asSettings);
+
+      const res = await request(app)
+        .patch('/api/user/settings')
+        .send({ knowledge_enabled: false });
+
+      expect(res.status).toBe(200);
+      expect(updateKnowledgeEnabled).toHaveBeenCalledWith(mockUserId, false);
+      expect(res.body.data).toEqual(fresh);
+    });
+
+    it('returns 400 when body is invalid', async () => {
+      const res = await request(app).patch('/api/user/settings').send({ knowledge_enabled: 'nope' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(updateKnowledgeEnabled).not.toHaveBeenCalled();
+    });
+
+    it('updates ui_theme when provided', async () => {
+      const fresh = {
+        ui_theme: 'dark' as const,
+        knowledge_enabled: true,
+        learning_min_interval_minutes: 1,
+        fsrs_weights_default: Array(21).fill(1),
+        target_retention_default: 0.9,
+      };
+      const asSettings = fresh as Awaited<ReturnType<typeof getStudySessionSettings>>;
+      vi.mocked(updateUiTheme).mockResolvedValueOnce(asSettings);
+      vi.mocked(getStudySessionSettings).mockResolvedValueOnce(asSettings);
+
+      const res = await request(app).patch('/api/user/settings').send({ ui_theme: 'dark' });
+
+      expect(res.status).toBe(200);
+      expect(updateUiTheme).toHaveBeenCalledWith(mockUserId, 'dark');
     });
   });
 });

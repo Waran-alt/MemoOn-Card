@@ -182,6 +182,12 @@ export type DeckMultiCardOverlayChartLabels = {
   cardScopeCap: string;
   /** Accessible name for the card scope `<select>`. */
   cardScopeGroup: string;
+  /** Stability Y-axis: linear scale (default). */
+  stabilityYScaleLinear: string;
+  /** Stability Y-axis: logarithmic scale (spreads low values when a few cards have very high S). */
+  stabilityYScaleLog: string;
+  /** Accessible name for stability Y-scale `<select>`. */
+  stabilityYScaleGroup: string;
 };
 
 type CardSeries = {
@@ -216,6 +222,8 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
   const [cardScope, setCardScope] = useState<OverlayCardScope>('all');
   /** `true` = real dates on X; `false` = one step per review index (aligned across cards). */
   const [xAxisByTime, setXAxisByTime] = useState(true);
+  /** Log Y only applies when `metric === 'stability'`. */
+  const [stabilityYLog, setStabilityYLog] = useState(false);
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   const showCardSeries = displayMode === 'all' || displayMode === 'cardsOnly';
@@ -340,6 +348,28 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     return { min: dMin, max: dMax + Math.max(dSpan * 0.08, 0.01) };
   }, [seriesList, metric, deckEvolution, deckEvolutionIndex]);
 
+  /** Strictly positive domain for `d3.scaleLog` when stability + log Y is on. */
+  const stabilityLogYDomain = useMemo(() => {
+    if (metric !== 'stability') return null;
+    const vals = seriesList.flatMap((s) => s.points.map((p) => p.y));
+    const evoVals = [
+      ...deckEvolution.flatMap((e) => [e.mean, e.median]),
+      ...deckEvolutionIndex.flatMap((e) => [e.mean, e.median]),
+    ];
+    const forExtent = vals.length ? [...vals, ...evoVals] : [];
+    const positive = forExtent.filter((v) => Number.isFinite(v) && v > 0);
+    const ltm = STABILITY_LONG_TERM_GOAL_DAYS;
+    if (positive.length === 0) {
+      return { min: 0.01, max: Math.max(ltm * 1.12, 1) };
+    }
+    const rawMin = d3.min(positive)!;
+    const rawMax = d3.max(positive)!;
+    let hi = Math.max(rawMax * 1.08, ltm * 1.12);
+    let lo = Math.max(1e-6, rawMin * 0.88);
+    if (!(hi > lo)) hi = lo * 1.05;
+    return { min: lo, max: hi };
+  }, [metric, seriesList, deckEvolution, deckEvolutionIndex]);
+
   const chartTotalWidth = M.left + plotInnerW + M.right;
 
   useEffect(() => {
@@ -367,7 +397,17 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     };
     run();
     requestAnimationFrame(run);
-  }, [xAxisByTime, chartTotalWidth, plotInnerW, maxSeriesLen, seriesList.length, metric, displayMode, cardScope]);
+  }, [
+    xAxisByTime,
+    chartTotalWidth,
+    plotInnerW,
+    maxSeriesLen,
+    seriesList.length,
+    metric,
+    displayMode,
+    cardScope,
+    stabilityYLog,
+  ]);
 
   useEffect(() => {
     const svgEl = svgRef.current;
@@ -385,10 +425,11 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       .domain([new Date(tMin - padT), new Date(tMax + padT)])
       .range([0, plotInnerW]);
 
-    const y = d3
-      .scaleLinear()
-      .domain([yExtent.min, yExtent.max])
-      .range([lineH, 0]);
+    const logDom = stabilityLogYDomain;
+    const useLogY = metric === 'stability' && stabilityYLog && logDom != null;
+    const y = useLogY && logDom
+      ? d3.scaleLog().domain([logDom.min, logDom.max]).range([lineH, 0]).clamp(true)
+      : d3.scaleLinear().domain([yExtent.min, yExtent.max]).range([lineH, 0]);
 
     const tickFormatTime = (d: Date | number) => {
       const date = d instanceof Date ? d : new Date(+d);
@@ -412,6 +453,26 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
 
     const g = svg.append('g').attr('transform', `translate(${M.left},${M.top})`);
 
+    const yGridTicks = y.ticks(useLogY ? 4 : 5).filter((t) => typeof t === 'number' && Number.isFinite(t));
+    const [yDomLo, yDomHi] = y.domain();
+    const gridG = g.append('g').attr('class', 'deck-overlay-y-grid').style('pointer-events', 'none');
+    for (const tick of yGridTicks) {
+      if (tick < yDomLo || tick > yDomHi) continue;
+      const yy = y(tick);
+      if (!Number.isFinite(yy)) continue;
+      gridG
+        .append('line')
+        .attr('class', 'deck-overlay-y-grid-line')
+        .attr('data-tick', String(tick))
+        .attr('x1', 0)
+        .attr('x2', plotInnerW)
+        .attr('y1', yy)
+        .attr('y2', yy)
+        .attr('stroke', 'var(--mc-border-subtle)')
+        .attr('stroke-width', 1)
+        .attr('opacity', 0.4);
+    }
+
     if (metric === 'stability') {
       const yG = y(STABILITY_LONG_TERM_GOAL_DAYS);
       const goalG = g
@@ -434,6 +495,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
 
     const lineGen = d3
       .line<{ tMs: number; y: number }>()
+      .defined((d) => !useLogY || (d.y > 0 && Number.isFinite(d.y)))
       .x((d, i) => xForSeriesPt(d.tMs, i))
       .y((d) => y(d.y))
       .curve(d3.curveMonotoneX);
@@ -454,21 +516,25 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
 
     const meanPathGenTime = d3
       .line<{ tMs: number; mean: number; median: number }>()
+      .defined((d) => !useLogY || (d.mean > 0 && Number.isFinite(d.mean)))
       .x((d) => xTime(new Date(d.tMs)))
       .y((d) => y(d.mean))
       .curve(d3.curveMonotoneX);
     const medianPathGenTime = d3
       .line<{ tMs: number; mean: number; median: number }>()
+      .defined((d) => !useLogY || (d.median > 0 && Number.isFinite(d.median)))
       .x((d) => xTime(new Date(d.tMs)))
       .y((d) => y(d.median))
       .curve(d3.curveMonotoneX);
     const meanPathGenIdx = d3
       .line<{ idx: number; mean: number; median: number }>()
+      .defined((d) => !useLogY || (d.mean > 0 && Number.isFinite(d.mean)))
       .x((d) => xIndex(d.idx))
       .y((d) => y(d.mean))
       .curve(d3.curveMonotoneX);
     const medianPathGenIdx = d3
       .line<{ idx: number; mean: number; median: number }>()
+      .defined((d) => !useLogY || (d.median > 0 && Number.isFinite(d.median)))
       .x((d) => xIndex(d.idx))
       .y((d) => y(d.median))
       .curve(d3.curveMonotoneX);
@@ -501,28 +567,32 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
           const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
           const d0 = deckEvolution[0]!;
           const xm = xTime(new Date(d0.tMs));
-          const ym = y(d0.mean);
-          const ymed = y(d0.median);
-          aggG
-            .append('circle')
-            .attr('cx', xm)
-            .attr('cy', ym)
-            .attr('r', 4)
-            .attr('fill', 'none')
-            .attr('stroke', 'var(--mc-text-muted)')
-            .attr('stroke-width', 2)
-            .append('title')
-            .text(labels.aggregateMeanCaption);
-          aggG
-            .append('circle')
-            .attr('cx', xm)
-            .attr('cy', ymed)
-            .attr('r', 4)
-            .attr('fill', 'none')
-            .attr('stroke', 'var(--mc-accent-primary)')
-            .attr('stroke-width', 2)
-            .append('title')
-            .text(labels.aggregateMedianCaption);
+          const ym = useLogY && !(d0.mean > 0 && Number.isFinite(d0.mean)) ? null : y(d0.mean);
+          const ymed = useLogY && !(d0.median > 0 && Number.isFinite(d0.median)) ? null : y(d0.median);
+          if (ym != null) {
+            aggG
+              .append('circle')
+              .attr('cx', xm)
+              .attr('cy', ym)
+              .attr('r', 4)
+              .attr('fill', 'none')
+              .attr('stroke', 'var(--mc-text-muted)')
+              .attr('stroke-width', 2)
+              .append('title')
+              .text(labels.aggregateMeanCaption);
+          }
+          if (ymed != null) {
+            aggG
+              .append('circle')
+              .attr('cx', xm)
+              .attr('cy', ymed)
+              .attr('r', 4)
+              .attr('fill', 'none')
+              .attr('stroke', 'var(--mc-accent-primary)')
+              .attr('stroke-width', 2)
+              .append('title')
+              .text(labels.aggregateMedianCaption);
+          }
         }
       } else if (deckEvolutionIndex.length >= 2) {
         const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
@@ -550,28 +620,32 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         const aggG = g.append('g').attr('class', 'deck-overlay-deck-evolution').style('pointer-events', 'none');
         const d0 = deckEvolutionIndex[0]!;
         const xm = xIndex(d0.idx);
-        const ym = y(d0.mean);
-        const ymed = y(d0.median);
-        aggG
-          .append('circle')
-          .attr('cx', xm)
-          .attr('cy', ym)
-          .attr('r', 4)
-          .attr('fill', 'none')
-          .attr('stroke', 'var(--mc-text-muted)')
-          .attr('stroke-width', 2)
-          .append('title')
-          .text(labels.aggregateMeanCaption);
-        aggG
-          .append('circle')
-          .attr('cx', xm)
-          .attr('cy', ymed)
-          .attr('r', 4)
-          .attr('fill', 'none')
-          .attr('stroke', 'var(--mc-accent-primary)')
-          .attr('stroke-width', 2)
-          .append('title')
-          .text(labels.aggregateMedianCaption);
+        const ym = useLogY && !(d0.mean > 0 && Number.isFinite(d0.mean)) ? null : y(d0.mean);
+        const ymed = useLogY && !(d0.median > 0 && Number.isFinite(d0.median)) ? null : y(d0.median);
+        if (ym != null) {
+          aggG
+            .append('circle')
+            .attr('cx', xm)
+            .attr('cy', ym)
+            .attr('r', 4)
+            .attr('fill', 'none')
+            .attr('stroke', 'var(--mc-text-muted)')
+            .attr('stroke-width', 2)
+            .append('title')
+            .text(labels.aggregateMeanCaption);
+        }
+        if (ymed != null) {
+          aggG
+            .append('circle')
+            .attr('cx', xm)
+            .attr('cy', ymed)
+            .attr('r', 4)
+            .attr('fill', 'none')
+            .attr('stroke', 'var(--mc-accent-primary)')
+            .attr('stroke-width', 2)
+            .append('title')
+            .text(labels.aggregateMedianCaption);
+        }
       }
     }
 
@@ -586,6 +660,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         const pts = s.points;
         for (let i = 0; i < pts.length; i++) {
           const p = pts[i]!;
+          if (useLogY && !(p.y > 0 && Number.isFinite(p.y))) continue;
           const isLast = i === pts.length - 1;
           const cx = xForSeriesPt(p.tMs, i);
           const cy = y(p.y);
@@ -680,16 +755,83 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       .attr('font-size', 10)
       .text(useTimeX ? labels.axisTimeCaption : labels.axisReviewOrder);
 
-    const axisY = d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2f'));
-    g.append('g')
-      .call(axisY)
-      .call((sel) => {
-        sel.selectAll('path,line').style('stroke', 'var(--mc-border-subtle)');
-        sel.selectAll('text').style('fill', 'var(--mc-text-secondary)').attr('font-size', 10);
-      });
-
     const yLabel =
       metric === 'stability' ? labels.axisStability : labels.axisDifficulty;
+
+    const axisY = useLogY
+      ? d3
+          .axisLeft(y)
+          .ticks(4)
+          .tickFormat((dv) => d3.format('.2f')(typeof dv === 'number' ? dv : Number(dv)))
+      : d3.axisLeft(y).ticks(5).tickFormat(d3.format('.2f'));
+    const yAxisG = g.append('g').attr('class', 'deck-overlay-axis-y');
+    yAxisG.call(axisY);
+    yAxisG.call((sel) => {
+      sel.selectAll('path,line').style('stroke', 'var(--mc-border-subtle)');
+      sel.selectAll('text').style('fill', 'var(--mc-text-secondary)').attr('font-size', 10);
+    });
+
+    const tickMatch = (a: number, b: number) =>
+      Number.isFinite(a) &&
+      Number.isFinite(b) &&
+      (a === b || Math.abs(a - b) <= 1e-5 * Math.max(1, Math.abs(a), Math.abs(b)));
+
+    const resetYGridHover = () => {
+      gridG
+        .selectAll('.deck-overlay-y-grid-line')
+        .attr('opacity', 0.4)
+        .attr('stroke-width', 1);
+    };
+
+    const showYTickHover = (tickVal: number, ev: MouseEvent) => {
+      const rect = wrapRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const valTxt = d3.format('.2f')(tickVal);
+      setTip({
+        x: ev.clientX - rect.left,
+        y: ev.clientY - rect.top,
+        text: `${yLabel}: ${valTxt}`,
+      });
+      gridG.selectAll('.deck-overlay-y-grid-line').each(function () {
+        const line = d3.select(this);
+        const v = Number(line.attr('data-tick'));
+        const match = tickMatch(v, tickVal);
+        line.attr('opacity', match ? 0.95 : 0.22).attr('stroke-width', match ? 1.75 : 1);
+      });
+    };
+
+    yAxisG.selectAll<SVGGElement, number | { valueOf(): number }>('g.tick').each(function (d) {
+      const tickVal = typeof d === 'number' ? d : Number(d);
+      if (!Number.isFinite(tickVal)) return;
+      const tickG = d3.select(this);
+      tickG.select('text').style('pointer-events', 'none');
+      const textNode = tickG.select('text').node() as SVGGraphicsElement | null;
+      if (!textNode) return;
+      let bbox: DOMRect;
+      try {
+        bbox = textNode.getBBox();
+      } catch {
+        return;
+      }
+      if (bbox.width <= 0 || bbox.height <= 0) return;
+      tickG
+        .insert('rect', 'text')
+        .attr('class', 'deck-overlay-y-tick-hit')
+        .attr('x', bbox.x - 3)
+        .attr('y', bbox.y - 2)
+        .attr('width', bbox.width + 6)
+        .attr('height', bbox.height + 4)
+        .attr('fill', 'transparent')
+        .style('cursor', 'default')
+        .on('mouseenter', function (ev) {
+          showYTickHover(tickVal, ev as MouseEvent);
+        })
+        .on('mouseleave', () => {
+          resetYGridHover();
+          setTip(null);
+        });
+    });
+
     g.append('text')
       .attr('transform', 'rotate(-90)')
       .attr('y', -34)
@@ -743,14 +885,17 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     /** Invisible overlay for nearest-point tooltip */
     const flatPoints = showCardSeries
       ? seriesList.flatMap((s) =>
-          s.points.map((p, i) => ({
-            px: xForSeriesPt(p.tMs, i),
-            py: y(p.y),
-            cardId: s.cardId,
-            recto: s.recto,
-            log: p.log,
-            color: s.color,
-          }))
+          s.points
+            .map((p, i) => ({ p, i }))
+            .filter(({ p }) => !useLogY || (p.y > 0 && Number.isFinite(p.y)))
+            .map(({ p, i }) => ({
+              px: xForSeriesPt(p.tMs, i),
+              py: y(p.y),
+              cardId: s.cardId,
+              recto: s.recto,
+              log: p.log,
+              color: s.color,
+            }))
         )
       : [];
 
@@ -762,6 +907,7 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
       .attr('fill', 'transparent')
       .style('cursor', showCardSeries ? 'crosshair' : 'default')
       .on('mousemove', function (ev: MouseEvent) {
+        resetYGridHover();
         if (!showCardSeries) {
           setTip(null);
           return;
@@ -796,9 +942,15 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
         ].join('\n');
         setTip({ x: ev.clientX - rect.left, y: ev.clientY - rect.top, text });
       })
-      .on('mouseleave', () => setTip(null));
+      .on('mouseleave', () => {
+        resetYGridHover();
+        setTip(null);
+      });
 
-    return () => setTip(null);
+    return () => {
+      resetYGridHover();
+      setTip(null);
+    };
   }, [
     seriesList,
     chartTotalWidth,
@@ -829,6 +981,8 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
     tMin,
     yExtent.max,
     yExtent.min,
+    stabilityYLog,
+    stabilityLogYDomain,
     ratingLabel,
     ratingMarkerMode,
     displayMode,
@@ -860,6 +1014,17 @@ export function DeckMultiCardOverlayChart({ cards, locale, labels, ratingLabel }
             <option value="stability">{labels.metricStability}</option>
             <option value="difficulty">{labels.metricDifficulty}</option>
           </select>
+          {metric === 'stability' ? (
+            <select
+              className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
+              value={stabilityYLog ? 'log' : 'linear'}
+              aria-label={labels.stabilityYScaleGroup}
+              onChange={(e) => setStabilityYLog(e.target.value === 'log')}
+            >
+              <option value="linear">{labels.stabilityYScaleLinear}</option>
+              <option value="log">{labels.stabilityYScaleLog}</option>
+            </select>
+          ) : null}
           <select
             className="min-w-0 w-full rounded-md border border-(--mc-border-subtle) bg-(--mc-bg-surface) px-2 py-1 text-[11px] font-medium text-(--mc-text-primary) md:w-auto md:max-w-[min(100%,12.5rem)] md:shrink md:text-xs"
             value={ratingMarkerMode}

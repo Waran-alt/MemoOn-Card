@@ -113,25 +113,37 @@ export function clearRefreshCookie(req: Request, res: Response): void {
 
 /**
  * Password-reset link poisoning mitigation: only allow origins already trusted for CORS.
- * Arbitrary `resetLinkBaseUrl` from the client is ignored if not in that allowlist.
+ *
+ * The forgot-password handler accepts an optional `resetLinkBaseUrl` from the client so the link
+ * matches the frontend origin (e.g. `https://app.com/fr`). Without this guard, an attacker could
+ * propose `https://evil.com` and trick users into resetting on a hostile site. We normalize both
+ * sides to `URL.origin` and require membership in `getAllowedOrigins()`.
+ *
+ * @param clientSuggested - Raw string from JSON body; may be a full URL with path or just an origin.
+ * @returns Origin string without trailing slash, suitable for prefixing `/reset-password?token=...`.
  */
 export function resolvePasswordResetBaseUrl(clientSuggested: string | undefined): string {
   const fallback = CORS_ORIGIN.replace(/\/$/, '');
   const trimmed = clientSuggested?.trim();
   if (!trimmed) return fallback;
+
   let candidateOrigin: string;
   try {
     candidateOrigin = new URL(trimmed).origin;
   } catch {
+    // Malformed URL — do not attempt partial parsing; fall back to primary CORS origin.
     return fallback;
   }
+
   const allowedOrigins = getAllowedOrigins().map((o) => {
     try {
       return new URL(o).origin;
     } catch {
+      // Legacy allowlist entries might be host-only; strip trailing slash for comparison.
       return o.replace(/\/$/, '');
     }
   });
+
   if (allowedOrigins.includes(candidateOrigin)) {
     return candidateOrigin.replace(/\/$/, '');
   }

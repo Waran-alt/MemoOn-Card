@@ -51,16 +51,16 @@ export async function getStudySessionSettings(userId: string): Promise<StudySess
           return n >= MIN_LEARNING_INTERVAL && n <= MAX_LEARNING_INTERVAL ? n : DEFAULT_LEARNING_MIN_INTERVAL_MINUTES;
         })()
       : DEFAULT_LEARNING_MIN_INTERVAL_MINUTES;
+  const defaultWeights = [...FSRS_V6_DEFAULT_WEIGHTS];
   const rawWeights = row?.fsrs_weights;
   const fsrsWeights =
     Array.isArray(rawWeights) && rawWeights.length >= 21
-      ? rawWeights.slice(0, 21).map((w) => (Number.isFinite(Number(w)) ? Number(w) : 1))
+      ? rawWeights.slice(0, defaultWeights.length).map((w) => (Number.isFinite(Number(w)) ? Number(w) : 1))
       : undefined;
   const targetRetention =
     row?.target_retention != null && Number.isFinite(Number(row.target_retention))
       ? Number(row.target_retention)
       : undefined;
-  const defaultWeights = [...FSRS_V6_DEFAULT_WEIGHTS];
   const fsrsWeightsDelta =
     fsrsWeights && defaultWeights.length === fsrsWeights.length
       ? fsrsWeights.map((w, i) => w - (defaultWeights[i] ?? 0))

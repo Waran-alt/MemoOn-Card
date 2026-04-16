@@ -154,6 +154,9 @@ export function DeckStatsModal({
       cardScopeAll: ta('deckStatsOverlayCardScopeAll'),
       cardScopeCap: ta('deckStatsOverlayCardScopeCap'),
       cardScopeGroup: ta('deckStatsOverlayCardScopeGroup'),
+      stabilityYScaleLinear: ta('deckStatsOverlayStabilityYLinear'),
+      stabilityYScaleLog: ta('deckStatsOverlayStabilityYLog'),
+      stabilityYScaleGroup: ta('deckStatsOverlayStabilityYScaleGroup'),
     }),
     [ta]
   );
