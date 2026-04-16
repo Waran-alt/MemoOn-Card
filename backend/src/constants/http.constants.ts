@@ -59,6 +59,12 @@ export const RESET_PASSWORD_RATE_LIMIT = {
   MAX: 10,
 } as const;
 
+/** Authenticated change-password: per IP + user (runs after JWT). */
+export const CHANGE_PASSWORD_RATE_LIMIT = {
+  WINDOW_MS: 60 * 60 * 1000,
+  MAX: 15,
+} as const;
+
 /** Refresh token httpOnly cookie (SSR + XSS-safe). `maxAge` on response uses JWT `exp` when set; this is the default (untrusted) TTL fallback. */
 export const REFRESH_COOKIE = {
   NAME: 'refresh_token',

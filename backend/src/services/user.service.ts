@@ -73,6 +73,15 @@ export class UserService {
     return result.rows[0] || null;
   }
 
+  /** For authenticated password change: load hash without exposing it in generic getUserById. */
+  async getUserWithPasswordHashById(userId: string): Promise<(User & { password_hash: string | null }) | null> {
+    const result = await pool.query<User & { password_hash: string | null }>(
+      'SELECT id, email, name, role, password_hash, created_at, updated_at FROM users WHERE id = $1',
+      [userId]
+    );
+    return result.rows[0] || null;
+  }
+
   /**
    * Find user by email (includes password_hash for verification).
    */

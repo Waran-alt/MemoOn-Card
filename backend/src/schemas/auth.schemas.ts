@@ -65,9 +65,29 @@ export const ResetPasswordSchema = z.object({
     .max(VALIDATION_LIMITS.PASSWORD_MAX_LENGTH),
 });
 
+/** Authenticated password change (requires current password). */
+export const ChangePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string()
+      .min(1, 'Current password is required')
+      .max(VALIDATION_LIMITS.PASSWORD_MAX_LENGTH),
+    newPassword: z
+      .string()
+      .min(VALIDATION_LIMITS.PASSWORD_MIN_LENGTH, `Password must be at least ${VALIDATION_LIMITS.PASSWORD_MIN_LENGTH} characters`)
+      .max(VALIDATION_LIMITS.PASSWORD_MAX_LENGTH),
+    /** Preserve trusted-device refresh TTL when rotating session after password change. */
+    trustDevice: z.boolean().optional().default(false),
+  })
+  .refine((d) => d.currentPassword !== d.newPassword, {
+    message: 'New password must be different from your current password',
+    path: ['newPassword'],
+  });
+
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type RefreshInput = z.infer<typeof RefreshSchema>;
 export type RefreshBodyInput = z.infer<typeof RefreshBodySchema>;
 export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;

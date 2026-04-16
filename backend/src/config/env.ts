@@ -91,6 +91,12 @@ const EnvSchema = z.object({
   DEV_EMAIL: z.string().optional().transform((s) => (s && s.trim()) || undefined),
   DEV_PASSWORD: z.string().optional().transform((s) => (s && s.trim()) || undefined),
   DEV_USERNAME: z.string().optional().transform((s) => (s && s.trim()) || undefined),
+
+  /** Brevo transactional API (password reset). Both required to send; omit for dev log-only. */
+  BREVO_API_KEY: z.string().optional().transform((s) => (s && s.trim()) || undefined),
+  /** Must be a verified sender in Brevo. */
+  BREVO_SENDER_EMAIL: z.string().optional().transform((s) => (s && s.trim()) || undefined),
+  BREVO_SENDER_NAME: z.string().optional().transform((s) => (s && s.trim()) || undefined),
 });
 
 type Env = z.infer<typeof EnvSchema>;
@@ -157,6 +163,9 @@ export const {
   DEV_EMAIL,
   DEV_PASSWORD,
   DEV_USERNAME,
+  BREVO_API_KEY,
+  BREVO_SENDER_EMAIL,
+  BREVO_SENDER_NAME,
 } = config;
 
 /** CORS allowed origins (from CORS_ORIGINS or [CORS_ORIGIN]). */

@@ -7,8 +7,9 @@
 #
 # One-time setup: Settings → Secrets and variables → Actions → Repository (not Environment).
 # - Secrets: HOSTINGER_API_KEY, POSTGRES_PASSWORD, JWT_SECRET, GRAFANA_ADMIN_PASSWORD (if using deploy.yml + Grafana)
-#   optional: DEV_EMAIL, DEV_PASSWORD, DEV_USERNAME
+#   optional: DEV_EMAIL, DEV_PASSWORD, DEV_USERNAME, BREVO_API_KEY (password-reset email via Brevo)
 # - Variables: HOSTINGER_VM_ID, NEXT_PUBLIC_API_URL, CORS_ORIGIN; optional: POSTGRES_DB, POSTGRES_USER,
+#   BREVO_SENDER_EMAIL, BREVO_SENDER_NAME (with BREVO_API_KEY for transactional mail)
 #   HOSTINGER_COMPOSE_FILE, GRAFANA_ROOT_URL (public Grafana URL, e.g. https://grafana.example.com — no trailing slash)
 # If NEXT_PUBLIC_API_URL / CORS_ORIGIN are in Secrets instead of Variables, they stay empty
 # because this workflow uses vars.* for them. See documentation/DEPLOYMENT-HOSTINGER.md.
@@ -58,5 +59,8 @@ jobs:
             DEV_EMAIL=${{ secrets.DEV_EMAIL }}
             DEV_PASSWORD=${{ secrets.DEV_PASSWORD }}
             DEV_USERNAME=${{ secrets.DEV_USERNAME }}
+            BREVO_API_KEY=${{ secrets.BREVO_API_KEY }}
+            BREVO_SENDER_EMAIL=${{ vars.BREVO_SENDER_EMAIL }}
+            BREVO_SENDER_NAME=${{ vars.BREVO_SENDER_NAME }}
             GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
             GRAFANA_ROOT_URL=${{ vars.GRAFANA_ROOT_URL }}

@@ -18,7 +18,7 @@ memoon-card/
 │   └── changesets/        # Individual migration files
 ├── documentation/         # Project docs (see documentation/README.md; archived notes in documentation/private/)
 ├── docker-compose.yml     # Docker Compose configuration
-├── env.example            # Root env template (copy to .env; do not commit .env)
+├── env.example            # Root env template (copy to .env; .env.example is a symlink for dotfile tools)
 └── package.json          # Root configuration
 ```
 
@@ -43,8 +43,8 @@ The project uses **immutable installs**: the lockfile must not be modified by a 
 
 Copy the example env files and set values as needed:
 
-- **Root:** `cp env.example .env` — ports, `NODE_ENV`
-- **Backend:** `backend/env.example` → `backend/.env` — JWT, CORS, rate limits
+- **Root:** `cp env.example .env` — ports, `NODE_ENV` (or `cp .env.example .env`)
+- **Backend:** `backend/env.example` → `backend/.env` — JWT, CORS, rate limits, DB, optional Brevo for password-reset email (`BREVO_*`)
 - **Frontend:** `frontend/env.example` → `frontend/.env` — API URL; optional E2E credentials (`E2E_TEST_PASSWORD`, `E2E_TEST_EMAIL`)
 
 See `documentation/ENVIRONMENT_SETUP.md` for auth and E2E variable details. Never commit `.env` files.

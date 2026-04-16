@@ -29,7 +29,7 @@ passwordRouter.post(
       const { token } = await passwordResetService.createToken(user.id);
       const baseUrl = resolvePasswordResetBaseUrl(resetLinkBaseUrl);
       const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
-      passwordResetService.sendResetEmail(user.email, resetLink);
+      await passwordResetService.sendResetEmail(user.email, resetLink);
     }
     // Same payload whether or not the user exists — do not branch on existence (enumeration).
     return res.json({

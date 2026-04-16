@@ -32,6 +32,9 @@ vi.mock('@/config/env', () => ({
   RESET_PASSWORD_RATE_LIMIT_MAX: undefined as number | undefined,
   FORGOT_PASSWORD_EMAIL_RATE_LIMIT_WINDOW_MS: undefined as number | undefined,
   FORGOT_PASSWORD_EMAIL_RATE_LIMIT_MAX: undefined as number | undefined,
+  BREVO_API_KEY: undefined as string | undefined,
+  BREVO_SENDER_EMAIL: undefined as string | undefined,
+  BREVO_SENDER_NAME: undefined as string | undefined,
 }));
 
 vi.mock('@/config/database', () => ({
@@ -542,7 +545,7 @@ describe('Auth routes', () => {
         token: 'reset-token-plain',
         expiresAt: new Date(),
       });
-      vi.mocked(passwordResetService.sendResetEmail).mockImplementation(() => {});
+      vi.mocked(passwordResetService.sendResetEmail).mockImplementation(() => Promise.resolve());
     });
 
     it('should use CORS_ORIGIN for reset link when resetLinkBaseUrl is omitted', async () => {

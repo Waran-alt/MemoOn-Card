@@ -57,6 +57,9 @@ services:
       DEV_EMAIL: ${DEV_EMAIL:-}
       DEV_PASSWORD: ${DEV_PASSWORD:-}
       DEV_USERNAME: ${DEV_USERNAME:-}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-}
     ports:
       - "127.0.0.1:4002:4002"
     depends_on:

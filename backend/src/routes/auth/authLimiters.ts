@@ -17,6 +17,7 @@ import {
 } from '@/config/env';
 import {
   AUTH_RATE_LIMIT,
+  CHANGE_PASSWORD_RATE_LIMIT,
   FORGOT_PASSWORD_RATE_LIMIT,
   FORGOT_PASSWORD_EMAIL_RATE_LIMIT,
   RESET_PASSWORD_RATE_LIMIT,
@@ -68,6 +69,21 @@ export const resetPasswordLimiter = rateLimit({
   windowMs: RESET_PASSWORD_RATE_LIMIT_WINDOW_MS ?? RESET_PASSWORD_RATE_LIMIT.WINDOW_MS,
   max: RESET_PASSWORD_RATE_LIMIT_MAX ?? RESET_PASSWORD_RATE_LIMIT.MAX,
   message: 'Too many reset attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+function changePasswordKey(req: Request): string {
+  const uid = typeof req.userId === 'string' && req.userId ? req.userId : 'anon';
+  return `change-pwd:${req.ip ?? 'unknown'}:${uid}`;
+}
+
+/** POST /api/user/change-password — after authMiddleware so req.userId is set. */
+export const changePasswordLimiter = rateLimit({
+  windowMs: CHANGE_PASSWORD_RATE_LIMIT.WINDOW_MS,
+  max: CHANGE_PASSWORD_RATE_LIMIT.MAX,
+  keyGenerator: (req) => changePasswordKey(req as Request),
+  message: 'Too many password change attempts, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
 });

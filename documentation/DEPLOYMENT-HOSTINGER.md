@@ -37,11 +37,14 @@ Si vous mettez une valeur en **Secret** alors que le workflow lit une **Variable
 | `POSTGRES_DB` | **Variable** | Non | `memoon_card_db` | Nom de la base. Vous pouvez en choisir un autre (ex. `memooncard_db`). |
 | `POSTGRES_USER` | **Variable** | Non | `postgres` | Utilisateur PostgreSQL. Vous pouvez choisir un autre utilisateur (ex. `memooncard`). |
 | `DEV_EMAIL`, `DEV_PASSWORD`, `DEV_USERNAME` | **Secrets** | Non | — | Compte « dev » créé/mis à jour au démarrage du backend. Les trois doivent être renseignés pour activer (voir section « Compte dev » ci-dessous). |
+| `BREVO_API_KEY` | **Secret** | Non | — | Clé API Brevo (v3) pour l’envoi des e-mails de réinitialisation de mot de passe. Sans elle (et sans expéditeur), le backend n’envoie pas de mail en prod (voir `documentation/ENVIRONMENT_SETUP.md`). |
+| `BREVO_SENDER_EMAIL` | **Variable** | Non | — | Adresse d’expéditeur **vérifiée dans Brevo**, de préférence sur **votre propre domaine** avec authentification **DKIM/DMARC** conforme (exigences Gmail/Yahoo/Outlook). Les domaines « gratuits » ou boîtes perso en From sont déconseillés. **Variable**, pas Secret. |
+| `BREVO_SENDER_NAME` | **Variable** | Non | — | Nom d’affichage optionnel pour l’en-tête From (ex. `MemoOn-Card`). |
 
 Les variables non renseignées restent vides côté GitHub ; le compose applique alors les valeurs par défaut (`postgres`, `memoon_card_db`). Si vous utilisez un **utilisateur ou une base personnalisés** (ex. `memooncard` / `memooncard_db`), définissez `POSTGRES_USER` et `POSTGRES_DB` dans les Variables, puis assurez-vous que le **volume PostgreSQL est vide** au premier démarrage du conteneur : Postgres ne crée l’utilisateur et la base qu’à l’initialisation. Si un volume existait déjà (créé avec d’autres identifiants), supprimez-le sur le VPS avant de redéployer (voir section « Réinitialiser la base Postgres et libérer l’espace disque (SSH) » ci-dessous).
 
 **Autres variables supportées par le backend (optionnel)**  
-Le backend lit d’autres variables définies dans `backend/src/config/env.ts`. Elles ne sont **pas** envoyées par le workflow Hostinger par défaut. Pour les utiliser en prod, il faut les ajouter au workflow (Variables) et au `docker-compose.prod.yml` (section `backend.environment`), ou les renseigner dans le panel Hostinger si le compose les transmet déjà.
+Le workflow **`deploy-hostinger.yml`** transmet déjà **`BREVO_*`** (Secrets/Variables) vers le compose : `docker-compose.prod.yml` / `docker-compose.deploy.yml` les passent au conteneur backend. D’autres variables définies dans `backend/src/config/env.ts` ne sont **pas** toutes envoyées par le workflow. Pour les utiliser en prod, il faut les ajouter au workflow et au compose (`backend.environment`), ou les renseigner sur le VPS dans le fichier `.env` fusionné par le déploiement.
 
 | Nom | Type | Défaut | Description |
 |-----|------|--------|-------------|

@@ -46,6 +46,7 @@ Important variables:
 - `CORS_ORIGIN` or `CORS_ORIGINS`
 - `RATE_LIMIT_*`, `AUTH_RATE_LIMIT_*`
 - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+- `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME` (optional; transactional email for password reset — use a domain-authenticated sender in Brevo; see `documentation/ENVIRONMENT_SETUP.md`)
 
 For full env reference, see `documentation/ENVIRONMENT_SETUP.md`.
 

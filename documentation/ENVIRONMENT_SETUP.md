@@ -9,12 +9,14 @@ Create `.env` files from the examples below. **Never commit `.env` files.**
 | Where | File | Purpose |
 |-------|------|--------|
 | Root | `.env` | Source of truth for Docker Compose values and shared runtime defaults. |
-| Backend | `backend/.env` | Backend-specific config: JWT, CORS, rate limiting, database connection for local runs. |
+| Backend | `backend/.env` | Backend-specific config: JWT, CORS, rate limiting, database, optional Brevo (password reset). |
 | Frontend | `frontend/.env` | API URL for the browser; optional E2E overrides when running Playwright. |
+
+Templates use the names `env.example` (and, for tools that expect a dotfile, `.env.example` in the same directory — a symlink to `env.example`).
 
 ## Root (`.env`)
 
-Copy from `env.example`:
+Copy from `env.example` (or `.env.example` — same file):
 
 ```bash
 cp env.example .env
@@ -39,7 +41,7 @@ Runtime precedence is:
 
 ## Backend (`backend/.env`)
 
-Copy from `backend/env.example`:
+Copy from `backend/env.example` (or `backend/.env.example` — same file):
 
 ```bash
 cp backend/env.example backend/.env
@@ -73,6 +75,19 @@ Backend must allow the frontend origin you use (localhost or `https://memoon-car
 - **POSTGRES_PORT** – Local backend: `5433`; Docker backend: `5432`.
 - **POSTGRES_DB**, **POSTGRES_USER**, **POSTGRES_PASSWORD** – Database credentials.
 
+### Email (Brevo, password reset)
+
+Optional. If **both** **BREVO_API_KEY** and **BREVO_SENDER_EMAIL** are set, the backend sends forgot-password emails via the [Brevo transactional API](https://developers.brevo.com/). The sender address must be a verified sender in Brevo.
+
+- **BREVO_API_KEY** – API key (v3). Treat as a secret in production.
+- **BREVO_SENDER_EMAIL** – From address (verified in Brevo).
+- **BREVO_SENDER_NAME** – Optional display name for the From header.
+
+**Deliverability (Gmail, Yahoo, Outlook, etc.)**  
+Major providers now require strong authentication for senders. In Brevo, use an address on a **domain you own** (e.g. `noreply@yourapp.com`), not a free personal mailbox as the transactional From. Complete Brevo’s **domain authentication** (typically **DKIM** and aligned **DMARC** for that domain). In the Brevo UI, open each sender and fix any warnings about Google / Yahoo / Microsoft compliance until DKIM and DMARC show as OK. Brevo’s own docs cover DNS records and sender setup.
+
+If they are unset: in **development**, the backend logs a redacted reset URL; in **production**, it logs a warning and does not send email until Brevo is configured.
+
 ## Frontend (`frontend/.env`)
 
 Copy from `frontend/env.example`:
@@ -90,7 +105,7 @@ cp frontend/env.example frontend/.env
 ## Summary
 
 1. **Root:** `cp env.example .env` — ports and `NODE_ENV`.
-2. **Backend:** `cp backend/env.example backend/.env` — JWT, CORS, rate limits.
+2. **Backend:** `cp backend/env.example backend/.env` — JWT, CORS, rate limits, DB, optional Brevo.
 3. **Frontend:** `cp frontend/env.example frontend/.env` — `NEXT_PUBLIC_API_URL`.
 
 For full run/setup steps, see `documentation/SETUP.md`.

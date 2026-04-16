@@ -5,7 +5,8 @@
 #
 # Env: GitHub Secrets/Variables, or locally: yarn docker:prod:up / yarn docker:prod:monitoring:up
 #   (scripts/compose-with-env.sh merges .env + backend/.env + frontend/.env).
-# Required: POSTGRES_PASSWORD, JWT_SECRET. Optional: NEXT_PUBLIC_API_URL, CORS_ORIGIN.
+# Required: POSTGRES_PASSWORD, JWT_SECRET. Optional: NEXT_PUBLIC_API_URL, CORS_ORIGIN,
+#   BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME (password-reset email).
 #
 # Reverse proxy (nginx): https://your-domain.com → frontend:3002, /api → backend:4002.
 # Secrets / HTTPS: documentation/DEPLOYMENT-HOSTINGER.md + private/CODEBASE_AUDIT_GRID.md (section 7).
@@ -56,6 +57,9 @@ services:
       DEV_EMAIL: ${DEV_EMAIL:-}
       DEV_PASSWORD: ${DEV_PASSWORD:-}
       DEV_USERNAME: ${DEV_USERNAME:-}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:-}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-}
     ports:
       - "127.0.0.1:4002:4002"
     depends_on:

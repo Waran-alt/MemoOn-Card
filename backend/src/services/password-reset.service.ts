@@ -1,15 +1,30 @@
 /**
  * Password reset (forgot-password) flow. Tokens stored as SHA-256 only; plain token exists only in email/link.
- * Creates time-limited, single-use tokens. Does not send email by default; wire sendResetEmail or a transactional provider for production.
- * In development the reset link may be logged. In production, avoid logging full reset URLs in shared logs (grid 1.5 / 8.1).
+ * Email: set BREVO_API_KEY + BREVO_SENDER_EMAIL (verified sender in Brevo). Without them, production logs a warning;
+ * development logs a token-redacted link (grid 1.5 / 8.1).
  */
 
 import crypto from 'crypto';
 import { pool } from '@/config/database';
+import {
+  BREVO_API_KEY,
+  BREVO_SENDER_EMAIL,
+  BREVO_SENDER_NAME,
+  NODE_ENV,
+} from '@/config/env';
 import { logger } from '@/utils/logger';
+import { sendBrevoTransactionalEmail } from '@/services/brevo-smtp.service';
 
 const TOKEN_BYTES = 32;
 const DEFAULT_EXPIRY_MINUTES = 60;
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;');
+}
 
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -50,6 +65,18 @@ export class PasswordResetService {
   }
 
   /**
+   * Invalidate all unused reset tokens for a user (e.g. after in-app password change).
+   * Prevents a stale email link from resetting the password after the user already changed it.
+   */
+  async invalidateAllActiveTokensForUser(userId: string): Promise<void> {
+    await pool.query(
+      `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND used_at IS NULL`,
+      [userId]
+    );
+  }
+
+  /**
    * Mark token as used so it cannot be reused.
    */
   async consumeToken(token: string): Promise<void> {
@@ -61,15 +88,61 @@ export class PasswordResetService {
   }
 
   /**
-   * Build reset URL and "send" to user. In development logs the link to console.
-   * For production, integrate an email sender (nodemailer, SendGrid, etc.) here.
+   * Send password reset email via Brevo when configured; otherwise dev log or warn.
    */
-  sendResetEmail(email: string, resetLink: string): void {
-    if (process.env.NODE_ENV === 'development') {
-      logger.info('Password reset link (dev only)', { email: email.replace(/(?<=.{2}).(?=@)/g, '*'), resetLink });
+  async sendResetEmail(email: string, resetLink: string): Promise<void> {
+    const maskedEmail = email.replace(/(?<=.{2}).(?=@)/g, '*');
+    const safeLink = resetLink.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]');
+
+    if (BREVO_API_KEY && BREVO_SENDER_EMAIL) {
+      const senderName = BREVO_SENDER_NAME?.trim() || 'MemoOn Card';
+      const htmlContent = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #0f172a;">
+ <p>You requested a password reset for your MemoOn Card account.</p>
+  <p><a href="${escapeHtmlAttr(resetLink)}">Reset your password</a></p>
+  <p style="font-size: 0.875rem; color: #64748b;">This link expires in about one hour. If you did not request this, you can ignore this email.</p>
+</body>
+</html>`.trim();
+
+      try {
+        await sendBrevoTransactionalEmail({
+          apiKey: BREVO_API_KEY,
+          senderEmail: BREVO_SENDER_EMAIL,
+          senderName,
+          toEmail: email,
+          subject: 'Reset your MemoOn Card password',
+          htmlContent,
+        });
+        logger.info('Password reset email sent via Brevo', { email: maskedEmail });
+      } catch (err) {
+        logger.error('Brevo password reset send failed', {
+          email: maskedEmail,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      if (NODE_ENV === 'development') {
+        logger.info('Password reset link (dev reference, token redacted)', {
+          email: maskedEmail,
+          resetLink: safeLink,
+        });
+      }
+      return;
     }
-    // TODO production: send email via your provider, e.g.:
-    // await emailTransport.sendMail({ to: email, subject: 'Reset your password', html: `...${resetLink}...` });
+
+    if (NODE_ENV === 'development') {
+      logger.info('Password reset link (dev only; set BREVO_API_KEY and BREVO_SENDER_EMAIL to send email)', {
+        email: maskedEmail,
+        resetLink: safeLink,
+      });
+      return;
+    }
+
+    logger.warn('Password reset email not sent: set BREVO_API_KEY and BREVO_SENDER_EMAIL', {
+      email: maskedEmail,
+    });
   }
 }
 
