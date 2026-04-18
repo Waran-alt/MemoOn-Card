@@ -45,6 +45,11 @@ vi.mock('@/hooks/useTranslation', () => ({
           navCloseMenu: 'Close menu',
           navOpenMenu: 'Open menu',
           navUserMenu: 'Account menu',
+          navSidebar: 'App navigation',
+          navSectionLibrary: 'Library',
+          navSectionInsights: 'Insights',
+          navSectionAccount: 'Account',
+          navSectionAdministration: 'Administration',
           languageSwitcherAria: 'Language',
           themeSwitcherAria: 'Theme',
         } as Record<string, string>

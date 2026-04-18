@@ -2,7 +2,7 @@
  * Public password-recovery routes under `/api/auth`:
  * - `POST /forgot-password` — rate-limited per email hash and per IP; always returns the same JSON
  *   whether the email exists (anti-enumeration — grid 1.5).
- * - `POST /reset-password` — consumes a one-time token, sets a new password, marks token used.
+ * - `POST /reset-password` — validates token, sets a new password, invalidates all reset tokens for the user.
  *
  * Reset links are built with `resolvePasswordResetBaseUrl` so open redirects are blocked: only
  * allowlisted origins become the link prefix.
@@ -57,7 +57,7 @@ passwordRouter.post(
       throw new AppError(400, 'Invalid or expired reset link. Please request a new one.');
     }
     await userService.updatePassword(userId, newPassword);
-    await passwordResetService.consumeToken(token);
+    await passwordResetService.invalidateAllActiveTokensForUser(userId);
     return res.json({
       success: true,
       message: 'Password has been reset. You can sign in with your new password.',

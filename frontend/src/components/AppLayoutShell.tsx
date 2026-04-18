@@ -17,16 +17,44 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { ConnectionSyncBanner } from './ConnectionSyncBanner';
 
-/** Nav items visible to all authenticated users. */
-const userNavItems = [
-  { path: '/app', labelKey: 'decks' as const },
-  { path: '/app/stats', labelKey: 'stats' as const },
-  { path: '/app/categories', labelKey: 'categories' as const },
-  { path: '/app/flagged-cards', labelKey: 'flaggedCards' as const },
-  { path: '/app/import-export', labelKey: 'importExport' as const },
-  { path: '/app/optimizer', labelKey: 'optimizer' as const },
-  { path: '/app/study-health', labelKey: 'studyHealth' as const },
-  { path: '/app/account', labelKey: 'accountAndData' as const },
+type NavItem = {
+  path: string;
+  labelKey:
+    | 'decks'
+    | 'categories'
+    | 'flaggedCards'
+    | 'importExport'
+    | 'stats'
+    | 'optimizer'
+    | 'studyHealth'
+    | 'accountAndData'
+    | 'admin'
+    | 'dev';
+};
+
+/** Grouped sidebar nav for scanning; order preserved within each section. */
+const userNavGroups: readonly { sectionKey: string; items: readonly NavItem[] }[] = [
+  {
+    sectionKey: 'navSectionLibrary',
+    items: [
+      { path: '/app', labelKey: 'decks' },
+      { path: '/app/categories', labelKey: 'categories' },
+      { path: '/app/flagged-cards', labelKey: 'flaggedCards' },
+      { path: '/app/import-export', labelKey: 'importExport' },
+    ],
+  },
+  {
+    sectionKey: 'navSectionInsights',
+    items: [
+      { path: '/app/stats', labelKey: 'stats' },
+      { path: '/app/optimizer', labelKey: 'optimizer' },
+      { path: '/app/study-health', labelKey: 'studyHealth' },
+    ],
+  },
+  {
+    sectionKey: 'navSectionAccount',
+    items: [{ path: '/app/account', labelKey: 'accountAndData' }],
+  },
 ] as const;
 
 /** Admin nav item: only shown when user.role === 'admin' (user management). */
@@ -181,21 +209,53 @@ export function AppLayoutShell({
             {tc('appName')}
           </Link>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 p-3">
-          {[...userNavItems, ...(user?.role === 'admin' ? [adminNavItem] : []), ...(user?.role === 'dev' ? [devNavItem] : [])].map(({ path, labelKey }) => {
-            const href = `/${locale}${path}`;
-            const isActive = isSidebarNavActive(pathname, locale, path);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setMenuOpen(false)}
-                className={sidebarNavLinkClass(isActive)}
-              >
-                {tc(labelKey)}
-              </Link>
-            );
-          })}
+        <nav className="flex flex-1 flex-col gap-3 overflow-y-auto p-3" aria-label={tc('navSidebar')}>
+          {userNavGroups.map((group) => (
+            <div key={group.sectionKey} className="flex flex-col gap-1">
+              <p className="px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-(--mc-text-muted)">
+                {tc(group.sectionKey)}
+              </p>
+              {group.items.map(({ path, labelKey }) => {
+                const href = `/${locale}${path}`;
+                const isActive = isSidebarNavActive(pathname, locale, path);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMenuOpen(false)}
+                    className={sidebarNavLinkClass(isActive)}
+                  >
+                    {tc(labelKey)}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+          {(user?.role === 'admin' || user?.role === 'dev') && (
+            <div className="flex flex-col gap-1 border-t border-(--mc-border-subtle) pt-3">
+              <p className="px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-(--mc-text-muted)">
+                {tc('navSectionAdministration')}
+              </p>
+              {user?.role === 'admin' && (
+                <Link
+                  href={`/${locale}${adminNavItem.path}`}
+                  onClick={() => setMenuOpen(false)}
+                  className={sidebarNavLinkClass(isSidebarNavActive(pathname, locale, adminNavItem.path))}
+                >
+                  {tc(adminNavItem.labelKey)}
+                </Link>
+              )}
+              {user?.role === 'dev' && (
+                <Link
+                  href={`/${locale}${devNavItem.path}`}
+                  onClick={() => setMenuOpen(false)}
+                  className={sidebarNavLinkClass(isSidebarNavActive(pathname, locale, devNavItem.path))}
+                >
+                  {tc(devNavItem.labelKey)}
+                </Link>
+              )}
+            </div>
+          )}
         </nav>
         <div className="border-t border-(--mc-border-subtle) p-3">
           <SignOutButton

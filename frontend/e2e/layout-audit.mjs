@@ -1,3 +1,7 @@
+/**
+ * Internal layout capture for developers / agents: full-page screenshots, JSON layout probes,
+ * and REPORT.md — not a product-facing CI gate unless you opt into threshold env vars.
+ */
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

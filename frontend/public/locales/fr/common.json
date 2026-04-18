@@ -45,5 +45,10 @@
   "navCloseMenu": "Fermer le menu",
   "navOpenMenu": "Ouvrir le menu",
   "navUserMenu": "Menu du compte",
+  "navSidebar": "Navigation de l’app",
+  "navSectionLibrary": "Bibliothèque",
+  "navSectionInsights": "Analyses",
+  "navSectionAccount": "Compte",
+  "navSectionAdministration": "Administration",
   "languageSwitcherAria": "Langue"
 }

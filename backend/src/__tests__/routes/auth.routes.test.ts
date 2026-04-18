@@ -75,7 +75,7 @@ vi.mock('@/services/password-reset.service', () => ({
     createToken: vi.fn(),
     sendResetEmail: vi.fn(),
     getUserIdForToken: vi.fn(),
-    consumeToken: vi.fn(),
+    invalidateAllActiveTokensForUser: vi.fn(),
   },
 }));
 
@@ -610,10 +610,10 @@ describe('Auth routes', () => {
    * updates password, then marks the token row used so the link cannot be replayed.
    */
   describe('POST /api/auth/reset-password', () => {
-    it('updates password and consumes token when token is valid', async () => {
+    it('updates password and invalidates all reset tokens for user when token is valid', async () => {
       vi.mocked(passwordResetService.getUserIdForToken).mockResolvedValueOnce(mockUserId);
       vi.mocked(userService.updatePassword).mockResolvedValueOnce();
-      vi.mocked(passwordResetService.consumeToken).mockResolvedValueOnce();
+      vi.mocked(passwordResetService.invalidateAllActiveTokensForUser).mockResolvedValueOnce();
 
       const res = await request(app).post('/api/auth/reset-password').send({
         token: 'valid-reset-token',
@@ -623,7 +623,7 @@ describe('Auth routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(userService.updatePassword).toHaveBeenCalledWith(mockUserId, 'new-new-new');
-      expect(passwordResetService.consumeToken).toHaveBeenCalledWith('valid-reset-token');
+      expect(passwordResetService.invalidateAllActiveTokensForUser).toHaveBeenCalledWith(mockUserId);
     });
 
     it('returns 400 when token is invalid or expired', async () => {
@@ -636,7 +636,7 @@ describe('Auth routes', () => {
 
       expect(res.status).toBe(400);
       expect(userService.updatePassword).not.toHaveBeenCalled();
-      expect(passwordResetService.consumeToken).not.toHaveBeenCalled();
+      expect(passwordResetService.invalidateAllActiveTokensForUser).not.toHaveBeenCalled();
     });
   });
 });
